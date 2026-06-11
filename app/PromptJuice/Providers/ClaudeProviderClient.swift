@@ -1,10 +1,10 @@
 import Foundation
 
-protocol ClaudeStatuslineSnapshotReading {
+protocol ClaudeStatuslineSnapshotReading: Sendable {
     func snapshot(now: Date) throws -> ProviderSnapshot
 }
 
-protocol ClaudeLocalUsageReading {
+protocol ClaudeLocalUsageReading: Sendable {
     func snapshot(now: Date) throws -> ProviderSnapshot
 }
 
@@ -243,7 +243,7 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
     }
 }
 
-struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading {
+struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
     static let sessionDuration: TimeInterval = 5 * 60 * 60
     private static let sessionDurationMinutes = 5 * 60
 

@@ -1,6 +1,6 @@
 import Foundation
 
-protocol UsageProviderClient {
+protocol UsageProviderClient: Sendable {
     var source: SnapshotSource { get }
 
     func snapshots(now: Date) -> [ProviderSnapshot]
