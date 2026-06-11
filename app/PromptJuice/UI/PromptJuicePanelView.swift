@@ -7,7 +7,11 @@ struct PromptJuicePanelView: View {
 
     private let panelWidth: CGFloat = 384
     private var panelHeight: CGFloat {
-        viewModel.mode == .alert ? 198 : 166
+        if viewModel.mode == .alert {
+            return 198
+        }
+
+        return selectedSnapshot == nil ? 166 : 230
     }
     private let panelCornerRadius: CGFloat = 22
 
@@ -16,6 +20,10 @@ struct PromptJuicePanelView: View {
             header
             usageRows
 
+            if let selectedSnapshot {
+                selectedProviderDetail(selectedSnapshot)
+            }
+
             if viewModel.mode == .alert {
                 actions
             }
@@ -23,6 +31,15 @@ struct PromptJuicePanelView: View {
         .padding(14)
         .frame(width: panelWidth, height: panelHeight)
         .glassPanel(cornerRadius: panelCornerRadius)
+    }
+
+    private var selectedSnapshot: UsageSnapshot? {
+        guard let selectedProvider = viewModel.selectedProvider,
+              viewModel.mode != .alert else {
+            return nil
+        }
+
+        return viewModel.snapshots.first { $0.provider == selectedProvider }
     }
 
     private var header: some View {
@@ -126,6 +143,53 @@ struct PromptJuicePanelView: View {
             .frame(width: 17, height: 19)
         }
     }
+
+    private func selectedProviderDetail(_ snapshot: UsageSnapshot) -> some View {
+        let summary = viewModel.providerSetupSummary(for: snapshot.provider)
+        let accent = snapshot.provider == .codex ? Color.cyan : Color.orange
+
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: snapshot.provider == .codex ? "cube" : "sparkles")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(accent)
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Circle().fill(accent.opacity(0.12)))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(viewModel.detailTitle(for: snapshot))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(1)
+
+                    ProviderStatusPill(state: summary.state)
+                }
+
+                Text(summary.detail)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .lineLimit(1)
+
+                Text(viewModel.lastCheckedText(for: summary))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.38))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .glassInset(
+            cornerRadius: 14,
+            accentColor: accent,
+            isSelected: true
+        )
+    }
 }
 
 private struct ActionButton: View {
@@ -174,7 +238,7 @@ private struct ProviderUsageRow: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.88))
 
-                    statusChip
+                    ProviderStatusPill(state: ProviderSetupState(confidence: snapshot.confidence))
 
                     Spacer()
 
@@ -242,26 +306,6 @@ private struct ProviderUsageRow: View {
         }
         .foregroundStyle(resetColor)
         .frame(width: 62, alignment: .trailing)
-    }
-
-    @ViewBuilder
-    private var statusChip: some View {
-        if let label = severity.chipText {
-            Text(label)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(severityColor)
-                .padding(.horizontal, 7)
-                .frame(height: 18)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(Capsule(style: .continuous).fill(severityColor.opacity(0.14)))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(severityColor.opacity(0.20), lineWidth: 1)
-                )
-        }
     }
 }
 

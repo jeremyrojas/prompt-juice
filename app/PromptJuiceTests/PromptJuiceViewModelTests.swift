@@ -81,6 +81,91 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .manual)
     }
 
+    func testProviderSetupSummariesUseSnapshotConfidence() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticProviderClient(storedSnapshots: [
+                ProviderSnapshot(
+                    identity: .claude,
+                    rateWindow: .available(
+                        usedPercent: 36,
+                        resetAt: Self.fixedNow.addingTimeInterval(60 * 60),
+                        durationMinutes: 300
+                    ),
+                    source: .claudeLocalLogs,
+                    confidence: .estimated,
+                    updatedAt: Self.fixedNow
+                ),
+                ProviderSnapshot(
+                    identity: .codex,
+                    rateWindow: .available(
+                        usedPercent: 20,
+                        resetAt: Self.fixedNow.addingTimeInterval(45 * 60),
+                        durationMinutes: 300
+                    ),
+                    source: .codexAppServer,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow
+                )
+            ]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(
+            viewModel.providerSetupSummaries.map(\.state),
+            [.estimated, .exact]
+        )
+        XCTAssertEqual(
+            viewModel.providerSetupSummary(for: .claude).secondaryActionTitle,
+            "Set Up Exact"
+        )
+        XCTAssertEqual(
+            viewModel.providerSetupSummary(for: .codex).sourceTitle,
+            "Codex app-server"
+        )
+    }
+
+    func testSelectedUnavailableProviderHeadlineIsReadable() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticProviderClient(storedSnapshots: [
+                ProviderSnapshot(
+                    identity: .claude,
+                    rateWindow: .unavailable,
+                    source: .claudeStatusline,
+                    confidence: .unavailable,
+                    updatedAt: Self.fixedNow,
+                    statusDetail: "Refreshing usage"
+                )
+            ]),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.selectProvider(.claude)
+
+        XCTAssertEqual(viewModel.headline, "Claude unavailable")
+    }
+
+    func testCompletingProviderSetupPersistsFirstRunState() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertFalse(viewModel.didCompleteProviderSetup)
+
+        viewModel.completeProviderSetup()
+
+        XCTAssertTrue(viewModel.didCompleteProviderSetup)
+        XCTAssertTrue(fixture.store.didCompleteProviderSetup)
+    }
+
     func testAlertCopyUsesRemainingJuice() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -279,6 +364,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
             updatedAt: fixedNow
         )
     ]
+
+    private struct StaticProviderClient: UsageProviderClient {
+        let source: SnapshotSource = .fixture
+        let storedSnapshots: [ProviderSnapshot]
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            storedSnapshots
+        }
+    }
 
     private final class BlockingUsageProviderClient: UsageProviderClient, @unchecked Sendable {
         let source: SnapshotSource = .fixture

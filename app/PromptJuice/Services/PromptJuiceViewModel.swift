@@ -52,20 +52,22 @@ final class PromptJuiceViewModel: ObservableObject {
             }
     }
 
-    // MARK: - Severity
+    var providerSetupSummaries: [ProviderSetupSummary] {
+        UsageProvider.allCases.map(providerSetupSummary)
+    }
 
-    /// Per-provider judgment for the row chip, bar color, and header tint.
+    var didCompleteProviderSetup: Bool {
+        settingsStore.didCompleteProviderSetup
+    }
+
     func severity(for snapshot: UsageSnapshot) -> UsageSeverity {
         alertEngine.severity(for: snapshot, thresholds: thresholds, now: now())
     }
 
-    /// Worst-wins judgment across all providers.
     var aggregateSeverity: UsageSeverity {
         alertEngine.aggregateSeverity(in: snapshots, thresholds: thresholds, now: now())
     }
 
-    /// Header droplet follows selection: the selected provider when one is
-    /// chosen, otherwise the aggregate.
     var headerSeverity: UsageSeverity {
         if let selectedSnapshot {
             return severity(for: selectedSnapshot)
@@ -74,7 +76,6 @@ final class PromptJuiceViewModel: ObservableObject {
         return aggregateSeverity
     }
 
-    /// Fill level for the header droplet (0...100), matching `headerSeverity`.
     var headerRemainingPercent: Double {
         if let selectedSnapshot {
             return selectedSnapshot.isAvailable ? selectedSnapshot.remainingPercent : 0
@@ -83,13 +84,10 @@ final class PromptJuiceViewModel: ObservableObject {
         return menuBarRemainingPercent
     }
 
-    /// Tint for the menu-bar glyph — the worst judgment across providers.
     var menuBarSeverity: UsageSeverity {
         aggregateSeverity
     }
 
-    /// Fill for the menu-bar glyph — the binding constraint (lowest remaining
-    /// among available providers). 100 when nothing is available yet.
     var menuBarRemainingPercent: Double {
         let available = snapshots.filter(\.isAvailable)
 
@@ -100,7 +98,6 @@ final class PromptJuiceViewModel: ObservableObject {
         return available.map(\.remainingPercent).min() ?? 100
     }
 
-    /// Manual-mode verdict headline — the answer, not the mechanism.
     private var manualVerdict: String {
         switch aggregateSeverity {
         case .healthy:
@@ -116,7 +113,6 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
-    /// Manual-mode subtitle — the live aggregate the static label used to hide.
     private var manualSubtitle: String {
         guard snapshots.contains(where: \.isAvailable) else {
             return "Usage unavailable"
@@ -137,6 +133,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
     var headline: String {
         if let selectedSnapshot {
+            if !selectedSnapshot.isAvailable {
+                return "\(selectedSnapshot.displayName) unavailable"
+            }
+
             if shouldUseSoon(for: selectedSnapshot) {
                 return "\(selectedSnapshot.displayName): \(remainingPercentValueText(for: selectedSnapshot)) to use"
             }
@@ -318,6 +318,32 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
+    func completeProviderSetup() {
+        settingsStore.didCompleteProviderSetup = true
+        actionMessage = "Providers ready."
+    }
+
+    func performProviderSetupAction(for provider: UsageProvider) {
+        refreshSnapshotsInBackground { [weak self] in
+            guard let self else {
+                return
+            }
+
+            let summary = self.providerSetupSummary(for: provider)
+
+            switch summary.state {
+            case .exact:
+                self.actionMessage = "\(provider.rawValue) is ready."
+            case .estimated:
+                self.actionMessage = "\(provider.rawValue) estimate is ready."
+            case .stale:
+                self.actionMessage = "\(provider.rawValue) refreshed from cache."
+            case .unavailable:
+                self.actionMessage = "\(provider.rawValue) needs setup."
+            }
+        }
+    }
+
     func setUsageSourceMode(_ mode: UsageSourceMode) {
         setUsageSourceMode(mode, persist: true, announce: true)
     }
@@ -427,6 +453,53 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return "\(source) · \(snapshot.confidence.rawValue)"
+    }
+
+    func providerSetupSummary(for provider: UsageProvider) -> ProviderSetupSummary {
+        let snapshot = snapshots.first { $0.provider == provider }
+
+        if let snapshot {
+            return ProviderSetupSummary.from(snapshot: snapshot)
+        }
+
+        return ProviderSetupSummary.unavailable(
+            for: provider,
+            detail: "Refresh to check local provider data."
+        )
+    }
+
+    func setupStateText(for snapshot: UsageSnapshot) -> String {
+        ProviderSetupState(confidence: snapshot.confidence).rawValue
+    }
+
+    func sourceTitle(for snapshot: UsageSnapshot) -> String {
+        providerSetupSummary(for: snapshot.provider).sourceTitle
+    }
+
+    func detailTitle(for snapshot: UsageSnapshot) -> String {
+        let summary = providerSetupSummary(for: snapshot.provider)
+
+        switch summary.state {
+        case .exact:
+            return "Exact from \(summary.sourceTitle)"
+        case .estimated:
+            return "Estimated from \(summary.sourceTitle)"
+        case .stale:
+            return "Stale reading from \(summary.sourceTitle)"
+        case .unavailable:
+            return "\(snapshot.displayName) unavailable"
+        }
+    }
+
+    func lastCheckedText(for summary: ProviderSetupSummary) -> String {
+        guard let updatedAt = summary.updatedAt else {
+            return "Last checked unavailable"
+        }
+
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return "Last checked \(formatter.string(from: updatedAt))"
     }
 
     private var hasPendingAlert: Bool {

@@ -33,6 +33,7 @@ private enum PanelClickRouter {
         at point: NSPoint,
         in bounds: NSRect,
         mode: PanelMode,
+        hasDetail: Bool,
         providers: [UsageProvider]
     ) -> PanelClickTarget? {
         let width = bounds.width
@@ -52,7 +53,13 @@ private enum PanelClickRouter {
 
         let rowHeight: CGFloat = 48
         let rowSpacing: CGFloat = 7
-        let bottomY: CGFloat = mode == .alert ? 47 : 14
+        let bottomY: CGFloat = if mode == .alert {
+            47
+        } else if hasDetail {
+            78
+        } else {
+            14
+        }
 
         for index in providers.indices {
             let bottomUpIndex = providers.count - 1 - index
@@ -70,12 +77,14 @@ private enum PanelClickRouter {
 
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content> {
     private let modeProvider: () -> PanelMode
+    private let hasDetailProvider: () -> Bool
     private let providers: () -> [UsageProvider]
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onCancel: () -> Void
 
     required init(rootView: Content) {
         self.modeProvider = { .manual }
+        self.hasDetailProvider = { false }
         self.providers = { [] }
         self.onPanelClick = { _ in }
         self.onCancel = {}
@@ -85,11 +94,13 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     init(
         rootView: Content,
         modeProvider: @escaping () -> PanelMode,
+        hasDetailProvider: @escaping () -> Bool,
         providers: @escaping () -> [UsageProvider],
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.modeProvider = modeProvider
+        self.hasDetailProvider = hasDetailProvider
         self.providers = providers
         self.onPanelClick = onPanelClick
         self.onCancel = onCancel
@@ -142,6 +153,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             at: point,
             in: bounds,
             mode: modeProvider(),
+            hasDetail: hasDetailProvider(),
             providers: providers()
         )
     }
@@ -158,7 +170,15 @@ final class JuicebarPanelController {
     private var snoozeAutoHideTask: Task<Void, Never>?
 
     private var panelSize: NSSize {
-        NSSize(width: 384, height: viewModel.mode == .alert ? 198 : 166)
+        NSSize(width: 384, height: panelHeight)
+    }
+
+    private var panelHeight: CGFloat {
+        if viewModel.mode == .alert {
+            return 198
+        }
+
+        return viewModel.selectedProvider == nil ? 166 : 230
     }
 
     init(viewModel: PromptJuiceViewModel) {
@@ -167,11 +187,14 @@ final class JuicebarPanelController {
         viewModel.$mode
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self, let panel = self.panel, panel.isVisible else {
-                    return
-                }
+                self?.resizeVisiblePanel()
+            }
+            .store(in: &cancellables)
 
-                self.position(panel)
+        viewModel.$selectedProvider
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.resizeVisiblePanel()
             }
             .store(in: &cancellables)
     }
@@ -247,6 +270,13 @@ final class JuicebarPanelController {
             modeProvider: { [weak viewModel] in
                 viewModel?.mode ?? .manual
             },
+            hasDetailProvider: { [weak viewModel] in
+                guard let viewModel else {
+                    return false
+                }
+
+                return viewModel.mode != .alert && viewModel.selectedProvider != nil
+            },
             providers: { [weak viewModel] in
                 viewModel?.snapshots.map(\.provider) ?? []
             },
@@ -276,6 +306,14 @@ final class JuicebarPanelController {
     private func dismissSurface() {
         viewModel.dismissCurrentWindow()
         hide()
+    }
+
+    private func resizeVisiblePanel() {
+        guard let panel, panel.isVisible else {
+            return
+        }
+
+        position(panel)
     }
 
     private func scheduleSnoozeAutoHide() {
@@ -382,6 +420,7 @@ final class JuicebarPanelController {
             at: localPoint,
             in: NSRect(origin: .zero, size: panel.frame.size),
             mode: viewModel.mode,
+            hasDetail: viewModel.mode != .alert && viewModel.selectedProvider != nil,
             providers: viewModel.snapshots.map(\.provider)
         ) else {
             return false

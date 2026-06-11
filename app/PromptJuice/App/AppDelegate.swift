@@ -1,10 +1,14 @@
 import AppKit
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let viewModel = PromptJuiceViewModel()
+    private let settingsStore = PromptJuiceSettingsStore.shared
+    private lazy var viewModel = PromptJuiceViewModel(settingsStore: settingsStore)
     private lazy var panelController = JuicebarPanelController(viewModel: viewModel)
     private var statusItem: NSStatusItem?
+    private var providerSetupWindow: NSWindow?
+    private var providerSettingsWindow: NSWindow?
     private var ticker: Timer?
     private var lastGlyphKey: String?
 
@@ -15,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preparePanelAfterLaunch()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.showLaunchAlertIfNeeded()
+            self?.showLaunchExperience()
         }
     }
 
@@ -50,9 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Redraws the menu-bar droplet from the current aggregate. The fill is the
-    /// binding constraint (lowest provider); the tint is the worst severity.
-    /// Skips redundant redraws so it's cheap to call every tick.
     private func updateStatusItemGlyph(force: Bool = false) {
         guard let button = statusItem?.button else {
             return
@@ -84,6 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func showLaunchExperience() {
+        if settingsStore.didCompleteProviderSetup {
+            showLaunchAlertIfNeeded()
+        } else {
+            showProviderSetup()
+        }
+    }
+
     @objc private func statusItemClicked(_ sender: Any?) {
         if shouldShowContextMenu {
             showContextMenu()
@@ -109,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(
-            withTitle: "Show Usage",
+            withTitle: "Show Juicebar",
             action: #selector(showUsage),
             keyEquivalent: ""
         ).target = self
@@ -118,8 +127,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(refreshUsage),
             keyEquivalent: "r"
         ).target = self
+        addProviderMenu(to: menu)
         menu.addItem(.separator())
-        addThresholdMenus(to: menu)
+        addAlertMenu(to: menu)
+        menu.addItem(.separator())
+        menu.addItem(
+            withTitle: "Settings...",
+            action: #selector(showProviderSettings),
+            keyEquivalent: ","
+        ).target = self
         menu.addItem(
             withTitle: "Quit PromptJuice",
             action: #selector(quit),
@@ -151,6 +167,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.show()
     }
 
+    @objc private func showProviderSetup() {
+        let window = ensureProviderSetupWindow()
+        NSApp.activate(ignoringOtherApps: true)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func showProviderSettings() {
+        let window = ensureProviderSettingsWindow()
+        NSApp.activate(ignoringOtherApps: true)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func performProviderMenuAction(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let provider = UsageProvider(rawValue: rawValue) else {
+            return
+        }
+
+        viewModel.performProviderSetupAction(for: provider)
+        panelController.show()
+    }
+
     @objc private func setRemainingMinutesThreshold(_ sender: NSMenuItem) {
         viewModel.setRemainingMinutesThreshold(sender.tag)
         panelController.show()
@@ -163,6 +203,121 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private func ensureProviderSetupWindow() -> NSWindow {
+        if let providerSetupWindow {
+            providerSetupWindow.contentView = NSHostingView(rootView: setupRootView)
+            return providerSetupWindow
+        }
+
+        let window = makeGlassWindow(
+            title: "Connect Providers",
+            size: NSSize(width: 760, height: 500)
+        )
+        window.contentView = NSHostingView(rootView: setupRootView)
+        providerSetupWindow = window
+        return window
+    }
+
+    private func ensureProviderSettingsWindow() -> NSWindow {
+        if let providerSettingsWindow {
+            providerSettingsWindow.contentView = NSHostingView(rootView: settingsRootView)
+            return providerSettingsWindow
+        }
+
+        let window = makeGlassWindow(
+            title: "PromptJuice Settings",
+            size: NSSize(width: 780, height: 520)
+        )
+        window.contentView = NSHostingView(rootView: settingsRootView)
+        providerSettingsWindow = window
+        return window
+    }
+
+    private var setupRootView: ProviderSetupWindowView {
+        ProviderSetupWindowView(
+            viewModel: viewModel,
+            onContinue: { [weak self] in
+                guard let self else {
+                    return
+                }
+
+                self.viewModel.completeProviderSetup()
+                self.providerSetupWindow?.orderOut(nil)
+                self.showUsage()
+            },
+            onOpenSettings: { [weak self] in
+                self?.showProviderSettings()
+            }
+        )
+    }
+
+    private var settingsRootView: ProviderSettingsWindowView {
+        ProviderSettingsWindowView(
+            viewModel: viewModel,
+            onOpenSetup: { [weak self] in
+                self?.showProviderSetup()
+            }
+        )
+    }
+
+    private func makeGlassWindow(title: String, size: NSSize) -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = title
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    private func addProviderMenu(to menu: NSMenu) {
+        let providerMenuItem = NSMenuItem(title: "Providers", action: nil, keyEquivalent: "")
+        let providerMenu = NSMenu(title: "Providers")
+
+        for summary in viewModel.providerSetupSummaries {
+            let item = NSMenuItem(
+                title: "\(summary.identity.displayName): \(summary.state.rawValue)",
+                action: #selector(performProviderMenuAction(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = summary.provider.rawValue
+            providerMenu.addItem(item)
+        }
+
+        providerMenu.addItem(.separator())
+        providerMenu.addItem(
+            withTitle: "Connect Providers...",
+            action: #selector(showProviderSetup),
+            keyEquivalent: ""
+        ).target = self
+        providerMenu.addItem(
+            withTitle: "Provider Settings...",
+            action: #selector(showProviderSettings),
+            keyEquivalent: ""
+        ).target = self
+
+        menu.setSubmenu(providerMenu, for: providerMenuItem)
+        menu.addItem(providerMenuItem)
+    }
+
+    private func addAlertMenu(to menu: NSMenu) {
+        let alertMenuItem = NSMenuItem(title: "Alerts", action: nil, keyEquivalent: "")
+        let alertMenu = NSMenu(title: "Alerts")
+
+        addThresholdMenus(to: alertMenu)
+
+        menu.setSubmenu(alertMenu, for: alertMenuItem)
+        menu.addItem(alertMenuItem)
     }
 
     private func addThresholdMenus(to menu: NSMenu) {

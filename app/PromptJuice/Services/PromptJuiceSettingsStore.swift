@@ -9,6 +9,7 @@ final class PromptJuiceSettingsStore {
         static let remainingPercentThreshold = "remainingPercentThreshold"
         static let snoozedUsageWindowID = "snoozedUsageWindowID"
         static let usageSourceMode = "usageSourceMode"
+        static let didCompleteProviderSetup = "didCompleteProviderSetup"
     }
 
     private let defaults: UserDefaults
@@ -49,6 +50,15 @@ final class PromptJuiceSettingsStore {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.usageSourceMode)
+        }
+    }
+
+    var didCompleteProviderSetup: Bool {
+        get {
+            defaults.bool(forKey: Key.didCompleteProviderSetup)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.didCompleteProviderSetup)
         }
     }
 
