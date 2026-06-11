@@ -24,4 +24,3 @@ build/
 # Local environment
 .env
 .env.*
-
