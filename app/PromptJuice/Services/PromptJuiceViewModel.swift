@@ -15,7 +15,6 @@ final class PromptJuiceViewModel: ObservableObject {
     private let now: () -> Date
     private let injectedProviderClient: (any UsageProviderClient)?
     private var providerClient: any UsageProviderClient
-    private var scenario: DemoScenario = .underusedCodex
 
     init(
         settingsStore: PromptJuiceSettingsStore = .shared,
@@ -29,8 +28,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.injectedProviderClient = providerClient
         self.sourceMode = initialSourceMode
         self.providerClient = providerClient ?? Self.makeProviderClient(
-            sourceMode: initialSourceMode,
-            scenario: scenario
+            sourceMode: initialSourceMode
         )
         self.alertEngine = alertEngine
         self.now = now
@@ -90,10 +88,10 @@ final class PromptJuiceViewModel: ObservableObject {
             }
 
             if shouldUseSoon(for: selectedSnapshot) {
-                return "\(resetText(for: selectedSnapshot)) before reset · \(sourceText)"
+                return "\(fullResetText(for: selectedSnapshot)) · \(sourceText)"
             }
 
-            return "\(percentText(for: selectedSnapshot)) · \(fullResetText(for: selectedSnapshot)) · \(sourceText)"
+            return "\(remainingPercentText(for: selectedSnapshot)) · \(fullResetText(for: selectedSnapshot))"
         }
 
         switch mode {
@@ -106,16 +104,16 @@ final class PromptJuiceViewModel: ObservableObject {
 
             if alertingSnapshots.count > 1 {
                 return alertingSnapshots
-                    .map { "\($0.displayName) \(remainingPercentValueText(for: $0)) in \(resetText(for: $0))" }
+                    .map { "\($0.displayName) \(remainingPercentText(for: $0)), \(resetText(for: $0))" }
                     .joined(separator: " · ")
             }
 
             if let alertSnapshot {
                 if shouldUseSoon(for: alertSnapshot) {
-                    return "\(resetText(for: alertSnapshot)) before reset."
+                    return fullResetText(for: alertSnapshot)
                 }
 
-                return "\(percentText(for: alertSnapshot)) · \(fullResetText(for: alertSnapshot))"
+                return "\(remainingPercentText(for: alertSnapshot)) · \(fullResetText(for: alertSnapshot))"
             }
 
             return "Good time to launch agents."
@@ -157,11 +155,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     @discardableResult
-    func checkDemoAlert(force: Bool = false) -> Bool {
+    func checkUsageAlert(force: Bool = false) -> Bool {
         actionMessage = nil
         selectedProvider = nil
-        setUsageSourceMode(.demo, persist: true, announce: false)
-        setDemoScenario(.underusedCodex)
+        refreshSnapshots()
 
         if force {
             clearSnoozeForCurrentWindow()
@@ -178,18 +175,9 @@ final class PromptJuiceViewModel: ObservableObject {
         return true
     }
 
-    func cycleDemoState() {
-        setUsageSourceMode(.demo, persist: true, announce: false)
-        setDemoScenario(scenario.next)
-        mode = scenario == .quiet ? .manual : .alert
-        actionMessage = nil
-        selectedProvider = nil
-        clearSnoozeForCurrentWindow()
-    }
-
     func snooze() {
         if mode == .alert {
-            settingsStore.snoozedDemoWindowID = currentWindowID
+            settingsStore.snoozedUsageWindowID = currentWindowID
         }
 
         mode = .snoozed
@@ -199,7 +187,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func dismissCurrentWindow() {
         if mode == .alert {
-            settingsStore.snoozedDemoWindowID = currentWindowID
+            settingsStore.snoozedUsageWindowID = currentWindowID
         }
 
         actionMessage = nil
@@ -232,17 +220,13 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func selectProvider(_ provider: UsageProvider) {
-        selectedProvider = selectedProvider == provider ? nil : provider
+        selectedProvider = provider
         actionMessage = nil
     }
 
     func clearSelection() {
         selectedProvider = nil
         actionMessage = nil
-    }
-
-    func recordDemoAction(_ title: String) {
-        actionMessage = "\(title) queued for later."
     }
 
     func tick() {
@@ -254,7 +238,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Unavailable"
         }
 
-        return "\(Int(snapshot.clampedUsedPercent.rounded()))% used"
+        return remainingPercentText(for: snapshot)
     }
 
     func remainingPercentText(for snapshot: UsageSnapshot) -> String {
@@ -323,8 +307,8 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func sourceText(for snapshot: UsageSnapshot) -> String {
         let source = switch snapshot.source {
-        case .demo:
-            "demo"
+        case .fixture:
+            "fixture"
         case .codexStub:
             "Codex stub"
         case .codexAppServer:
@@ -347,7 +331,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private var isCurrentWindowSnoozed: Bool {
-        settingsStore.snoozedDemoWindowID == currentWindowID
+        settingsStore.snoozedUsageWindowID == currentWindowID
     }
 
     private var currentWindowID: String {
@@ -355,12 +339,12 @@ final class PromptJuiceViewModel: ObservableObject {
             .map(\.resetWindowID)
             .joined(separator: "|")
 
-        return "\(sourceMode.rawValue)-\(scenario.rawValue)-\(windowParts)"
+        return "\(sourceMode.rawValue)-\(windowParts)"
     }
 
     private func clearSnoozeForCurrentWindow() {
         if isCurrentWindowSnoozed {
-            settingsStore.snoozedDemoWindowID = nil
+            settingsStore.snoozedUsageWindowID = nil
         }
     }
 
@@ -372,12 +356,6 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         objectWillChange.send()
-    }
-
-    private func setDemoScenario(_ nextScenario: DemoScenario) {
-        scenario = nextScenario
-        configureProviderClient()
-        refreshSnapshots()
     }
 
     private func setUsageSourceMode(
@@ -406,8 +384,7 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         providerClient = Self.makeProviderClient(
-            sourceMode: sourceMode,
-            scenario: scenario
+            sourceMode: sourceMode
         )
     }
 
@@ -415,15 +392,12 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots = providerClient.snapshots(now: now())
     }
 
-    private static func makeProviderClient(
-        sourceMode: UsageSourceMode,
-        scenario: DemoScenario
-    ) -> any UsageProviderClient {
+    private static func makeProviderClient(sourceMode: UsageSourceMode) -> any UsageProviderClient {
         switch sourceMode {
-        case .demo:
-            return DemoProviderClient(scenario: scenario)
+        case .fixture:
+            return FixtureUsageProviderClient(scenario: .underusedCodex)
         case .liveCodex:
-            return ClaudeLiveUsageProviderClient(scenario: scenario)
+            return ClaudeLiveUsageProviderClient()
         }
     }
 }

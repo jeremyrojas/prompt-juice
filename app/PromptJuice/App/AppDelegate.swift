@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startTicker()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.showLaunchDemoAlert()
+            self?.showLaunchAlertIfNeeded()
         }
     }
 
@@ -84,27 +84,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ).target = self
         addUsageSourceMenu(to: menu)
         menu.addItem(.separator())
-        menu.addItem(
-            withTitle: "Check Demo Alert",
-            action: #selector(checkDemoAlert),
-            keyEquivalent: ""
-        ).target = self
-        menu.addItem(
-            withTitle: "Cycle Demo State",
-            action: #selector(cycleDemoState),
-            keyEquivalent: ""
-        ).target = self
-        menu.addItem(.separator())
         addThresholdMenus(to: menu)
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "Request Notifications",
             action: #selector(requestNotifications),
-            keyEquivalent: ""
-        ).target = self
-        menu.addItem(
-            withTitle: "Send Demo Notification",
-            action: #selector(sendDemoNotification),
             keyEquivalent: ""
         ).target = self
         menu.addItem(.separator())
@@ -126,27 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.show()
     }
 
-    private func showLaunchDemoAlert() {
-        if viewModel.sourceMode == .demo {
-            viewModel.checkDemoAlert(force: true)
-        } else {
-            viewModel.showManualCheck()
-        }
-
-        panelController.show()
-    }
-
-    @objc private func checkDemoAlert() {
-        if viewModel.checkDemoAlert() {
+    private func showLaunchAlertIfNeeded() {
+        if viewModel.checkUsageAlert() {
             panelController.show()
-        } else {
-            panelController.hide()
         }
-    }
-
-    @objc private func cycleDemoState() {
-        viewModel.cycleDemoState()
-        panelController.show()
     }
 
     @objc private func refreshUsage() {
@@ -178,15 +145,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notificationService.requestAuthorization()
     }
 
-    @objc private func sendDemoNotification() {
-        viewModel.checkDemoAlert(force: true)
-        panelController.show()
-        notificationService.sendUseSoonNotification(
-            title: viewModel.headline,
-            body: viewModel.detail
-        )
-    }
-
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -195,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sourceMenuItem = NSMenuItem(title: "Usage Source", action: nil, keyEquivalent: "")
         let sourceMenu = NSMenu(title: "Usage Source")
 
-        for mode in UsageSourceMode.allCases {
+        for mode in UsageSourceMode.userFacingModes {
             let item = NSMenuItem(
                 title: mode.title,
                 action: #selector(setUsageSourceMode(_:)),

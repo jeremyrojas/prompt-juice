@@ -1,15 +1,20 @@
 enum UsageSourceMode: String, CaseIterable, Equatable {
-    case demo
+    case fixture
     case liveCodex
 
     static let defaultMode: UsageSourceMode = .liveCodex
+    static let userFacingModes: [UsageSourceMode] = [.liveCodex]
 
     var title: String {
         switch self {
-        case .demo:
-            return "Demo Usage"
+        case .fixture:
+            return "Fixture Usage"
         case .liveCodex:
             return "Live Usage"
         }
+    }
+
+    var isUserFacing: Bool {
+        Self.userFacingModes.contains(self)
     }
 }

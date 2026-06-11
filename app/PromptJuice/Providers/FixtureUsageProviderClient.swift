@@ -1,8 +1,8 @@
 import Foundation
 
-struct DemoProviderClient: UsageProviderClient {
-    let scenario: DemoScenario
-    let source: SnapshotSource = .demo
+struct FixtureUsageProviderClient: UsageProviderClient {
+    let scenario: FixtureUsageScenario
+    let source: SnapshotSource = .fixture
 
     func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
         switch scenario {
@@ -110,13 +110,13 @@ struct DemoProviderClient: UsageProviderClient {
     }
 }
 
-enum DemoScenario: Int, CaseIterable {
+enum FixtureUsageScenario: Int, CaseIterable {
     case underusedCodex
     case underusedClaude
     case healthy
     case quiet
 
-    var next: DemoScenario {
+    var next: FixtureUsageScenario {
         let allCases = Self.allCases
         let nextIndex = (rawValue + 1) % allCases.count
         return allCases[nextIndex]

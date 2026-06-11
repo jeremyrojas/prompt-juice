@@ -51,30 +51,26 @@ struct CodexProviderClient: UsageProviderClient {
 struct CodexLiveUsageProviderClient: UsageProviderClient {
     let source: SnapshotSource = .codexAppServer
 
-    private let scenario: DemoScenario
     private let codexProviderClient: CodexProviderClient
 
     init(
-        scenario: DemoScenario,
         codexProviderClient: CodexProviderClient = CodexProviderClient()
     ) {
-        self.scenario = scenario
         self.codexProviderClient = codexProviderClient
     }
 
     func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
         let codexSnapshot = codexProviderClient.snapshots(now: now).first
 
-        return DemoProviderClient(scenario: scenario)
-            .snapshots(now: now)
-            .map { snapshot in
-                guard snapshot.identity == .codex,
-                      let codexSnapshot else {
-                    return snapshot
-                }
-
-                return codexSnapshot
-            }
+        return [
+            codexSnapshot ?? ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .unavailable,
+                source: source,
+                confidence: .unavailable,
+                updatedAt: now
+            )
+        ]
     }
 }
 

@@ -110,7 +110,7 @@ final class AlertEngineTests: XCTestCase {
                 resetAt: now.addingTimeInterval(TimeInterval(resetMinutesFromNow * 60)),
                 durationMinutes: 300
             ),
-            source: .demo,
+            source: .fixture,
             confidence: confidence,
             updatedAt: now
         )

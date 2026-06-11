@@ -67,16 +67,13 @@ struct ClaudeProviderClient: UsageProviderClient {
 struct ClaudeLiveUsageProviderClient: UsageProviderClient {
     let source: SnapshotSource = .claudeStatusline
 
-    private let scenario: DemoScenario
     private let claudeProviderClient: ClaudeProviderClient
     private let codexProviderClient: CodexProviderClient
 
     init(
-        scenario: DemoScenario,
         claudeProviderClient: ClaudeProviderClient = ClaudeProviderClient(),
         codexProviderClient: CodexProviderClient = CodexProviderClient()
     ) {
-        self.scenario = scenario
         self.claudeProviderClient = claudeProviderClient
         self.codexProviderClient = codexProviderClient
     }
@@ -85,19 +82,24 @@ struct ClaudeLiveUsageProviderClient: UsageProviderClient {
         let claudeSnapshot = claudeProviderClient.snapshots(now: now).first
         let codexSnapshot = codexProviderClient.snapshots(now: now).first
 
-        return DemoProviderClient(scenario: scenario)
-            .snapshots(now: now)
-            .map { snapshot in
-                if snapshot.identity == .claude {
-                    return claudeSnapshot ?? snapshot
-                }
+        return [
+            claudeSnapshot ?? unavailableSnapshot(identity: .claude, source: .claudeStatusline, now: now),
+            codexSnapshot ?? unavailableSnapshot(identity: .codex, source: .codexAppServer, now: now)
+        ]
+    }
 
-                if snapshot.identity == .codex {
-                    return codexSnapshot ?? snapshot
-                }
-
-                return snapshot
-            }
+    private func unavailableSnapshot(
+        identity: ProviderIdentity,
+        source: SnapshotSource,
+        now: Date
+    ) -> ProviderSnapshot {
+        ProviderSnapshot(
+            identity: identity,
+            rateWindow: .unavailable,
+            source: source,
+            confidence: .unavailable,
+            updatedAt: now
+        )
     }
 }
 
