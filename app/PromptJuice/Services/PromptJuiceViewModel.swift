@@ -10,27 +10,40 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var thresholds: AlertThresholds
 
     private let settingsStore: PromptJuiceSettingsStore
+    private let alertEngine: AlertEngine
+    private let now: () -> Date
+    private var providerClient: any UsageProviderClient
     private var scenario: DemoScenario = .underusedCodex
 
-    init(settingsStore: PromptJuiceSettingsStore = .shared) {
+    init(
+        settingsStore: PromptJuiceSettingsStore = .shared,
+        providerClient: (any UsageProviderClient)? = nil,
+        alertEngine: AlertEngine = AlertEngine(),
+        now: @escaping () -> Date = Date.init
+    ) {
         self.settingsStore = settingsStore
+        self.providerClient = providerClient ?? DemoProviderClient(scenario: scenario)
+        self.alertEngine = alertEngine
+        self.now = now
         thresholds = settingsStore.thresholds
-        snapshots = DemoUsageProvider.snapshots(for: scenario)
+        snapshots = self.providerClient.snapshots(now: now())
     }
 
     var primarySnapshot: UsageSnapshot? {
-        snapshots.min { first, second in
-            first.resetAt < second.resetAt
-        }
+        snapshots
+            .filter(\.isAvailable)
+            .min { first, second in
+                first.resetAt < second.resetAt
+            }
     }
 
     var headline: String {
         if let selectedSnapshot {
             if shouldUseSoon(for: selectedSnapshot) {
-                return "\(selectedSnapshot.provider.rawValue): \(remainingPercentValueText(for: selectedSnapshot)) to use"
+                return "\(selectedSnapshot.displayName): \(remainingPercentValueText(for: selectedSnapshot)) to use"
             }
 
-            return "\(selectedSnapshot.provider.rawValue) has \(remainingPercentText(for: selectedSnapshot))"
+            return "\(selectedSnapshot.displayName) has \(remainingPercentText(for: selectedSnapshot))"
         }
 
         switch mode {
@@ -41,17 +54,17 @@ final class PromptJuiceViewModel: ObservableObject {
                 return "Plenty of prompt juice left"
             }
 
-            let alertingSnapshots = snapshots.filter { shouldAlert(for: $0) }
+            let alertingSnapshots = self.alertingSnapshots
 
             if alertingSnapshots.count > 1 {
                 return "Use prompt juice soon"
             }
 
             if shouldUseSoon(for: alertSnapshot) {
-                return "\(alertSnapshot.provider.rawValue): \(remainingPercentValueText(for: alertSnapshot)) to use"
+                return "\(alertSnapshot.displayName): \(remainingPercentValueText(for: alertSnapshot)) to use"
             }
 
-            return "\(alertSnapshot.provider.rawValue) has \(remainingPercentText(for: alertSnapshot))"
+            return "\(alertSnapshot.displayName) has \(remainingPercentText(for: alertSnapshot))"
         case .snoozed:
             return "Snoozed for this window"
         }
@@ -70,11 +83,11 @@ final class PromptJuiceViewModel: ObservableObject {
         case .manual:
             return "Claude and Codex usage at a glance."
         case .alert:
-            let alertingSnapshots = snapshots.filter { shouldAlert(for: $0) }
+            let alertingSnapshots = self.alertingSnapshots
 
             if alertingSnapshots.count > 1 {
                 return alertingSnapshots
-                    .map { "\($0.provider.rawValue) \(remainingPercentValueText(for: $0)) in \(resetText(for: $0))" }
+                    .map { "\($0.displayName) \(remainingPercentValueText(for: $0)) in \(resetText(for: $0))" }
                     .joined(separator: " · ")
             }
 
@@ -101,13 +114,19 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private var alertSnapshot: UsageSnapshot? {
-        let alertingSnapshots = snapshots.filter { shouldAlert(for: $0) }
+        alertEngine.preferredSnapshot(
+            in: snapshots,
+            thresholds: thresholds,
+            now: now()
+        )
+    }
 
-        if let highestRemaining = alertingSnapshots.max(by: { $0.remainingPercent < $1.remainingPercent }) {
-            return highestRemaining
-        }
-
-        return snapshots.max { $0.remainingPercent < $1.remainingPercent }
+    private var alertingSnapshots: [UsageSnapshot] {
+        alertEngine.alertingSnapshots(
+            in: snapshots,
+            thresholds: thresholds,
+            now: now()
+        )
     }
 
     func showManualCheck() {
@@ -121,8 +140,7 @@ final class PromptJuiceViewModel: ObservableObject {
     func checkDemoAlert(force: Bool = false) -> Bool {
         actionMessage = nil
         selectedProvider = nil
-        scenario = .underusedCodex
-        snapshots = DemoUsageProvider.snapshots(for: scenario)
+        setDemoScenario(.underusedCodex)
 
         if force {
             clearSnoozeForCurrentWindow()
@@ -140,8 +158,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func cycleDemoState() {
-        scenario = scenario.next
-        snapshots = DemoUsageProvider.snapshots(for: scenario)
+        setDemoScenario(scenario.next)
         mode = scenario == .quiet ? .manual : .alert
         actionMessage = nil
         selectedProvider = nil
@@ -198,20 +215,33 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func percentText(for snapshot: UsageSnapshot) -> String {
-        "\(Int(snapshot.clampedUsedPercent.rounded()))% used"
+        guard snapshot.isAvailable else {
+            return "Unavailable"
+        }
+
+        return "\(Int(snapshot.clampedUsedPercent.rounded()))% used"
     }
 
     func remainingPercentText(for snapshot: UsageSnapshot) -> String {
-        "\(Int(snapshot.remainingPercent.rounded()))% left"
+        guard snapshot.isAvailable else {
+            return "unavailable"
+        }
+
+        return "\(Int(snapshot.remainingPercent.rounded()))% left"
     }
 
     func remainingPercentValueText(for snapshot: UsageSnapshot) -> String {
-        "\(Int(snapshot.remainingPercent.rounded()))%"
+        guard snapshot.isAvailable else {
+            return "n/a"
+        }
+
+        return "\(Int(snapshot.remainingPercent.rounded()))%"
     }
 
     func remainingText(for snapshot: UsageSnapshot) -> String {
-        let seconds = max(0, snapshot.resetAt.timeIntervalSinceNow)
-        let minutes = max(0, Int(ceil(seconds / 60)))
+        guard let minutes = snapshot.rateWindow.minutesUntilReset(now: now()) else {
+            return "Unavailable"
+        }
 
         if minutes < 60 {
             return "\(minutes)m left"
@@ -223,8 +253,9 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func resetText(for snapshot: UsageSnapshot) -> String {
-        let seconds = max(0, snapshot.resetAt.timeIntervalSinceNow)
-        let minutes = max(0, Int(ceil(seconds / 60)))
+        guard let minutes = snapshot.rateWindow.minutesUntilReset(now: now()) else {
+            return "n/a"
+        }
 
         if minutes < 60 {
             return "\(minutes)m"
@@ -240,37 +271,23 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func shouldUseSoon(for snapshot: UsageSnapshot) -> Bool {
-        minutesUntilReset(for: snapshot) <= thresholds.remainingMinutes
-            && snapshot.remainingPercent >= Double(thresholds.remainingPercent)
+        alertEngine.shouldUseSoon(
+            for: snapshot,
+            thresholds: thresholds,
+            now: now()
+        )
     }
 
     func statusText(for snapshot: UsageSnapshot) -> String {
-        if shouldUseSoon(for: snapshot) {
-            return "Use soon"
-        }
-
-        if snapshot.remainingPercent <= 0 {
-            return "Empty"
-        }
-
-        if snapshot.remainingPercent >= 40 {
-            return "Lots left"
-        }
-
-        if snapshot.remainingPercent >= 15 {
-            return "Some left"
-        }
-
-        return "Low"
-    }
-
-    private func minutesUntilReset(for snapshot: UsageSnapshot) -> Int {
-        let seconds = max(0, snapshot.resetAt.timeIntervalSinceNow)
-        return Int(ceil(seconds / 60))
+        alertEngine.statusText(
+            for: snapshot,
+            thresholds: thresholds,
+            now: now()
+        )
     }
 
     private var hasPendingAlert: Bool {
-        snapshots.contains { shouldAlert(for: $0) }
+        !alertingSnapshots.isEmpty
     }
 
     private var isCurrentWindowSnoozed: Bool {
@@ -279,10 +296,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
     private var currentWindowID: String {
         let windowParts = snapshots
-            .map { snapshot in
-                let resetMinute = Int(snapshot.resetAt.timeIntervalSince1970 / 60)
-                return "\(snapshot.provider.rawValue):\(resetMinute)"
-            }
+            .map(\.resetWindowID)
             .joined(separator: "|")
 
         return "\(scenario.rawValue)-\(windowParts)"
@@ -304,7 +318,9 @@ final class PromptJuiceViewModel: ObservableObject {
         objectWillChange.send()
     }
 
-    private func shouldAlert(for snapshot: UsageSnapshot) -> Bool {
-        shouldUseSoon(for: snapshot)
+    private func setDemoScenario(_ nextScenario: DemoScenario) {
+        scenario = nextScenario
+        providerClient = DemoProviderClient(scenario: nextScenario)
+        snapshots = providerClient.snapshots(now: now())
     }
 }

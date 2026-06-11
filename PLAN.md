@@ -81,37 +81,43 @@ Acceptance criteria:
 
 Goal: make the app ready for real providers while preserving the current UI.
 
+Phase 1A status on `codex/architecture-foundation`: the small provider boundary,
+domain snapshot model, and alert engine are in place. Demo behavior still drives
+the Juicebar while Codex live access remains a follow-up spike.
+
 Core model work:
 
-- Add `RateWindow`.
-- Add `ProviderSnapshot`.
-- Add `ProviderIdentity`.
-- Add `SnapshotSource`.
-- Add `SnapshotConfidence`.
-- Add provider error/stale states.
-- Add alert-window identity for reset-window tracking.
+- ✅ Add `RateWindow`.
+- ✅ Add `ProviderSnapshot`.
+- ✅ Add `ProviderIdentity`.
+- ✅ Add `SnapshotSource`.
+- ✅ Add `SnapshotConfidence`.
+- ✅ Represent exact, estimated, stale, and unavailable snapshot states.
+- ✅ Keep reset-window tracking through normalized snapshot window IDs.
 
 Provider layer:
 
-- Define `UsageProviderClient`.
-- Move demo data behind `DemoProviderClient`.
-- Prepare empty shells for `CodexProviderClient` and `ClaudeProviderClient`.
-- Keep provider clients async and local-first.
+- ✅ Define `UsageProviderClient`.
+- ✅ Move demo data behind `DemoProviderClient`.
+- ✅ Prepare safe shell for `CodexProviderClient`.
+- Make provider clients async when live reads need it.
 - Make every provider return normalized snapshots.
+- Add `ClaudeProviderClient` with the Claude phase.
 
 Alert layer:
 
-- Move alert decisions out of `PromptJuiceViewModel`.
-- Add `AlertEngine`.
-- Add threshold rules.
-- Add stale-data suppression.
-- Add snooze per provider reset window.
+- ✅ Move alert decisions out of `PromptJuiceViewModel`.
+- ✅ Add `AlertEngine`.
+- ✅ Add threshold rules.
+- ✅ Add stale-data suppression.
+- Preserve current demo-window Snooze behavior.
+- Add snooze per provider reset window once live providers ship.
 - Add quiet-hours shape, even if the setting ships later.
 
 State layer:
 
-- Add a small local store for settings and alert state.
-- Persist snooze and dismiss state.
+- ✅ Keep the existing small settings store for thresholds and demo snooze state.
+- ✅ Persist snooze and dismiss state for the current demo reset window.
 - Cache last-good provider snapshots.
 - Keep the storage format simple until live providers prove the final shape.
 
@@ -124,18 +130,19 @@ UI boundary:
 
 Tests:
 
-- Alert threshold tests.
+- ✅ Alert threshold tests.
+- ✅ Snooze-window tests.
+- ✅ Snapshot stale/confidence tests.
+- ✅ Demo provider tests.
+- ✅ Codex shell tests.
 - Reset countdown tests.
-- Snooze-window tests.
-- Snapshot stale/confidence tests.
-- Demo provider tests.
 
 Acceptance criteria:
 
-- The current demo UI behaves the same after the refactor.
-- Alert rules can be tested without launching macOS UI.
-- Provider snapshots can represent exact, estimated, stale, and failed states.
-- Real Codex work can start without reshaping the app again.
+- ✅ The current demo UI behaves the same after the refactor.
+- ✅ Alert rules can be tested in pure XCTest.
+- ✅ Provider snapshots can represent exact, estimated, stale, and unavailable states.
+- ✅ Real Codex work can start from `CodexProviderClient`.
 
 ## Phase 2: Local Behavior
 
