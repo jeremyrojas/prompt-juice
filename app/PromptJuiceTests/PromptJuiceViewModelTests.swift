@@ -32,6 +32,22 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .manual)
     }
 
+    func testDismissDoesNotSuppressCurrentFixtureWindow() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
+        viewModel.dismissCurrentWindow()
+
+        XCTAssertTrue(viewModel.checkUsageAlert())
+        XCTAssertEqual(viewModel.mode, .alert)
+    }
+
     func testManualCheckClearsCurrentFixtureSnooze() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

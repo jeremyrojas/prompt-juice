@@ -193,10 +193,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func dismissCurrentWindow() {
-        if mode == .alert {
-            settingsStore.snoozedUsageWindowID = currentWindowID
-        }
-
         actionMessage = nil
         selectedProvider = nil
     }
