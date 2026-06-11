@@ -149,6 +149,11 @@ Acceptance criteria:
 Goal: show live Codex quota/reset data through the provider boundary while
 preserving the current demo fallback and read-only safety posture.
 
+Phase 1B status on `codex/codex-provider-integration`: PromptJuice can read
+live Codex rate-limit data from `codex app-server`, map it into
+`ProviderSnapshot`, show it in the existing Codex row, and fall back to a stale
+last-good snapshot or calm unavailable row.
+
 Source anchor:
 
 - Primary path: `codex app-server`.
@@ -170,41 +175,42 @@ Safety rails:
 
 Implementation slices:
 
-1. Add `CodexAppServerClient`.
-   - Launch or connect to `codex app-server`.
-   - Send `initialize` and `initialized`.
-   - Send `account/rateLimits/read`.
-   - Add request IDs, timeout handling, process cleanup, and structured errors.
-2. Add Codex rate-limit DTOs and parser tests.
-   - Decode single-bucket and `rateLimitsByLimitId` responses.
-   - Map `primary.usedPercent` to `RateWindow.usedPercent`.
-   - Map `primary.windowDurationMins` to `RateWindow.durationMinutes`.
-   - Map `primary.resetsAt` to `RateWindow.resetAt`.
-   - Represent missing or malformed data as `.unavailable`.
-3. Wire `CodexProviderClient` to the client/parser.
-   - Return `.exact` when provider rate-limit fields are complete.
-   - Return `.unavailable` with an inspectable error when app-server is absent
+1. ✅ Add `CodexAppServerClient`.
+   - ✅ Launch `codex app-server`.
+   - ✅ Send `initialize` and `initialized`.
+   - ✅ Send `account/rateLimits/read`.
+   - ✅ Add request IDs, timeout handling, process cleanup, and structured errors.
+2. ✅ Add Codex rate-limit DTOs and parser tests.
+   - ✅ Decode single-bucket and `rateLimitsByLimitId` responses.
+   - ✅ Map `primary.usedPercent` to `RateWindow.usedPercent`.
+   - ✅ Map `primary.windowDurationMins` to `RateWindow.durationMinutes`.
+   - ✅ Map `primary.resetsAt` to `RateWindow.resetAt`.
+   - ✅ Represent missing or malformed data as `.unavailable`.
+3. ✅ Wire `CodexProviderClient` to the client/parser.
+   - ✅ Return `.exact` when provider rate-limit fields are complete.
+   - ✅ Return `.unavailable` with an inspectable error when app-server is absent
      or unreachable.
-   - Cache the last-good snapshot after the exact path works.
-4. Add minimal UI/settings support.
-   - Add a menu option for Demo vs Live Codex source.
-   - Surface source/confidence in a compact detail line.
-   - Keep provider rows, Snooze, thresholds, and alert copy stable.
-5. Validate with layered tests and one opt-in smoke.
-   - Parser fixture tests for single-bucket and multi-bucket responses.
-   - Provider tests for exact, unavailable, stale, and timeout states.
-   - View-model tests for live Codex snapshot display and fallback behavior.
-   - Manual smoke: live app-server available, app-server absent, and app-server
+   - ✅ Cache the last-good snapshot after the exact path works.
+4. ✅ Add minimal UI/settings support.
+   - ✅ Add a menu option for Demo vs Live Codex source.
+   - ✅ Add a Refresh Usage menu option.
+   - ✅ Surface source/confidence in a compact detail line.
+   - ✅ Keep provider rows, Snooze, thresholds, and alert copy stable.
+5. ✅ Validate with layered tests and one opt-in smoke.
+   - ✅ Parser fixture tests for single-bucket and multi-bucket responses.
+   - ✅ Provider tests for exact, unavailable, stale, and timeout states.
+   - ✅ View-model tests keep demo behavior deterministic.
+   - ✅ Manual smoke: live app-server available, app-server absent, and app-server
      timeout.
 
 Acceptance criteria:
 
-- PromptJuice shows a real Codex reset window when app-server returns a complete
+- ✅ PromptJuice shows a real Codex reset window when app-server returns a complete
   rate-limit response.
-- App-server absence produces a calm unavailable Codex row.
-- Local session history, if used, is labeled as estimated context.
-- PromptJuice stores snapshots and freshness metadata only.
-- `swift build`, `swift test`, and the macOS app build pass.
+- ✅ App-server absence produces a calm unavailable Codex row.
+- ✅ Local session history stays out of this slice.
+- ✅ PromptJuice stores snapshots and freshness metadata only.
+- ✅ `swift build`, `swift test`, and the macOS app build pass.
 
 ## Phase 2: Local Behavior
 
