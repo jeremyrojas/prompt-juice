@@ -101,7 +101,7 @@ struct PromptJuicePanelView: View {
             onSnooze()
         }
         .accessibilityLabel("Snooze this usage window")
-        .accessibilityHint("Keeps PromptJuice quiet for the current demo reset window.")
+        .accessibilityHint("Keeps PromptJuice quiet for the current reset window.")
     }
 
     private var iconName: String {
@@ -200,8 +200,8 @@ private struct ProviderUsageRow: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(snapshot.displayName) usage")
-        .accessibilityValue("\(viewModel.percentText(for: snapshot)), \(viewModel.resetText(for: snapshot)) before reset")
+        .accessibilityLabel("\(snapshot.displayName) juice")
+        .accessibilityValue("\(viewModel.percentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))")
         .accessibilityHint("Shows details for \(snapshot.displayName).")
     }
 

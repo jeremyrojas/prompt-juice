@@ -34,7 +34,7 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
             content.sound = .default
 
             let request = UNNotificationRequest(
-                identifier: "promptjuice.demo.use-soon.\(UUID().uuidString)",
+                identifier: "promptjuice.use-soon.\(UUID().uuidString)",
                 content: content,
                 trigger: nil
             )

@@ -1,5 +1,5 @@
 enum SnapshotSource: String, Equatable {
-    case demo
+    case fixture
     case codexStub
     case codexAppServer
     case codexCache

@@ -4,12 +4,12 @@ import XCTest
 final class ProviderClientTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    func testDemoProviderReturnsNormalizedSnapshots() {
-        let snapshots = DemoProviderClient(scenario: .underusedCodex)
+    func testFixtureProviderReturnsNormalizedSnapshots() {
+        let snapshots = FixtureUsageProviderClient(scenario: .underusedCodex)
             .snapshots(now: now)
 
         XCTAssertEqual(snapshots.map(\.identity), [.claude, .codex])
-        XCTAssertEqual(snapshots.map(\.source), [.demo, .demo])
+        XCTAssertEqual(snapshots.map(\.source), [.fixture, .fixture])
         XCTAssertEqual(snapshots.map(\.confidence), [.exact, .exact])
         XCTAssertEqual(snapshots[1].remainingPercent, 69)
         XCTAssertEqual(snapshots[1].rateWindow.minutesUntilReset(now: now), 52)

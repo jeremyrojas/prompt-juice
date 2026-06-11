@@ -7,7 +7,7 @@ final class PromptJuiceSettingsStore {
     private enum Key {
         static let remainingMinutesThreshold = "remainingMinutesThreshold"
         static let remainingPercentThreshold = "remainingPercentThreshold"
-        static let snoozedDemoWindowID = "snoozedDemoWindowID"
+        static let snoozedUsageWindowID = "snoozedUsageWindowID"
         static let usageSourceMode = "usageSourceMode"
     }
 
@@ -25,12 +25,12 @@ final class PromptJuiceSettingsStore {
         )
     }
 
-    var snoozedDemoWindowID: String? {
+    var snoozedUsageWindowID: String? {
         get {
-            defaults.string(forKey: Key.snoozedDemoWindowID)
+            defaults.string(forKey: Key.snoozedUsageWindowID)
         }
         set {
-            defaults.set(newValue, forKey: Key.snoozedDemoWindowID)
+            defaults.set(newValue, forKey: Key.snoozedUsageWindowID)
         }
     }
 
@@ -41,7 +41,11 @@ final class PromptJuiceSettingsStore {
                 return UsageSourceMode.defaultMode
             }
 
-            return mode
+            if mode.isUserFacing {
+                return mode
+            }
+
+            return UsageSourceMode.defaultMode
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.usageSourceMode)
