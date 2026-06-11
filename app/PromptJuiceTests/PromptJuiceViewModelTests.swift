@@ -88,6 +88,38 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.percentText(for: codex), "69% left")
     }
 
+    func testManualVerdictAndSubtitleReflectAggregate() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertEqual(viewModel.headline, "Use it before reset")
+        XCTAssertTrue(viewModel.detail.contains("Claude 43%"))
+        XCTAssertTrue(viewModel.detail.contains("Codex 69%"))
+        XCTAssertTrue(viewModel.detail.contains("resets in"))
+    }
+
+    func testManualVerdictIsCalmWhenHealthy() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: FixtureUsageProviderClient(scenario: .quiet),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
+    }
+
     func testProviderSelectionStaysSticky() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

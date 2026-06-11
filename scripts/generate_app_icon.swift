@@ -20,75 +20,133 @@ try fileManager.createDirectory(
     withIntermediateDirectories: true
 )
 
-func makeIcon(size: CGFloat) -> NSImage {
-    let image = NSImage(size: NSSize(width: size, height: size))
+// Droplet geometry — kept in sync with app/PromptJuice/UI/DropletGeometry.swift.
+// This script is standalone (run via `swift scripts/generate_app_icon.swift`),
+// so it cannot import the package; the constants are duplicated on purpose.
+let dropletTip = CGPoint(x: 0.5, y: 0.1208)
+let dropletSegments: [(CGPoint, CGPoint, CGPoint)] = [
+    (CGPoint(x: 0.5000, y: 0.1208), CGPoint(x: 0.2083, y: 0.4708), CGPoint(x: 0.2083, y: 0.6667)),
+    (CGPoint(x: 0.2083, y: 0.8292), CGPoint(x: 0.3375, y: 0.9333), CGPoint(x: 0.5000, y: 0.9333)),
+    (CGPoint(x: 0.6625, y: 0.9333), CGPoint(x: 0.7917, y: 0.8292), CGPoint(x: 0.7917, y: 0.6667)),
+    (CGPoint(x: 0.7917, y: 0.4708), CGPoint(x: 0.5000, y: 0.1208), CGPoint(x: 0.5000, y: 0.1208))
+]
+let dropletFillTop: CGFloat = 0.17
+let dropletFillBottom: CGFloat = 0.92
 
-    image.lockFocus()
-    defer {
-        image.unlockFocus()
+func dropletFraction(_ f: CGPoint, in r: NSRect) -> NSPoint {
+    NSPoint(x: r.minX + f.x * r.width, y: r.minY + f.y * r.height)
+}
+
+func dropletPath(in r: NSRect) -> NSBezierPath {
+    let path = NSBezierPath()
+    path.move(to: dropletFraction(dropletTip, in: r))
+    for segment in dropletSegments {
+        path.curve(
+            to: dropletFraction(segment.2, in: r),
+            controlPoint1: dropletFraction(segment.0, in: r),
+            controlPoint2: dropletFraction(segment.1, in: r)
+        )
+    }
+    path.close()
+    return path
+}
+
+func dropletWave(in r: NSRect, remaining: Double) -> NSBezierPath {
+    let clamped = CGFloat(min(1, max(0, remaining)))
+    let waterline = dropletFillTop + (1 - clamped) * (dropletFillBottom - dropletFillTop)
+    let y = r.minY + waterline * r.height
+    let amplitude = r.height * 0.02
+
+    let path = NSBezierPath()
+    path.move(to: NSPoint(x: r.minX, y: y))
+    path.curve(
+        to: NSPoint(x: r.maxX, y: y),
+        controlPoint1: NSPoint(x: r.minX + r.width * 0.33, y: y - amplitude),
+        controlPoint2: NSPoint(x: r.minX + r.width * 0.66, y: y + amplitude)
+    )
+    path.line(to: NSPoint(x: r.maxX, y: r.maxY))
+    path.line(to: NSPoint(x: r.minX, y: r.maxY))
+    path.close()
+    return path
+}
+
+func dropPoint(_ fx: CGFloat, _ fy: CGFloat, in r: NSRect) -> NSPoint {
+    dropletFraction(CGPoint(x: fx, y: fy), in: r)
+}
+
+func drawAppIcon(in rect: NSRect, detail: Bool) {
+    let size = rect.width
+    let background = NSBezierPath(roundedRect: rect, xRadius: size * 0.22, yRadius: size * 0.22)
+    NSGradient(colors: [
+        NSColor(calibratedRed: 0.086, green: 0.188, blue: 0.122, alpha: 1),
+        NSColor(calibratedRed: 0.043, green: 0.102, blue: 0.071, alpha: 1),
+        NSColor(calibratedRed: 0.020, green: 0.043, blue: 0.027, alpha: 1)
+    ])?.draw(in: background, angle: -90)
+
+    NSGraphicsContext.saveGraphicsState()
+    background.addClip()
+    let glowCenter = NSPoint(x: rect.midX, y: rect.minY + rect.height * 0.60)
+    NSGradient(colors: [
+        NSColor(calibratedRed: 0.78, green: 1, blue: 0.24, alpha: 0.22),
+        NSColor(calibratedRed: 0.78, green: 1, blue: 0.24, alpha: 0)
+    ])?.draw(fromCenter: glowCenter, radius: 0, toCenter: glowCenter, radius: size * 0.44, options: [])
+    NSGraphicsContext.restoreGraphicsState()
+
+    let dropRect = NSRect(x: size * 0.22, y: size * 0.10, width: size * 0.56, height: size * 0.80)
+    let drop = dropletPath(in: dropRect)
+
+    NSColor.white.withAlphaComponent(0.10).setFill()
+    drop.fill()
+
+    NSGraphicsContext.saveGraphicsState()
+    drop.addClip()
+    NSGradient(colors: [
+        NSColor(calibratedRed: 0.92, green: 1.00, blue: 0.27, alpha: 1),
+        NSColor(calibratedRed: 0.44, green: 0.886, blue: 0.10, alpha: 1),
+        NSColor(calibratedRed: 0.04, green: 0.60, blue: 0.35, alpha: 1)
+    ])?.draw(in: dropletWave(in: dropRect, remaining: 0.74), angle: -90)
+    NSGraphicsContext.restoreGraphicsState()
+
+    if detail {
+        let cursor = NSBezierPath()
+        cursor.move(to: dropPoint(0.34, 0.58, in: dropRect))
+        cursor.line(to: dropPoint(0.50, 0.71, in: dropRect))
+        cursor.line(to: dropPoint(0.34, 0.84, in: dropRect))
+        cursor.lineWidth = size * 0.034
+        cursor.lineCapStyle = .round
+        cursor.lineJoinStyle = .round
+        NSColor.white.withAlphaComponent(0.95).setStroke()
+        cursor.stroke()
+
+        let underscore = NSBezierPath()
+        underscore.move(to: dropPoint(0.56, 0.84, in: dropRect))
+        underscore.line(to: dropPoint(0.74, 0.84, in: dropRect))
+        underscore.lineWidth = size * 0.034
+        underscore.lineCapStyle = .round
+        NSColor.white.withAlphaComponent(0.95).setStroke()
+        underscore.stroke()
+
+        let highlight = NSBezierPath(ovalIn: NSRect(
+            x: dropRect.minX + dropRect.width * 0.18,
+            y: dropRect.minY + dropRect.height * 0.16,
+            width: dropRect.width * 0.32,
+            height: dropRect.height * 0.24
+        ))
+        NSColor.white.withAlphaComponent(0.16).setFill()
+        highlight.fill()
     }
 
-    let rect = NSRect(x: 0, y: 0, width: size, height: size)
-    let radius = size * 0.22
-    let background = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-    NSGradient(
-        colors: [
-            NSColor(calibratedRed: 0.05, green: 0.07, blue: 0.08, alpha: 1),
-            NSColor(calibratedRed: 0.08, green: 0.12, blue: 0.14, alpha: 1),
-            NSColor(calibratedRed: 0.02, green: 0.03, blue: 0.04, alpha: 1)
-        ]
-    )?.draw(in: background, angle: -45)
+    NSColor.white.withAlphaComponent(0.30).setStroke()
+    drop.lineWidth = max(1, size * 0.012)
+    drop.lineJoinStyle = .round
+    drop.stroke()
+}
 
-    let glow = NSBezierPath(ovalIn: NSRect(
-        x: size * 0.16,
-        y: size * 0.56,
-        width: size * 0.52,
-        height: size * 0.32
-    ))
-    NSColor(calibratedRed: 0.22, green: 0.82, blue: 1, alpha: 0.18).setFill()
-    glow.fill()
-
-    let drop = NSBezierPath()
-    drop.move(to: NSPoint(x: size * 0.50, y: size * 0.80))
-    drop.curve(
-        to: NSPoint(x: size * 0.24, y: size * 0.42),
-        controlPoint1: NSPoint(x: size * 0.38, y: size * 0.66),
-        controlPoint2: NSPoint(x: size * 0.24, y: size * 0.55)
-    )
-    drop.curve(
-        to: NSPoint(x: size * 0.50, y: size * 0.18),
-        controlPoint1: NSPoint(x: size * 0.24, y: size * 0.27),
-        controlPoint2: NSPoint(x: size * 0.36, y: size * 0.18)
-    )
-    drop.curve(
-        to: NSPoint(x: size * 0.76, y: size * 0.42),
-        controlPoint1: NSPoint(x: size * 0.64, y: size * 0.18),
-        controlPoint2: NSPoint(x: size * 0.76, y: size * 0.27)
-    )
-    drop.curve(
-        to: NSPoint(x: size * 0.50, y: size * 0.80),
-        controlPoint1: NSPoint(x: size * 0.76, y: size * 0.55),
-        controlPoint2: NSPoint(x: size * 0.62, y: size * 0.66)
-    )
-    drop.close()
-
-    NSGradient(
-        colors: [
-            NSColor(calibratedRed: 0.24, green: 0.88, blue: 1, alpha: 1),
-            NSColor(calibratedRed: 0.09, green: 0.52, blue: 1, alpha: 1)
-        ]
-    )?.draw(in: drop, angle: 90)
-
-    let shine = NSBezierPath(ovalIn: NSRect(
-        x: size * 0.39,
-        y: size * 0.56,
-        width: size * 0.16,
-        height: size * 0.16
-    ))
-    NSColor.white.withAlphaComponent(0.34).setFill()
-    shine.fill()
-
-    return image
+func makeIcon(size: CGFloat) -> NSImage {
+    NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+        drawAppIcon(in: rect, detail: size >= 64)
+        return true
+    }
 }
 
 func writePNG(size: CGFloat, fileName: String) throws {

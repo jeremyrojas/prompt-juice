@@ -31,16 +31,14 @@ struct PromptJuicePanelView: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: 30, height: 30)
-                    .overlay(Circle().fill(iconColor.opacity(0.16)))
+                    .overlay(Circle().fill(headerTint.opacity(0.16)))
                     .overlay(
                         Circle()
                             .stroke(Color.white.opacity(0.15), lineWidth: 1)
                     )
-                    .shadow(color: iconColor.opacity(0.16), radius: 10, x: 0, y: 0)
+                    .shadow(color: headerTint.opacity(0.16), radius: 10, x: 0, y: 0)
 
-                Image(systemName: iconName)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(iconColor)
+                headerGlyph
             }
             .contentShape(Circle())
             .onTapGesture {
@@ -104,25 +102,27 @@ struct PromptJuicePanelView: View {
         .accessibilityHint("Keeps PromptJuice quiet for the current reset window.")
     }
 
-    private var iconName: String {
-        switch viewModel.mode {
-        case .manual:
-            return "drop.fill"
-        case .alert:
-            return "bolt.fill"
-        case .snoozed:
-            return "moon.fill"
+    private var headerTint: Color {
+        if viewModel.mode == .snoozed {
+            return .indigo
         }
+
+        return viewModel.headerSeverity.tint
     }
 
-    private var iconColor: Color {
-        switch viewModel.mode {
-        case .manual:
-            return .cyan
-        case .alert:
-            return .green
-        case .snoozed:
-            return .indigo
+    @ViewBuilder
+    private var headerGlyph: some View {
+        if viewModel.mode == .snoozed {
+            Image(systemName: "moon.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(headerTint)
+        } else {
+            DropletGauge(
+                remaining: viewModel.headerRemainingPercent / 100,
+                tint: headerTint,
+                lineWidth: 1.6
+            )
+            .frame(width: 17, height: 19)
         }
     }
 }
@@ -177,25 +177,21 @@ private struct ProviderUsageRow: View {
 
                     Spacer()
 
-                    Text(viewModel.percentText(for: snapshot))
+                    Text(percentLabel)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.54))
                         .monospacedDigit()
 
-                    Text(viewModel.resetText(for: snapshot))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(viewModel.shouldUseSoon(for: snapshot) ? Color.red : Color.white.opacity(0.86))
-                        .monospacedDigit()
-                        .frame(width: 52, alignment: .trailing)
+                    resetLabel
                 }
 
-                CapacityBar(remainingPercent: snapshot.remainingPercent, color: capacityColor)
+                CapacityBar(remainingPercent: snapshot.remainingPercent, color: severityColor)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .glassInset(
                 cornerRadius: 14,
-                accentColor: isSelected ? capacityColor : nil,
+                accentColor: isSelected ? severityColor : nil,
                 isSelected: isSelected
             )
         }
@@ -216,63 +212,61 @@ private struct ProviderUsageRow: View {
         snapshot.provider == .claude ? .orange : .cyan
     }
 
-    private var capacityColor: Color {
-        if viewModel.shouldUseSoon(for: snapshot) {
-            return .red
-        }
-
-        switch snapshot.remainingPercent {
-        case 40...:
-            return .green
-        case 15..<40:
-            return .orange
-        default:
-            return .red
-        }
+    private var severity: UsageSeverity {
+        viewModel.severity(for: snapshot)
     }
 
-    private var statusText: String {
-        viewModel.statusText(for: snapshot)
+    private var severityColor: Color {
+        severity.tint
     }
 
+    private var percentLabel: String {
+        snapshot.isAvailable
+            ? viewModel.remainingPercentValueText(for: snapshot)
+            : "Unavailable"
+    }
+
+    private var resetColor: Color {
+        severity.isAlerting ? severityColor : Color.white.opacity(0.86)
+    }
+
+    @ViewBuilder
+    private var resetLabel: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 8, weight: .bold))
+            Text(viewModel.resetText(for: snapshot))
+                .font(.system(size: 11, weight: .semibold))
+                .monospacedDigit()
+        }
+        .foregroundStyle(resetColor)
+        .frame(width: 62, alignment: .trailing)
+    }
+
+    @ViewBuilder
     private var statusChip: some View {
-        Text(statusText)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(capacityColor)
-            .padding(.horizontal, 7)
-            .frame(height: 18)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(Capsule(style: .continuous).fill(capacityColor.opacity(0.14)))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(capacityColor.opacity(0.20), lineWidth: 1)
-            )
+        if let label = severity.chipText {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(severityColor)
+                .padding(.horizontal, 7)
+                .frame(height: 18)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(Capsule(style: .continuous).fill(severityColor.opacity(0.14)))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(severityColor.opacity(0.20), lineWidth: 1)
+                )
+        }
     }
 }
 
 private extension View {
     func glassPanel(cornerRadius: CGFloat) -> some View {
-        background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.075),
-                            Color.black.opacity(0.68),
-                            Color.black.opacity(0.82)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
+        background(PanelMaterial(cornerRadius: cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.10), lineWidth: 1)

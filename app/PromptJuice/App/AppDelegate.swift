@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var panelController = JuicebarPanelController(viewModel: viewModel)
     private var statusItem: NSStatusItem?
     private var ticker: Timer?
+    private var lastGlyphKey: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.applicationIconImage = PromptJuiceIcon.appIconImage()
@@ -30,22 +31,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        button.image = PromptJuiceIcon.statusBarImage()
         button.imagePosition = .imageOnly
         button.toolTip = "PromptJuice"
-        button.setAccessibilityLabel("PromptJuice menu")
         button.setAccessibilityHelp("Left click to show usage. Right click for PromptJuice controls.")
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        updateStatusItemGlyph(force: true)
     }
 
     private func startTicker() {
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.viewModel.tick()
+                self?.updateStatusItemGlyph()
             }
         }
+    }
+
+    /// Redraws the menu-bar droplet from the current aggregate. The fill is the
+    /// binding constraint (lowest provider); the tint is the worst severity.
+    /// Skips redundant redraws so it's cheap to call every tick.
+    private func updateStatusItemGlyph(force: Bool = false) {
+        guard let button = statusItem?.button else {
+            return
+        }
+
+        let remaining = viewModel.menuBarRemainingPercent
+        let severity = viewModel.menuBarSeverity
+        let percent = Int(remaining.rounded())
+        let key = "\(percent)-\(severity)"
+
+        guard force || key != lastGlyphKey else {
+            return
+        }
+
+        lastGlyphKey = key
+
+        let image = PromptJuiceIcon.statusBarImage(
+            remaining: remaining / 100,
+            severity: severity
+        )
+        image?.size = NSSize(width: 18, height: 18)
+        button.image = image
+        button.setAccessibilityLabel("PromptJuice: \(percent)% left")
     }
 
     private func preparePanelAfterLaunch() {
