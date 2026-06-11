@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PromptJuice Juicebar States</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #101112;
+        --bg-2: #17191b;
+        --panel: rgba(31, 35, 38, 0.76);
+        --panel-strong: rgba(17, 19, 21, 0.9);
+        --line: rgba(255, 255, 255, 0.11);
+        --line-soft: rgba(255, 255, 255, 0.07);
+        --text: rgba(255, 255, 255, 0.9);
+        --muted: rgba(255, 255, 255, 0.56);
+        --faint: rgba(255, 255, 255, 0.34);
+        --green: #37d06f;
+        --amber: #f3a336;
+        --red: #ff5b5f;
+        --red-soft: rgba(255, 91, 95, 0.16);
+        --cyan: #48d5ff;
+        --indigo: #8b8dff;
+        --claude: #ffac45;
+        --shadow: 0 28px 70px rgba(0, 0, 0, 0.48), 0 8px 22px rgba(0, 0, 0, 0.36);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 310px),
+          linear-gradient(140deg, #111214 0%, #181a1c 42%, #0c0d0e 100%);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.45;
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0 72px;
+      }
+
+      header {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 30px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 34px;
+        line-height: 1.12;
+        font-weight: 760;
+      }
+
+      .lead {
+        max-width: 720px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .legend-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.045);
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--dot-color);
+        box-shadow: 0 0 10px color-mix(in srgb, var(--dot-color), transparent 20%);
+      }
+
+      .section-title {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 34px 0 14px;
+      }
+
+      .section-title h2 {
+        font-size: 17px;
+        font-weight: 760;
+      }
+
+      .section-title p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .state-card,
+      .decision-card {
+        min-width: 0;
+        border: 1px solid var(--line-soft);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+          rgba(255, 255, 255, 0.025);
+        padding: 16px;
+      }
+
+      .state-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .state-meta h3 {
+        font-size: 13px;
+        font-weight: 760;
+        color: rgba(255, 255, 255, 0.84);
+      }
+
+      .state-meta span {
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .desktop-strip {
+        height: 24px;
+        border-radius: 12px 12px 0 0;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.09), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.07)),
+          rgba(0, 0, 0, 0.28);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 0;
+      }
+
+      .stage {
+        position: relative;
+        display: grid;
+        place-items: start center;
+        min-height: 252px;
+        padding: 0 12px 22px;
+        border-radius: 0 0 18px 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 58%),
+          linear-gradient(135deg, rgba(72, 213, 255, 0.08), transparent 42%),
+          #0b0c0d;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-top: 0;
+      }
+
+      .juicebar {
+        position: relative;
+        width: min(100%, 384px);
+        margin-top: -1px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at 13% 0%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 35%, transparent 62%),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.085), rgba(15, 18, 20, 0.9) 44%, rgba(9, 10, 11, 0.96)),
+          var(--panel);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        backdrop-filter: blur(28px) saturate(1.45);
+      }
+
+      .juicebar-inner {
+        padding: 14px;
+      }
+
+      .state-card.closed .juicebar {
+        transform: translateY(-10px) scale(0.98);
+        opacity: 0.18;
+        filter: blur(1px);
+        pointer-events: none;
+      }
+
+      .state-card.closed .closed-note {
+        display: grid;
+      }
+
+      .closed-note {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        padding: 24px;
+        border-radius: 0 0 18px 18px;
+        background: rgba(0, 0, 0, 0.34);
+      }
+
+      .closed-note-inner {
+        display: grid;
+        gap: 10px;
+        justify-items: center;
+        padding: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 14px;
+        background: rgba(24, 26, 28, 0.88);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+      }
+
+      .closed-note-title {
+        font-size: 12px;
+        font-weight: 780;
+      }
+
+      .closed-note-text {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .prompt-header {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) 26px;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .juice-icon,
+      .close {
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035)),
+          rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+      }
+
+      .juice-icon {
+        width: 30px;
+        height: 30px;
+        color: var(--cyan);
+        box-shadow: inset 0 0 18px rgba(72, 213, 255, 0.16), 0 0 18px rgba(72, 213, 255, 0.16);
+      }
+
+      .juice-icon svg {
+        width: 15px;
+        height: 15px;
+        fill: currentColor;
+      }
+
+      .close {
+        width: 25px;
+        height: 25px;
+        padding: 0;
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 18px;
+        line-height: 1;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .title-block {
+        min-width: 0;
+      }
+
+      .title {
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 14px;
+        font-weight: 760;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .title.urgent,
+      .subtitle.urgent {
+        color: var(--red);
+      }
+
+      .subtitle.urgent {
+        text-shadow: 0 0 18px rgba(255, 91, 95, 0.22);
+      }
+
+      .subtitle {
+        color: rgba(255, 255, 255, 0.56);
+        font-size: 11px;
+        font-weight: 650;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .rows {
+        display: grid;
+        gap: 7px;
+      }
+
+      .usage-row {
+        width: 100%;
+        display: grid;
+        gap: 6px;
+        padding: 9px 11px;
+        border: 1px solid rgba(255, 255, 255, 0.075);
+        border-radius: 14px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.028)),
+          rgba(255, 255, 255, 0.03);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        appearance: none;
+      }
+
+      .usage-row:hover {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.04)),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .usage-row:focus-visible,
+      .button:focus-visible,
+      .close:focus-visible {
+        outline: 2px solid rgba(72, 213, 255, 0.72);
+        outline-offset: 2px;
+      }
+
+      .usage-row.selected {
+        border-color: color-mix(in srgb, var(--level-color), transparent 52%);
+        box-shadow: 0 0 18px color-mix(in srgb, var(--level-color), transparent 86%);
+      }
+
+      .usage-row.urgent {
+        border-color: rgba(255, 91, 95, 0.58);
+        background:
+          linear-gradient(180deg, rgba(255, 91, 95, 0.14), rgba(255, 255, 255, 0.032)),
+          rgba(255, 255, 255, 0.035);
+        box-shadow: 0 0 22px rgba(255, 91, 95, 0.16);
+      }
+
+      .usage-top {
+        display: grid;
+        grid-template-columns: auto auto auto 1fr auto auto;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .provider {
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .status {
+        height: 19px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--level-color), transparent 76%);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent),
+          color-mix(in srgb, var(--level-color), transparent 88%);
+        color: var(--level-color);
+        font-size: 9px;
+        font-weight: 800;
+      }
+
+      .used,
+      .time {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .used {
+        color: rgba(255, 255, 255, 0.54);
+        font-weight: 650;
+      }
+
+      .time {
+        width: 44px;
+        text-align: right;
+        color: rgba(255, 255, 255, 0.87);
+        font-weight: 780;
+      }
+
+      .time.urgent {
+        color: var(--red);
+        text-shadow: 0 0 16px rgba(255, 91, 95, 0.28);
+      }
+
+      .bar {
+        position: relative;
+        height: 6px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        cursor: pointer;
+      }
+
+      .bar-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: calc(var(--remaining) * 1%);
+        min-width: 8px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--level-color), color-mix(in srgb, var(--level-color), transparent 48%));
+      }
+
+      .footer {
+        display: grid;
+        grid-template-columns: repeat(var(--button-count), minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .footer:empty {
+        display: none;
+      }
+
+      .button {
+        height: 29px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.035)),
+          rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 11px;
+        font-weight: 760;
+        font-family: inherit;
+        cursor: pointer;
+        appearance: none;
+      }
+
+      .button.primary {
+        background: rgba(255, 255, 255, 0.92);
+        color: rgba(0, 0, 0, 0.86);
+      }
+
+      .button.danger {
+        border-color: rgba(255, 91, 95, 0.28);
+        background:
+          linear-gradient(180deg, rgba(255, 91, 95, 0.18), rgba(255, 91, 95, 0.08)),
+          rgba(255, 255, 255, 0.04);
+        color: #ff9a9d;
+      }
+
+      .decision-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .decision-card h3 {
+        font-size: 13px;
+        font-weight: 760;
+        margin-bottom: 6px;
+      }
+
+      .decision-card p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .mini-footer {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .mini-pill {
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 12px;
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.045);
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 11px;
+        font-weight: 760;
+      }
+
+      .mini-pill.primary {
+        background: rgba(255, 255, 255, 0.92);
+        color: rgba(0, 0, 0, 0.86);
+      }
+
+      @media (max-width: 920px) {
+        .grid,
+        .decision-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .page {
+          width: min(100% - 20px, 1180px);
+          padding-top: 28px;
+        }
+
+        h1 {
+          font-size: 26px;
+        }
+
+        .state-card {
+          padding: 10px;
+        }
+
+        .stage {
+          padding-inline: 8px;
+        }
+
+        .juicebar-inner {
+          padding: 12px;
+        }
+
+        .usage-top {
+          grid-template-columns: auto auto 1fr auto;
+        }
+
+        .status,
+        .used {
+          display: none;
+        }
+
+        .footer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <h1>PromptJuice Juicebar States</h1>
+        <p class="lead">
+          A quick visual board for the Juicebar: manual checks, alert states, selected providers,
+          and low-capacity levels. Click any provider row or juice bar to update that mock card.
+        </p>
+        <div class="legend" aria-label="Usage level legend">
+          <span class="legend-chip"><span class="dot" style="--dot-color: var(--red)"></span>Use soon: lots left, reset soon</span>
+          <span class="legend-chip"><span class="dot" style="--dot-color: var(--green)"></span>Lots left: 40%+ left</span>
+          <span class="legend-chip"><span class="dot" style="--dot-color: var(--amber)"></span>Some left: 15-39% left</span>
+          <span class="legend-chip"><span class="dot" style="--dot-color: var(--red)"></span>Low: under 15% left</span>
+        </div>
+      </header>
+
+      <section>
+        <div class="section-title">
+          <h2>Juicebar States</h2>
+          <p>All states use the same compact Juicebar shell.</p>
+        </div>
+        <div class="grid" id="states"></div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <h2>Action Strip</h2>
+          <p>X closes the Juicebar. Snooze pauses reminders for the current window.</p>
+        </div>
+        <div class="decision-grid">
+          <article class="decision-card">
+            <h3>Alert footer</h3>
+            <p>Keep alert actions tiny: Snooze pauses reminders for this usage window.</p>
+            <div class="mini-footer">
+              <span class="mini-pill primary">Snooze</span>
+            </div>
+          </article>
+          <article class="decision-card">
+            <h3>Manual check footer</h3>
+            <p>Manual checks stay focused on the current numbers. Provider rows are clickable.</p>
+            <div class="mini-footer">
+              <span class="mini-pill">No footer</span>
+            </div>
+          </article>
+          <article class="decision-card">
+            <h3>Later shortcuts</h3>
+            <p>Configurable workflow shortcuts can live in settings after the core check feels right.</p>
+            <div class="mini-footer">
+              <span class="mini-pill">Later</span>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const states = [
+        {
+          name: "Manual check",
+          tag: "quiet",
+          title: "Prompt juice check",
+          subtitle: "Claude and Codex usage at a glance.",
+          footer: [],
+          rows: [
+            { provider: "Claude", used: 57, time: "34m", dot: "claude" },
+            { provider: "Codex", used: 31, time: "44m", dot: "codex", urgent: true }
+          ]
+        },
+        {
+          name: "Codex alert",
+          tag: "use soon",
+          title: "Codex has 69% left",
+          subtitle: "44m to use it before reset.",
+          footer: ["Snooze"],
+          primary: "Snooze",
+          rows: [
+            { provider: "Claude", used: 57, time: "34m", dot: "claude" },
+            { provider: "Codex", used: 31, time: "44m", dot: "codex", selected: true, urgent: true }
+          ]
+        },
+        {
+          name: "Claude alert",
+          tag: "use soon",
+          title: "Claude has 64% left",
+          subtitle: "47m to use it before reset.",
+          footer: ["Snooze"],
+          primary: "Snooze",
+          rows: [
+            { provider: "Claude", used: 36, time: "47m", dot: "claude", selected: true, urgent: true },
+            { provider: "Codex", used: 72, time: "1h 26m", dot: "codex" }
+          ]
+        },
+        {
+          name: "Both have juice",
+          tag: "use soon",
+          title: "Plenty of prompt juice left",
+          subtitle: "Claude 58% left · Codex 72% left.",
+          footer: ["Snooze"],
+          primary: "Snooze",
+          rows: [
+            { provider: "Claude", used: 42, time: "41m", dot: "claude", urgent: true },
+            { provider: "Codex", used: 28, time: "52m", dot: "codex", urgent: true }
+          ]
+        },
+        {
+          name: "Some left",
+          tag: "some left",
+          title: "Claude has 26% left",
+          subtitle: "74% used · resets in 28m",
+          footer: ["Snooze"],
+          primary: "Snooze",
+          rows: [
+            { provider: "Claude", used: 74, time: "28m", dot: "claude", selected: true },
+            { provider: "Codex", used: 48, time: "56m", dot: "codex" }
+          ]
+        },
+        {
+          name: "Low zone",
+          tag: "low",
+          title: "Codex has 9% left",
+          subtitle: "91% used · resets in 18m",
+          footer: ["Snooze"],
+          primary: "Snooze",
+          rows: [
+            { provider: "Claude", used: 63, time: "38m", dot: "claude" },
+            { provider: "Codex", used: 91, time: "18m", dot: "codex", selected: true }
+          ]
+        },
+        {
+          name: "Exhausted",
+          tag: "empty",
+          title: "Codex has 0% left",
+          subtitle: "100% used · resets in 12m",
+          footer: [],
+          rows: [
+            { provider: "Claude", used: 81, time: "22m", dot: "claude" },
+            { provider: "Codex", used: 100, time: "12m", dot: "codex", selected: true }
+          ]
+        },
+        {
+          name: "Snoozed",
+          tag: "paused",
+          title: "Snoozed for this window",
+          subtitle: "PromptJuice will stay quiet.",
+          footer: [],
+          icon: "moon",
+          rows: [
+            { provider: "Claude", used: 43, time: "39m", dot: "claude" },
+            { provider: "Codex", used: 31, time: "44m", dot: "codex" }
+          ]
+        }
+      ];
+
+      const root = document.getElementById("states");
+
+      function levelFor(used) {
+        const remaining = 100 - used;
+        if (remaining >= 40) return { label: "Lots left", color: "var(--green)" };
+        if (remaining >= 15) return { label: "Some left", color: "var(--amber)" };
+        if (remaining > 0) return { label: "Low", color: "var(--red)" };
+        return { label: "Empty", color: "var(--red)" };
+      }
+
+      function parseMinutes(time) {
+        const hourMatch = time.match(/(\d+)h/);
+        const minuteMatch = time.match(/(\d+)m/);
+        const hours = hourMatch ? Number(hourMatch[1]) : 0;
+        const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+        return hours * 60 + minutes;
+      }
+
+      function shouldUseSoon(row) {
+        return Boolean(row.urgent) || (100 - row.used >= 40 && parseMinutes(row.time) <= 60);
+      }
+
+      function copyFor(row) {
+        const remaining = Math.max(0, 100 - row.used);
+        const resetMinutes = parseMinutes(row.time);
+
+        if (remaining >= 40 && resetMinutes <= 60) {
+          return {
+            title: `${row.provider}: ${remaining}% to use in ${row.time}`,
+            subtitle: `Good window to spend it before reset.`
+          };
+        }
+
+        if (remaining <= 0) {
+          return {
+            title: `${row.provider} has 0% left`,
+            subtitle: `Reset in ${row.time}.`
+          };
+        }
+
+        return {
+          title: `${row.provider} has ${remaining}% left`,
+          subtitle: `${row.used}% used · resets in ${row.time}`
+        };
+      }
+
+      function dotColor(dot) {
+        return dot === "claude" ? "var(--claude)" : "var(--cyan)";
+      }
+
+      function iconSvg(icon) {
+        if (icon === "moon") {
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.4 15.7A8.2 8.2 0 0 1 8.3 5.6a.8.8 0 0 0-1-.96A9.4 9.4 0 1 0 19.36 16.7a.8.8 0 0 0-.96-1Z"/></svg>';
+        }
+
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6c3.2 4.2 6.4 8.1 6.4 12.1a6.4 6.4 0 1 1-12.8 0c0-4 3.2-7.9 6.4-12.1Z"/></svg>';
+      }
+
+      function rowTemplate(row, stateIndex, rowIndex) {
+        const level = levelFor(row.used);
+        const remaining = Math.max(0, 100 - row.used);
+        const useSoon = shouldUseSoon(row);
+        return `
+          <button
+            type="button"
+            class="usage-row ${row.selected ? "selected" : ""} ${useSoon ? "urgent" : ""}"
+            style="--level-color: ${useSoon ? "var(--red)" : level.color}; --remaining: ${remaining}"
+            data-state-index="${stateIndex}"
+            data-row-index="${rowIndex}"
+            data-provider="${row.provider}"
+            data-used="${row.used}"
+            data-time="${row.time}"
+            data-urgent="${useSoon ? "true" : "false"}"
+            aria-label="Show ${row.provider} juice details"
+            title="${copyFor(row).subtitle}"
+          >
+            <div class="usage-top">
+              <span class="dot" style="--dot-color: ${dotColor(row.dot)}"></span>
+              <span class="provider">${row.provider}</span>
+              <span class="status">${useSoon ? "Use soon" : level.label}</span>
+              <span></span>
+              <span class="used">${row.used}% used</span>
+              <span class="time ${useSoon ? "urgent" : ""}">${row.time}</span>
+            </div>
+            <div class="bar"><span class="bar-fill"></span></div>
+          </button>
+        `;
+      }
+
+      function footerTemplate(state) {
+        if (!state.footer.length) return "";
+        const buttons = state.footer.map((label) => {
+          const primary = label === state.primary ? " primary" : "";
+          return `<button type="button" class="button${primary}" data-action="${label}">${label}</button>`;
+        });
+
+        return `<div class="footer" style="--button-count: ${buttons.length}">${buttons.join("")}</div>`;
+      }
+
+      root.innerHTML = states.map((state, stateIndex) => `
+        <article class="state-card" data-state-index="${stateIndex}">
+          <div class="state-meta">
+            <h3>${state.name}</h3>
+            <span>${state.tag}</span>
+          </div>
+          <div class="desktop-strip"></div>
+          <div class="stage">
+            <div class="juicebar">
+              <div class="juicebar-inner">
+                <div class="prompt-header">
+                  <div class="juice-icon">${iconSvg(state.icon)}</div>
+                  <div class="title-block">
+                    <div class="title">${state.title}</div>
+                    <div class="subtitle">${state.subtitle}</div>
+                  </div>
+                  <button type="button" class="close" data-close aria-label="Close mock Juicebar">×</button>
+                </div>
+                <div class="rows">${state.rows.map((row, rowIndex) => rowTemplate(row, stateIndex, rowIndex)).join("")}</div>
+                ${footerTemplate(state)}
+              </div>
+            </div>
+            <div class="closed-note">
+              <div class="closed-note-inner">
+                <div class="closed-note-title">Juicebar closed</div>
+                <div class="closed-note-text">Mock close action</div>
+                <button type="button" class="button" data-reopen>Reopen</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      `).join("");
+
+      function updateCard(card, title, subtitle, urgent = false) {
+        const titleEl = card.querySelector(".title");
+        const subtitleEl = card.querySelector(".subtitle");
+
+        titleEl.textContent = title;
+        subtitleEl.textContent = subtitle;
+        titleEl.classList.toggle("urgent", urgent);
+        subtitleEl.classList.toggle("urgent", urgent);
+      }
+
+      root.addEventListener("click", (event) => {
+        const row = event.target.closest(".usage-row");
+        const action = event.target.closest("[data-action]");
+        const close = event.target.closest("[data-close]");
+        const reopen = event.target.closest("[data-reopen]");
+        const card = event.target.closest(".state-card");
+
+        if (!card) return;
+
+        if (reopen) {
+          card.classList.remove("closed");
+          return;
+        }
+
+        if (row) {
+          card.querySelectorAll(".usage-row").forEach((item) => item.classList.remove("selected"));
+          row.classList.add("selected");
+
+          const used = Number(row.dataset.used);
+          const mockRow = {
+            provider: row.dataset.provider,
+            used,
+            time: row.dataset.time,
+            urgent: row.dataset.urgent === "true"
+          };
+          const copy = copyFor(mockRow);
+          updateCard(card, copy.title, copy.subtitle, mockRow.urgent);
+          return;
+        }
+
+        if (action?.dataset.action === "Snooze") {
+          updateCard(card, "Snoozed for this window", "PromptJuice will stay quiet.", false);
+          action.textContent = "Snoozed";
+          action.classList.add("danger");
+          return;
+        }
+
+        if (close) {
+          card.classList.add("closed");
+        }
+      });
+    </script>
+  </body>
+</html>
