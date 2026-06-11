@@ -349,6 +349,26 @@ Safety rules:
 - Keep live Codex behind an explicit local setting until the smoke path feels
   reliable.
 
+Phase 1B implementation status:
+
+- `CodexAppServerClient` launches `codex app-server` over stdio, sends the
+  initialization handshake, reads `account/rateLimits/read`, and cleans up the
+  process after each request.
+- `CodexRateLimitReadResult` decodes the current single-bucket and
+  `rateLimitsByLimitId` response shapes.
+- `CodexProviderClient` maps complete provider data to `.exact` Codex snapshots
+  and records structured unavailable states for launch, timeout, server, or
+  parsing failures.
+- `CodexSnapshotCache` stores the last-good Codex `RateWindow` and `updatedAt`
+  only, then returns `.stale` cached snapshots when live reads fail before the
+  cached reset window expires.
+- The app defaults to Live Codex source, with menu controls for Refresh Usage
+  and Usage Source -> Demo Usage / Live Codex.
+- The Juicebar keeps the existing Claude demo row and replaces the Codex row
+  with live app-server data in Live Codex mode.
+- Live smoke on June 11, 2026 showed Codex `8% used, 1h 13m before reset` in
+  the Juicebar from `account/rateLimits/read`.
+
 Provider strategy:
 
 - Use provider-reported quota/reset data when available.

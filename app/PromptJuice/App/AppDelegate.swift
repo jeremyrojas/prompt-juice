@@ -78,6 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         ).target = self
         menu.addItem(
+            withTitle: "Refresh Usage",
+            action: #selector(refreshUsage),
+            keyEquivalent: "r"
+        ).target = self
+        addUsageSourceMenu(to: menu)
+        menu.addItem(.separator())
+        menu.addItem(
             withTitle: "Check Demo Alert",
             action: #selector(checkDemoAlert),
             keyEquivalent: ""
@@ -120,7 +127,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showLaunchDemoAlert() {
-        viewModel.checkDemoAlert(force: true)
+        if viewModel.sourceMode == .demo {
+            viewModel.checkDemoAlert(force: true)
+        } else {
+            viewModel.showManualCheck()
+        }
+
         panelController.show()
     }
 
@@ -134,6 +146,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func cycleDemoState() {
         viewModel.cycleDemoState()
+        panelController.show()
+    }
+
+    @objc private func refreshUsage() {
+        viewModel.refreshUsage()
+        panelController.show()
+    }
+
+    @objc private func setUsageSourceMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let mode = UsageSourceMode(rawValue: rawValue) else {
+            return
+        }
+
+        viewModel.setUsageSourceMode(mode)
         panelController.show()
     }
 
@@ -162,6 +189,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private func addUsageSourceMenu(to menu: NSMenu) {
+        let sourceMenuItem = NSMenuItem(title: "Usage Source", action: nil, keyEquivalent: "")
+        let sourceMenu = NSMenu(title: "Usage Source")
+
+        for mode in UsageSourceMode.allCases {
+            let item = NSMenuItem(
+                title: mode.title,
+                action: #selector(setUsageSourceMode(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = viewModel.sourceMode == mode ? .on : .off
+            sourceMenu.addItem(item)
+        }
+
+        menu.setSubmenu(sourceMenu, for: sourceMenuItem)
+        menu.addItem(sourceMenuItem)
     }
 
     private func addThresholdMenus(to menu: NSMenu) {

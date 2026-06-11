@@ -6,19 +6,22 @@ struct ProviderSnapshot: Identifiable, Equatable {
     let source: SnapshotSource
     let confidence: SnapshotConfidence
     let updatedAt: Date
+    let statusDetail: String?
 
     init(
         identity: ProviderIdentity,
         rateWindow: RateWindow,
         source: SnapshotSource,
         confidence: SnapshotConfidence,
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        statusDetail: String? = nil
     ) {
         self.identity = identity
         self.rateWindow = rateWindow
         self.source = source
         self.confidence = confidence
         self.updatedAt = updatedAt
+        self.statusDetail = statusDetail
     }
 
     var id: UsageProvider {

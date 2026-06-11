@@ -70,6 +70,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let store = PromptJuiceSettingsStore(defaults: defaults)
+        store.usageSourceMode = .demo
         return (suiteName, defaults, store)
     }
 

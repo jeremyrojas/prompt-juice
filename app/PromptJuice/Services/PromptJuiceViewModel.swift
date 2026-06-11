@@ -8,10 +8,12 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var actionMessage: String?
     @Published private(set) var selectedProvider: UsageProvider?
     @Published private(set) var thresholds: AlertThresholds
+    @Published private(set) var sourceMode: UsageSourceMode
 
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
     private let now: () -> Date
+    private let injectedProviderClient: (any UsageProviderClient)?
     private var providerClient: any UsageProviderClient
     private var scenario: DemoScenario = .underusedCodex
 
@@ -21,8 +23,15 @@ final class PromptJuiceViewModel: ObservableObject {
         alertEngine: AlertEngine = AlertEngine(),
         now: @escaping () -> Date = Date.init
     ) {
+        let initialSourceMode = settingsStore.usageSourceMode
+
         self.settingsStore = settingsStore
-        self.providerClient = providerClient ?? DemoProviderClient(scenario: scenario)
+        self.injectedProviderClient = providerClient
+        self.sourceMode = initialSourceMode
+        self.providerClient = providerClient ?? Self.makeProviderClient(
+            sourceMode: initialSourceMode,
+            scenario: scenario
+        )
         self.alertEngine = alertEngine
         self.now = now
         thresholds = settingsStore.thresholds
@@ -72,16 +81,26 @@ final class PromptJuiceViewModel: ObservableObject {
 
     var detail: String {
         if let selectedSnapshot {
-            if shouldUseSoon(for: selectedSnapshot) {
-                return "\(resetText(for: selectedSnapshot)) before reset."
+            let sourceText = sourceText(for: selectedSnapshot)
+
+            if !selectedSnapshot.isAvailable {
+                return [sourceText, selectedSnapshot.statusDetail]
+                    .compactMap { $0 }
+                    .joined(separator: " · ")
             }
 
-            return "\(percentText(for: selectedSnapshot)) · \(fullResetText(for: selectedSnapshot))"
+            if shouldUseSoon(for: selectedSnapshot) {
+                return "\(resetText(for: selectedSnapshot)) before reset · \(sourceText)"
+            }
+
+            return "\(percentText(for: selectedSnapshot)) · \(fullResetText(for: selectedSnapshot)) · \(sourceText)"
         }
 
         switch mode {
         case .manual:
-            return "Claude and Codex usage at a glance."
+            return sourceMode == .liveCodex
+                ? "Live Codex and Claude demo usage."
+                : "Claude and Codex usage at a glance."
         case .alert:
             let alertingSnapshots = self.alertingSnapshots
 
@@ -130,6 +149,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func showManualCheck() {
+        refreshSnapshots()
         mode = .manual
         actionMessage = nil
         selectedProvider = nil
@@ -140,6 +160,7 @@ final class PromptJuiceViewModel: ObservableObject {
     func checkDemoAlert(force: Bool = false) -> Bool {
         actionMessage = nil
         selectedProvider = nil
+        setUsageSourceMode(.demo, persist: true, announce: false)
         setDemoScenario(.underusedCodex)
 
         if force {
@@ -158,6 +179,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func cycleDemoState() {
+        setUsageSourceMode(.demo, persist: true, announce: false)
         setDemoScenario(scenario.next)
         mode = scenario == .quiet ? .manual : .alert
         actionMessage = nil
@@ -194,6 +216,19 @@ final class PromptJuiceViewModel: ObservableObject {
         thresholds.remainingPercent = value
         settingsStore.saveThresholds(thresholds)
         refreshModeForThresholds()
+    }
+
+    func refreshUsage() {
+        refreshSnapshots()
+        actionMessage = "\(sourceMode.title) refreshed."
+
+        if mode == .alert && !hasPendingAlert {
+            mode = .manual
+        }
+    }
+
+    func setUsageSourceMode(_ mode: UsageSourceMode) {
+        setUsageSourceMode(mode, persist: true, announce: true)
     }
 
     func selectProvider(_ provider: UsageProvider) {
@@ -286,6 +321,21 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
+    func sourceText(for snapshot: UsageSnapshot) -> String {
+        let source = switch snapshot.source {
+        case .demo:
+            "demo"
+        case .codexStub:
+            "Codex stub"
+        case .codexAppServer:
+            "Codex app-server"
+        case .codexCache:
+            "Codex cache"
+        }
+
+        return "\(source) · \(snapshot.confidence.rawValue)"
+    }
+
     private var hasPendingAlert: Bool {
         !alertingSnapshots.isEmpty
     }
@@ -299,7 +349,7 @@ final class PromptJuiceViewModel: ObservableObject {
             .map(\.resetWindowID)
             .joined(separator: "|")
 
-        return "\(scenario.rawValue)-\(windowParts)"
+        return "\(sourceMode.rawValue)-\(scenario.rawValue)-\(windowParts)"
     }
 
     private func clearSnoozeForCurrentWindow() {
@@ -320,7 +370,54 @@ final class PromptJuiceViewModel: ObservableObject {
 
     private func setDemoScenario(_ nextScenario: DemoScenario) {
         scenario = nextScenario
-        providerClient = DemoProviderClient(scenario: nextScenario)
+        configureProviderClient()
+        refreshSnapshots()
+    }
+
+    private func setUsageSourceMode(
+        _ mode: UsageSourceMode,
+        persist: Bool,
+        announce: Bool
+    ) {
+        sourceMode = mode
+
+        if persist {
+            settingsStore.usageSourceMode = mode
+        }
+
+        configureProviderClient()
+        refreshSnapshots()
+
+        if announce {
+            actionMessage = "\(mode.title) selected."
+        }
+    }
+
+    private func configureProviderClient() {
+        if let injectedProviderClient {
+            providerClient = injectedProviderClient
+            return
+        }
+
+        providerClient = Self.makeProviderClient(
+            sourceMode: sourceMode,
+            scenario: scenario
+        )
+    }
+
+    private func refreshSnapshots() {
         snapshots = providerClient.snapshots(now: now())
+    }
+
+    private static func makeProviderClient(
+        sourceMode: UsageSourceMode,
+        scenario: DemoScenario
+    ) -> any UsageProviderClient {
+        switch sourceMode {
+        case .demo:
+            return DemoProviderClient(scenario: scenario)
+        case .liveCodex:
+            return CodexLiveUsageProviderClient(scenario: scenario)
+        }
     }
 }
