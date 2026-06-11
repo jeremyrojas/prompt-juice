@@ -24,12 +24,6 @@ delegate:
 }
 ```
 
-For this worktree, the command is:
-
-```bash
-PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/statusline-command.sh' bash /Users/jeremyrojas/.codex/worktrees/aee8/prompt-juice/scripts/claude-statusline-bridge.sh
-```
-
 Claude Code reloads statusline changes on the next interaction. After a Claude
 assistant response, verify the cache:
 
