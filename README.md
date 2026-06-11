@@ -9,6 +9,7 @@ The first milestone is a static concept prototype: a native Juicebar, menu-bar i
 - Next implementation plan: [PLAN.md](PLAN.md)
 - Product and MVP plan: [docs/prompt-juice.md](docs/prompt-juice.md)
 - OSS usage tools research: [docs/oss-usage-tools-research.md](docs/oss-usage-tools-research.md)
+- Claude statusline bridge: [docs/claude-statusline-bridge.md](docs/claude-statusline-bridge.md)
 - Usage state board: [design/prompt-juice-states.html](design/prompt-juice-states.html)
 
 ## Project Layout

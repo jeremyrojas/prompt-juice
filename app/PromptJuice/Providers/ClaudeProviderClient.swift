@@ -536,6 +536,71 @@ private struct ClaudeStatuslineRateLimitWindow: Decodable {
         case durationMinutes = "duration_minutes"
         case windowMinutes = "window_minutes"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        usedPercentage = Self.decodeDouble(from: container, forKey: .usedPercentage)
+        resetsAt = Self.decodeResetText(from: container, forKey: .resetsAt)
+        durationMinutes = Self.decodeInt(from: container, forKey: .durationMinutes)
+        windowMinutes = Self.decodeInt(from: container, forKey: .windowMinutes)
+    }
+
+    private static func decodeDouble(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Double? {
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return value
+        }
+
+        if let text = try? container.decode(String.self, forKey: key) {
+            return Double(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return nil
+    }
+
+    private static func decodeInt(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Int? {
+        if let value = try? container.decode(Int.self, forKey: key) {
+            return value
+        }
+
+        if let doubleValue = try? container.decode(Double.self, forKey: key) {
+            return Int(doubleValue)
+        }
+
+        if let text = try? container.decode(String.self, forKey: key) {
+            return Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return nil
+    }
+
+    private static func decodeResetText(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> String? {
+        if let text = try? container.decode(String.self, forKey: key) {
+            return text
+        }
+
+        if let intValue = try? container.decode(Int64.self, forKey: key) {
+            return String(intValue)
+        }
+
+        if let doubleValue = try? container.decode(Double.self, forKey: key) {
+            if doubleValue.rounded(.towardZero) == doubleValue {
+                return String(Int64(doubleValue))
+            }
+
+            return String(doubleValue)
+        }
+
+        return nil
+    }
 }
 
 private struct CachedClaudeSnapshot: Codable {

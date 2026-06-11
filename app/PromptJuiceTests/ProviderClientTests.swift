@@ -106,6 +106,31 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.remainingPercent, 75.5)
     }
 
+    func testClaudeStatuslineReaderAcceptsNumericResetTimestamp() throws {
+        let fixture = """
+        {
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": "24.5",
+              "resets_at": 1800001800,
+              "duration_minutes": "300"
+            }
+          }
+        }
+        """
+
+        let snapshot = try ClaudeStatuslineSnapshotReader.snapshot(
+            from: Data(fixture.utf8),
+            now: now
+        )
+
+        XCTAssertEqual(snapshot.source, .claudeStatusline)
+        XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 24.5)
+        XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_001_800))
+    }
+
     func testClaudeStatuslineReaderRejectsMissingFiveHourWindow() {
         XCTAssertThrowsError(
             try ClaudeStatuslineSnapshotReader.snapshot(
@@ -277,6 +302,82 @@ final class ProviderClientTests: XCTestCase {
         ])
     }
 
+    func testClaudeStatuslineBridgeWritesSanitizedCacheAndPreservesDelegateOutput() throws {
+        try requireJQ()
+
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateInputURL = root.appendingPathComponent("delegate-input.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: delegateInputURL,
+            output: "custom statusline"
+        )
+        let input = """
+        {
+          "workspace": { "current_dir": "/secret/project" },
+          "model": { "display_name": "Claude" },
+          "context_window": { "used_percentage": 42 },
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": 12.5,
+              "resets_at": 1800001800
+            }
+          }
+        }
+        """
+
+        let result = try runClaudeStatuslineBridge(
+            input: input,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.output, "custom statusline")
+        XCTAssertEqual(try String(contentsOf: delegateInputURL, encoding: .utf8), input)
+
+        let cacheText = try String(contentsOf: cacheURL, encoding: .utf8)
+        XCTAssertTrue(cacheText.contains(#""used_percentage":12.5"#))
+        XCTAssertTrue(cacheText.contains(#""resets_at":"1800001800""#))
+        XCTAssertFalse(cacheText.contains("workspace"))
+        XCTAssertFalse(cacheText.contains("current_dir"))
+        XCTAssertFalse(cacheText.contains("model"))
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+        XCTAssertEqual(snapshot.source, .claudeStatusline)
+        XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 12.5)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_001_800))
+    }
+
+    func testClaudeStatuslineBridgeSkipsCacheWhenRateLimitsAreMissing() throws {
+        try requireJQ()
+
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateInputURL = root.appendingPathComponent("delegate-input.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: delegateInputURL,
+            output: "custom statusline"
+        )
+
+        let result = try runClaudeStatuslineBridge(
+            input: #"{"context_window":{"used_percentage":42}}"#,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.output, "custom statusline")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cacheURL.path))
+    }
+
     func testEstimatedClaudeSnapshotCanTriggerAlert() {
         let snapshot = ProviderSnapshot(
             identity: .claude,
@@ -365,6 +466,93 @@ final class ProviderClientTests: XCTestCase {
             .appendingPathComponent("PromptJuiceTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+
+    private func requireJQ() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["bash", "-lc", "command -v jq >/dev/null 2>&1"]
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw XCTSkip("jq is required for Claude statusline bridge smoke tests.")
+        }
+    }
+
+    private func makeDelegateScript(
+        in directory: URL,
+        delegateInputURL: URL,
+        output: String
+    ) throws -> URL {
+        let scriptURL = directory.appendingPathComponent("delegate.sh")
+        let script = """
+        #!/usr/bin/env bash
+        cat > '\(shellSingleQuotedContent(delegateInputURL.path))'
+        printf '%s' '\(shellSingleQuotedContent(output))'
+        """
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: scriptURL.path
+        )
+        return scriptURL
+    }
+
+    private func runClaudeStatuslineBridge(
+        input: String,
+        cacheURL: URL,
+        delegateURL: URL
+    ) throws -> (status: Int32, output: String, error: String) {
+        let bridgeURL = repositoryRoot
+            .appendingPathComponent("scripts/claude-statusline-bridge.sh")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: bridgeURL.path))
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [bridgeURL.path]
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["PROMPTJUICE_CLAUDE_STATUS_CACHE"] = cacheURL.path
+        environment["PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND"] = "bash \(shellSingleQuoted(delegateURL.path))"
+        process.environment = environment
+
+        let inputPipe = Pipe()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        inputPipe.fileHandleForWriting.write(Data(input.utf8))
+        try inputPipe.fileHandleForWriting.close()
+
+        let output = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let error = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        return (
+            process.terminationStatus,
+            String(data: output, encoding: .utf8) ?? "",
+            String(data: error, encoding: .utf8) ?? ""
+        )
+    }
+
+    private var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        "'\(shellSingleQuotedContent(value))'"
+    }
+
+    private func shellSingleQuotedContent(_ value: String) -> String {
+        value.replacingOccurrences(of: "'", with: "'\\''")
     }
 
     private let multiBucketFixture = """
