@@ -78,6 +78,7 @@ struct PromptJuicePanelView: View {
                     .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
             .contentShape(Circle())
             .accessibilityLabel("Close Juicebar")
             .accessibilityHint("Dismisses this usage window.")

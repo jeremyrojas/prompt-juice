@@ -2,13 +2,23 @@ import AppKit
 import Combine
 import SwiftUI
 
-private final class JuicebarWindow: NSWindow {
+private final class JuicebarPanel: NSPanel {
+    var onCancel: (() -> Void)?
+
     override var canBecomeKey: Bool {
         true
     }
 
     override var canBecomeMain: Bool {
-        true
+        false
+    }
+
+    override func keyDown(with event: NSEvent) {
+        interpretKeyEvents([event])
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
     }
 }
 
@@ -62,11 +72,13 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     private let modeProvider: () -> PanelMode
     private let providers: () -> [UsageProvider]
     private let onPanelClick: (PanelClickTarget) -> Void
+    private let onCancel: () -> Void
 
     required init(rootView: Content) {
         self.modeProvider = { .manual }
         self.providers = { [] }
         self.onPanelClick = { _ in }
+        self.onCancel = {}
         super.init(rootView: rootView)
     }
 
@@ -74,11 +86,13 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         rootView: Content,
         modeProvider: @escaping () -> PanelMode,
         providers: @escaping () -> [UsageProvider],
-        onPanelClick: @escaping (PanelClickTarget) -> Void
+        onPanelClick: @escaping (PanelClickTarget) -> Void,
+        onCancel: @escaping () -> Void
     ) {
         self.modeProvider = modeProvider
         self.providers = providers
         self.onPanelClick = onPanelClick
+        self.onCancel = onCancel
         super.init(rootView: rootView)
     }
 
@@ -101,6 +115,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseDown(with event: NSEvent) {
         window?.makeKey()
+        window?.makeFirstResponder(self)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -112,6 +127,14 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         }
 
         super.mouseUp(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        interpretKeyEvents([event])
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel()
     }
 
     private func clickTarget(at point: NSPoint) -> PanelClickTarget? {
@@ -131,6 +154,7 @@ final class JuicebarPanelController {
     private var cancellables = Set<AnyCancellable>()
     private var localClickMonitor: Any?
     private var globalClickMonitor: Any?
+    private var localKeyMonitor: Any?
     private var snoozeAutoHideTask: Task<Void, Never>?
 
     private var panelSize: NSSize {
@@ -164,14 +188,14 @@ final class JuicebarPanelController {
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
         position(panel)
-        installClickMonitors()
-        NSApp.activate(ignoringOtherApps: true)
+        installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(panel.contentView)
     }
 
     func hide() {
         snoozeAutoHideTask?.cancel()
-        removeClickMonitors()
+        removeEventMonitors()
         panel?.orderOut(nil)
     }
 
@@ -180,13 +204,17 @@ final class JuicebarPanelController {
             return panel
         }
 
-        let panel = JuicebarWindow(
+        let panel = JuicebarPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
+        panel.onCancel = { [weak self] in
+            self?.dismissSurface()
+        }
+        panel.becomesKeyOnlyIfNeeded = false
         panel.level = .floating
         panel.title = "PromptJuice Juicebar"
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
@@ -220,6 +248,9 @@ final class JuicebarPanelController {
             },
             onPanelClick: { [weak self] target in
                 self?.handleClick(target)
+            },
+            onCancel: { [weak self] in
+                self?.dismissSurface()
             }
         )
         self.panel = panel
@@ -229,14 +260,18 @@ final class JuicebarPanelController {
     private func handleClick(_ target: PanelClickTarget) {
         switch target {
         case .close:
-            viewModel.dismissCurrentWindow()
-            hide()
+            dismissSurface()
         case .snooze:
             viewModel.snooze()
             scheduleSnoozeAutoHide()
         case .provider(let provider):
             viewModel.selectProvider(provider)
         }
+    }
+
+    private func dismissSurface() {
+        viewModel.dismissCurrentWindow()
+        hide()
     }
 
     private func scheduleSnoozeAutoHide() {
@@ -251,25 +286,37 @@ final class JuicebarPanelController {
         }
     }
 
-    private func installClickMonitors() {
+    private func installEventMonitors() {
         if localClickMonitor == nil {
             localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
                 guard let self else {
                     return event
                 }
 
-                return self.handleMouseEvent(event) ? nil : event
+                return self.handleMouseEvent(event, allowsOutsideDismissal: false) ? nil : event
+            }
+        }
+
+        if localKeyMonitor == nil {
+            localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+                guard let self else {
+                    return event
+                }
+
+                return self.handleKeyEvent(event) ? nil : event
             }
         }
 
         if globalClickMonitor == nil {
-            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
-                _ = self?.handleMouseEvent(event)
+            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+            ) { [weak self] event in
+                _ = self?.handleMouseEvent(event, allowsOutsideDismissal: true)
             }
         }
     }
 
-    private func removeClickMonitors() {
+    private func removeEventMonitors() {
         if let localClickMonitor {
             NSEvent.removeMonitor(localClickMonitor)
             self.localClickMonitor = nil
@@ -279,9 +326,30 @@ final class JuicebarPanelController {
             NSEvent.removeMonitor(globalClickMonitor)
             self.globalClickMonitor = nil
         }
+
+        if let localKeyMonitor {
+            NSEvent.removeMonitor(localKeyMonitor)
+            self.localKeyMonitor = nil
+        }
     }
 
-    private func handleMouseEvent(_ event: NSEvent) -> Bool {
+    private func handleKeyEvent(_ event: NSEvent) -> Bool {
+        guard panel?.isVisible == true else {
+            return false
+        }
+
+        if event.keyCode == 53 {
+            dismissSurface()
+            return true
+        }
+
+        return false
+    }
+
+    private func handleMouseEvent(
+        _ event: NSEvent,
+        allowsOutsideDismissal: Bool
+    ) -> Bool {
         guard let panel, panel.isVisible else {
             return false
         }
@@ -294,6 +362,10 @@ final class JuicebarPanelController {
         }
 
         guard panel.frame.contains(screenPoint) else {
+            if allowsOutsideDismissal {
+                dismissSurface()
+            }
+
             return false
         }
 
