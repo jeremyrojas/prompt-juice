@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.applicationIconImage = PromptJuiceIcon.appIconImage()
         configureStatusItem()
         startTicker()
+        preparePanelAfterLaunch()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             self?.showLaunchAlertIfNeeded()
@@ -44,6 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 self?.viewModel.tick()
             }
+        }
+    }
+
+    private func preparePanelAfterLaunch() {
+        DispatchQueue.main.async { [weak self] in
+            self?.panelController.prepare()
         }
     }
 
@@ -102,8 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showLaunchAlertIfNeeded() {
-        if viewModel.checkUsageAlert() {
-            panelController.show()
+        viewModel.refreshUsageAlertInBackground { [weak self] shouldShow in
+            if shouldShow {
+                self?.panelController.show()
+            }
         }
     }
 

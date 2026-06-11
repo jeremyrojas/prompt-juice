@@ -1,6 +1,6 @@
 import Foundation
 
-protocol CodexRateLimitReading {
+protocol CodexRateLimitReading: Sendable {
     func readRateLimits() throws -> CodexRateLimitReadResult
 }
 

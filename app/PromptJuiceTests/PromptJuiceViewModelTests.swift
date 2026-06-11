@@ -116,6 +116,58 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.store.usageSourceMode, .liveCodex)
     }
 
+    func testManualCheckReturnsBeforeBackgroundRefreshCompletes() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        let start = DispatchTime.now().uptimeNanoseconds
+        viewModel.showManualCheck()
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+
+        XCTAssertLessThan(elapsed, 100)
+        XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
+
+        provider.releaseRefresh()
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testLaunchAlertDecisionUsesBackgroundRefreshResult() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+        let expectation = expectation(description: "refresh alert decision")
+        var shouldShow = false
+
+        viewModel.refreshUsageAlertInBackground { result in
+            shouldShow = result
+            expectation.fulfill()
+        }
+
+        provider.releaseRefresh()
+        await fulfillment(of: [expectation], timeout: 1)
+
+        XCTAssertTrue(shouldShow)
+        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertEqual(viewModel.snapshots, Self.alertSnapshots)
+    }
+
     private func makeFixture() -> (
         suiteName: String,
         defaults: UserDefaults,
@@ -129,4 +181,99 @@ final class PromptJuiceViewModelTests: XCTestCase {
     }
 
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private static let healthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 10,
+                resetAt: fixedNow.addingTimeInterval(240 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 12,
+                resetAt: fixedNow.addingTimeInterval(250 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private static let alertSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(10 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: fixedNow.addingTimeInterval(12 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private final class BlockingUsageProviderClient: UsageProviderClient, @unchecked Sendable {
+        let source: SnapshotSource = .fixture
+
+        private let initialSnapshots: [ProviderSnapshot]
+        private let refreshedSnapshots: [ProviderSnapshot]
+        private let refreshStarted = DispatchSemaphore(value: 0)
+        private let refreshCanFinish = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var calls = 0
+
+        init(
+            initialSnapshots: [ProviderSnapshot],
+            refreshedSnapshots: [ProviderSnapshot]
+        ) {
+            self.initialSnapshots = initialSnapshots
+            self.refreshedSnapshots = refreshedSnapshots
+        }
+
+        var callCount: Int {
+            lock.withLock {
+                calls
+            }
+        }
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            let currentCall = lock.withLock {
+                calls += 1
+                return calls
+            }
+
+            guard currentCall > 1 else {
+                return initialSnapshots
+            }
+
+            refreshStarted.signal()
+            _ = refreshCanFinish.wait(timeout: .now() + 1)
+            return refreshedSnapshots
+        }
+
+        func releaseRefresh() {
+            _ = refreshStarted.wait(timeout: .now() + 1)
+            refreshCanFinish.signal()
+        }
+    }
 }

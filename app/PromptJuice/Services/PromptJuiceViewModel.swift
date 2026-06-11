@@ -15,6 +15,7 @@ final class PromptJuiceViewModel: ObservableObject {
     private let now: () -> Date
     private let injectedProviderClient: (any UsageProviderClient)?
     private var providerClient: any UsageProviderClient
+    private var refreshTask: Task<Void, Never>?
 
     init(
         settingsStore: PromptJuiceSettingsStore = .shared,
@@ -33,7 +34,14 @@ final class PromptJuiceViewModel: ObservableObject {
         self.alertEngine = alertEngine
         self.now = now
         thresholds = settingsStore.thresholds
-        snapshots = self.providerClient.snapshots(now: now())
+        snapshots = if let providerClient {
+            providerClient.snapshots(now: now())
+        } else {
+            Self.cachedOrUnavailableSnapshots(
+                sourceMode: initialSourceMode,
+                now: now()
+            )
+        }
     }
 
     var primarySnapshot: UsageSnapshot? {
@@ -147,18 +155,17 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func showManualCheck() {
-        refreshSnapshots()
         mode = .manual
         actionMessage = nil
         selectedProvider = nil
         clearSnoozeForCurrentWindow()
+        refreshSnapshotsInBackground()
     }
 
     @discardableResult
     func checkUsageAlert(force: Bool = false) -> Bool {
         actionMessage = nil
         selectedProvider = nil
-        refreshSnapshots()
 
         if force {
             clearSnoozeForCurrentWindow()
@@ -207,11 +214,30 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func refreshUsage() {
-        refreshSnapshots()
-        actionMessage = "\(sourceMode.title) refreshed."
+        actionMessage = "Refreshing \(sourceMode.title.lowercased())."
+        refreshSnapshotsInBackground(
+            completionMessage: "\(sourceMode.title) refreshed."
+        ) { [weak self] in
+            guard let self else {
+                return
+            }
 
-        if mode == .alert && !hasPendingAlert {
-            mode = .manual
+            if self.mode == .alert && !self.hasPendingAlert {
+                self.mode = .manual
+            }
+        }
+    }
+
+    func refreshUsageAlertInBackground(
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        refreshSnapshotsInBackground { [weak self] in
+            guard let self else {
+                completion(false)
+                return
+            }
+
+            completion(self.checkUsageAlert())
         }
     }
 
@@ -370,7 +396,11 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         configureProviderClient()
-        refreshSnapshots()
+        snapshots = Self.cachedOrUnavailableSnapshots(
+            sourceMode: mode,
+            now: now()
+        )
+        refreshSnapshotsInBackground()
 
         if announce {
             actionMessage = "\(mode.title) selected."
@@ -388,8 +418,36 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
-    private func refreshSnapshots() {
-        snapshots = providerClient.snapshots(now: now())
+    private func refreshSnapshotsInBackground(
+        completionMessage: String? = nil,
+        completion: (@MainActor @Sendable () -> Void)? = nil
+    ) {
+        refreshTask?.cancel()
+
+        let providerClient = providerClient
+        let refreshDate = now()
+
+        refreshTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let refreshedSnapshots = providerClient.snapshots(now: refreshDate)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+
+                self.snapshots = refreshedSnapshots
+
+                if let completionMessage {
+                    self.actionMessage = completionMessage
+                }
+
+                completion?()
+            }
+        }
     }
 
     private static func makeProviderClient(sourceMode: UsageSourceMode) -> any UsageProviderClient {
@@ -399,5 +457,50 @@ final class PromptJuiceViewModel: ObservableObject {
         case .liveCodex:
             return ClaudeLiveUsageProviderClient()
         }
+    }
+
+    private static func cachedOrUnavailableSnapshots(
+        sourceMode: UsageSourceMode,
+        now: Date
+    ) -> [ProviderSnapshot] {
+        switch sourceMode {
+        case .fixture:
+            return FixtureUsageProviderClient(scenario: .underusedCodex)
+                .snapshots(now: now)
+        case .liveCodex:
+            return [
+                ClaudeSnapshotCache.shared.snapshot(
+                    now: now,
+                    failureDetail: "Refreshing usage"
+                ) ?? unavailableSnapshot(
+                    identity: .claude,
+                    source: .claudeStatusline,
+                    now: now
+                ),
+                CodexSnapshotCache.shared.snapshot(
+                    now: now,
+                    failureDetail: "Refreshing usage"
+                ) ?? unavailableSnapshot(
+                    identity: .codex,
+                    source: .codexAppServer,
+                    now: now
+                )
+            ]
+        }
+    }
+
+    private static func unavailableSnapshot(
+        identity: ProviderIdentity,
+        source: SnapshotSource,
+        now: Date
+    ) -> ProviderSnapshot {
+        ProviderSnapshot(
+            identity: identity,
+            rateWindow: .unavailable,
+            source: source,
+            confidence: .unavailable,
+            updatedAt: now,
+            statusDetail: "Refreshing usage"
+        )
     }
 }

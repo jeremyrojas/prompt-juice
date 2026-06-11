@@ -160,6 +160,10 @@ final class JuicebarPanelController {
         }
     }
 
+    func prepare() {
+        _ = ensurePanel()
+    }
+
     func show() {
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
