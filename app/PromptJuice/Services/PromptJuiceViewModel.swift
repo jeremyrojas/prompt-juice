@@ -99,7 +99,7 @@ final class PromptJuiceViewModel: ObservableObject {
         switch mode {
         case .manual:
             return sourceMode == .liveCodex
-                ? "Live Codex and Claude demo usage."
+                ? "Live Claude and Codex usage."
                 : "Claude and Codex usage at a glance."
         case .alert:
             let alertingSnapshots = self.alertingSnapshots
@@ -331,6 +331,12 @@ final class PromptJuiceViewModel: ObservableObject {
             "Codex app-server"
         case .codexCache:
             "Codex cache"
+        case .claudeStatusline:
+            "Claude statusline"
+        case .claudeLocalLogs:
+            "Claude local logs"
+        case .claudeCache:
+            "Claude cache"
         }
 
         return "\(source) · \(snapshot.confidence.rawValue)"
@@ -417,7 +423,7 @@ final class PromptJuiceViewModel: ObservableObject {
         case .demo:
             return DemoProviderClient(scenario: scenario)
         case .liveCodex:
-            return CodexLiveUsageProviderClient(scenario: scenario)
+            return ClaudeLiveUsageProviderClient(scenario: scenario)
         }
     }
 }
