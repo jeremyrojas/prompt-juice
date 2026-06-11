@@ -1,20 +1,28 @@
-# PromptJuice
+# PromptJuice 💧
 
-PromptJuice is a native macOS menu-bar app that shows Claude and Codex usage windows in a compact top-center Juicebar.
+*Make every usage window worth the squeeze.*
+
+PromptJuice is a native macOS menu-bar app that shows Claude and Codex usage windows in a compact top-center Juice Bar.
 
 It helps answer one question while you work: how much useful AI capacity is left before the current window resets?
+
+## Naming
+
+- **PromptJuice** is the app.
+- **Juice Bar** is the floating menu-bar window that opens from the PromptJuice droplet — pull up a stool and check your levels.
+- `Juicebar` appears in implementation names where the codebase uses a single-word identifier.
 
 ## Status
 
 PromptJuice is an early open-source prototype. It currently includes:
 
 - A native macOS accessory app with a menu-bar droplet.
-- A floating Juicebar panel with Claude and Codex rows.
+- A floating Juice Bar panel with Claude and Codex rows.
 - Fixture usage data for tests and previews.
 - Live Codex rate-limit reads through the local Codex app-server.
 - Claude usage reads through a Claude Code statusline cache, with a local-log estimate fallback.
 - Source and confidence labels for exact, estimated, stale, and unavailable data.
-- Snooze, refresh, and threshold controls.
+- Snooze, refresh, and threshold controls — set your sweet spot and get nudged when juice dips below it.
 
 ## Build And Run
 
@@ -38,7 +46,7 @@ swift test
 
 ## Provider Integrations
 
-PromptJuice treats every provider snapshot as local state with a source and confidence label.
+PromptJuice treats every provider snapshot as local state with a source and confidence label. Think of confidence as freshness: exact is fresh-squeezed, estimated is from concentrate, and stale is past its date.
 
 - `demo` with `exact` confidence powers the built-in prototype data.
 - `codexAppServer` with `exact` confidence comes from `codex app-server` and `account/rateLimits/read`.
@@ -56,7 +64,7 @@ Read the setup and troubleshooting details in [docs/provider-integrations.md](do
 app/
   PromptJuice/
     App/          App entry points and app lifecycle
-    UI/           Juicebar panel, menu-bar views, settings UI
+    UI/           Juice Bar panel, menu-bar views, settings UI
     Models/       Usage windows, snapshots, alert state
     Providers/    Fixture, Codex, and Claude usage sources
     Services/     Notifications and local settings
@@ -74,3 +82,7 @@ scripts/          Build, run, icon, and bridge helpers
 - Provider integrations: [docs/provider-integrations.md](docs/provider-integrations.md)
 - Claude statusline bridge: [docs/claude-statusline-bridge.md](docs/claude-statusline-bridge.md)
 - Usage state board: [design/prompt-juice-states.html](design/prompt-juice-states.html)
+
+---
+
+*Down to the last drop.*
