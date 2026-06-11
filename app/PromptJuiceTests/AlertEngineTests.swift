@@ -97,6 +97,131 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testSeverityHealthyWhenPlentyAndFarFromReset() {
+        let snapshot = makeSnapshot(
+            usedPercent: 20,
+            resetMinutesFromNow: 240,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .healthy
+        )
+    }
+
+    func testSeverityUseSoonWhenPlentyButResetIsNear() {
+        let snapshot = makeSnapshot(
+            usedPercent: 31,
+            resetMinutesFromNow: 52,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .useSoon
+        )
+    }
+
+    func testSeverityLowTakesPriorityOverUseSoon() {
+        let snapshot = makeSnapshot(
+            usedPercent: 90,
+            resetMinutesFromNow: 20,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .low
+        )
+    }
+
+    func testSeverityEmptyWhenNoneLeft() {
+        let snapshot = makeSnapshot(
+            usedPercent: 100,
+            resetMinutesFromNow: 30,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .empty
+        )
+    }
+
+    func testSeverityUnavailableSnapshot() {
+        let snapshot = ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexStub,
+            confidence: .unavailable,
+            updatedAt: now
+        )
+
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .unavailable
+        )
+    }
+
+    func testAggregateSeverityWorstAlertingWins() {
+        let healthy = makeSnapshot(
+            identity: .claude,
+            usedPercent: 8,
+            resetMinutesFromNow: 240,
+            confidence: .exact
+        )
+        let useSoon = makeSnapshot(
+            identity: .codex,
+            usedPercent: 31,
+            resetMinutesFromNow: 52,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(
+            engine.aggregateSeverity(
+                in: [healthy, useSoon],
+                thresholds: thresholds,
+                now: now
+            ),
+            .useSoon
+        )
+    }
+
+    func testAggregateSeverityIgnoresUnavailableUnlessAll() {
+        let healthy = makeSnapshot(
+            identity: .claude,
+            usedPercent: 8,
+            resetMinutesFromNow: 240,
+            confidence: .exact
+        )
+        let unavailable = ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexStub,
+            confidence: .unavailable,
+            updatedAt: now
+        )
+
+        XCTAssertEqual(
+            engine.aggregateSeverity(
+                in: [healthy, unavailable],
+                thresholds: thresholds,
+                now: now
+            ),
+            .healthy
+        )
+
+        XCTAssertEqual(
+            engine.aggregateSeverity(
+                in: [unavailable],
+                thresholds: thresholds,
+                now: now
+            ),
+            .unavailable
+        )
+    }
+
     private func makeSnapshot(
         identity: ProviderIdentity = .codex,
         usedPercent: Double,

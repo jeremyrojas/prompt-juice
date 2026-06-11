@@ -52,6 +52,89 @@ final class PromptJuiceViewModel: ObservableObject {
             }
     }
 
+    // MARK: - Severity
+
+    /// Per-provider judgment for the row chip, bar color, and header tint.
+    func severity(for snapshot: UsageSnapshot) -> UsageSeverity {
+        alertEngine.severity(for: snapshot, thresholds: thresholds, now: now())
+    }
+
+    /// Worst-wins judgment across all providers.
+    var aggregateSeverity: UsageSeverity {
+        alertEngine.aggregateSeverity(in: snapshots, thresholds: thresholds, now: now())
+    }
+
+    /// Header droplet follows selection: the selected provider when one is
+    /// chosen, otherwise the aggregate.
+    var headerSeverity: UsageSeverity {
+        if let selectedSnapshot {
+            return severity(for: selectedSnapshot)
+        }
+
+        return aggregateSeverity
+    }
+
+    /// Fill level for the header droplet (0...100), matching `headerSeverity`.
+    var headerRemainingPercent: Double {
+        if let selectedSnapshot {
+            return selectedSnapshot.isAvailable ? selectedSnapshot.remainingPercent : 0
+        }
+
+        return menuBarRemainingPercent
+    }
+
+    /// Tint for the menu-bar glyph — the worst judgment across providers.
+    var menuBarSeverity: UsageSeverity {
+        aggregateSeverity
+    }
+
+    /// Fill for the menu-bar glyph — the binding constraint (lowest remaining
+    /// among available providers). 100 when nothing is available yet.
+    var menuBarRemainingPercent: Double {
+        let available = snapshots.filter(\.isAvailable)
+
+        guard !available.isEmpty else {
+            return 100
+        }
+
+        return available.map(\.remainingPercent).min() ?? 100
+    }
+
+    /// Manual-mode verdict headline — the answer, not the mechanism.
+    private var manualVerdict: String {
+        switch aggregateSeverity {
+        case .healthy:
+            return "Plenty of prompt juice left"
+        case .useSoon:
+            return "Use it before reset"
+        case .low:
+            return "Running low on juice"
+        case .empty:
+            return "Out of prompt juice"
+        case .unavailable:
+            return "Usage unavailable"
+        }
+    }
+
+    /// Manual-mode subtitle — the live aggregate the static label used to hide.
+    private var manualSubtitle: String {
+        guard snapshots.contains(where: \.isAvailable) else {
+            return "Usage unavailable"
+        }
+
+        var parts = snapshots.map { snapshot -> String in
+            snapshot.isAvailable
+                ? "\(snapshot.displayName) \(remainingPercentValueText(for: snapshot))"
+                : "\(snapshot.displayName) n/a"
+        }
+
+        if let soonest = primarySnapshot {
+            parts.append(fullResetText(for: soonest))
+        }
+
+        return parts.joined(separator: " · ")
+    }
+
     var headline: String {
         if let selectedSnapshot {
             if shouldUseSoon(for: selectedSnapshot) {
@@ -63,7 +146,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         switch mode {
         case .manual:
-            return "PromptJuice check"
+            return manualVerdict
         case .alert:
             guard let alertSnapshot else {
                 return "Plenty of prompt juice left"
@@ -104,9 +187,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         switch mode {
         case .manual:
-            return sourceMode == .liveCodex
-                ? "Live Claude and Codex usage."
-                : "Claude and Codex usage at a glance."
+            return manualSubtitle
         case .alert:
             let alertingSnapshots = self.alertingSnapshots
 

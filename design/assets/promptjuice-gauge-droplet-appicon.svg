@@ -1,0 +1,49 @@
+<svg viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16301f"/>
+      <stop offset="0.55" stop-color="#0b1a12"/>
+      <stop offset="1" stop-color="#050b07"/>
+    </linearGradient>
+    <linearGradient id="juice" x1="0" y1="0" x2="0.15" y2="1">
+      <stop offset="0" stop-color="#eaff45"/>
+      <stop offset="0.45" stop-color="#6fe21a"/>
+      <stop offset="1" stop-color="#0a9a58"/>
+    </linearGradient>
+    <radialGradient id="hl" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+    <clipPath id="dropClip">
+      <path d="M512 150 C512 150 250 470 250 662 C250 780 367 870 512 870 C657 870 774 780 774 662 C774 470 512 150 512 150 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="229" fill="url(#bg)"/>
+  <ellipse cx="512" cy="640" rx="300" ry="240" fill="#c8ff3c" opacity="0.16" filter="url(#soft)"/>
+
+  <!-- glass droplet body -->
+  <path d="M512 150 C512 150 250 470 250 662 C250 780 367 870 512 870 C657 870 774 780 774 662 C774 470 512 150 512 150 Z" fill="#ffffff" opacity="0.10"/>
+
+  <!-- juice fill (~74%) -->
+  <g clip-path="url(#dropClip)">
+    <path fill="url(#juice)" d="M220 430 Q360 388 512 424 Q664 460 804 410 L804 900 L220 900 Z"/>
+    <path d="M250 428 Q380 392 512 424 Q644 456 762 416" fill="none" stroke="#ffffff" stroke-width="9" opacity="0.35" stroke-linecap="round"/>
+    <circle cx="430" cy="560" r="15" fill="#ffffff" opacity="0.16"/>
+    <circle cx="600" cy="650" r="10" fill="#ffffff" opacity="0.14"/>
+    <circle cx="500" cy="740" r="8" fill="#ffffff" opacity="0.12"/>
+    <ellipse cx="512" cy="846" rx="150" ry="20" fill="#000000" opacity="0.14"/>
+  </g>
+
+  <!-- prompt cursor inside juice -->
+  <path d="M408 600 L486 678 L408 756" fill="none" stroke="#ffffff" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M536 744 L626 744" fill="none" stroke="#ffffff" stroke-width="42" stroke-linecap="round"/>
+
+  <!-- specular highlight + rim -->
+  <ellipse cx="408" cy="470" rx="120" ry="170" fill="url(#hl)" opacity="0.7" transform="rotate(-22 408 470)"/>
+  <path d="M512 150 C512 150 250 470 250 662 C250 780 367 870 512 870 C657 870 774 780 774 662 C774 470 512 150 512 150 Z"
+        fill="none" stroke="#ffffff" stroke-width="12" opacity="0.32" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

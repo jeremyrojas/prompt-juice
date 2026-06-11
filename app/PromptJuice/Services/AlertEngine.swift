@@ -44,6 +44,50 @@ struct AlertEngine {
             .max { $0.remainingPercent < $1.remainingPercent }
     }
 
+    /// The single judgment for one provider, used by the chip, row/bar color,
+    /// header droplet, and menu-bar glyph. "Nearly out" (red) takes priority
+    /// over "use it before reset" (amber).
+    func severity(
+        for snapshot: ProviderSnapshot,
+        thresholds: AlertThresholds,
+        now: Date = Date()
+    ) -> UsageSeverity {
+        guard snapshot.isAvailable else {
+            return .unavailable
+        }
+
+        let remaining = snapshot.remainingPercent
+
+        if remaining <= 0 {
+            return .empty
+        }
+
+        if remaining < Double(UsageSeverity.lowRemainingFloor) {
+            return .low
+        }
+
+        if shouldUseSoon(for: snapshot, thresholds: thresholds, now: now) {
+            return .useSoon
+        }
+
+        return .healthy
+    }
+
+    /// Worst-wins judgment across providers, ignoring unavailable ones unless
+    /// every provider is unavailable. Drives the panel verdict headline and the
+    /// menu-bar glyph tint.
+    func aggregateSeverity(
+        in snapshots: [ProviderSnapshot],
+        thresholds: AlertThresholds,
+        now: Date = Date()
+    ) -> UsageSeverity {
+        let available = snapshots
+            .map { severity(for: $0, thresholds: thresholds, now: now) }
+            .filter { $0 != .unavailable }
+
+        return available.max { $0.rank < $1.rank } ?? .unavailable
+    }
+
     func statusText(
         for snapshot: ProviderSnapshot,
         thresholds: AlertThresholds,

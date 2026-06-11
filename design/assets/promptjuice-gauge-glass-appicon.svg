@@ -1,0 +1,53 @@
+<svg viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16301f"/>
+      <stop offset="0.55" stop-color="#0b1a12"/>
+      <stop offset="1" stop-color="#050b07"/>
+    </linearGradient>
+    <linearGradient id="juice" x1="0" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#eaff45"/>
+      <stop offset="0.45" stop-color="#6fe21a"/>
+      <stop offset="1" stop-color="#0a9a58"/>
+    </linearGradient>
+    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+    <clipPath id="glassClip">
+      <path d="M277 190 L341 786 Q346 830 390 830 L634 830 Q678 830 683 786 L747 190 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="229" fill="url(#bg)"/>
+  <ellipse cx="512" cy="600" rx="340" ry="200" fill="#c8ff3c" opacity="0.16" filter="url(#soft)"/>
+
+  <!-- glass body -->
+  <path d="M277 190 L341 786 Q346 830 390 830 L634 830 Q678 830 683 786 L747 190 Z" fill="#ffffff" opacity="0.12"/>
+
+  <!-- juice -->
+  <g clip-path="url(#glassClip)">
+    <path d="M250 470 Q390 420 512 462 Q640 502 790 444 L790 860 L250 860 Z" fill="url(#juice)"/>
+    <path d="M285 468 Q400 424 512 462 Q636 500 740 450" fill="none" stroke="#ffffff" stroke-width="9" opacity="0.35" stroke-linecap="round"/>
+    <circle cx="430" cy="560" r="16" fill="#ffffff" opacity="0.16"/>
+    <circle cx="585" cy="640" r="11" fill="#ffffff" opacity="0.14"/>
+    <circle cx="500" cy="720" r="8" fill="#ffffff" opacity="0.12"/>
+    <ellipse cx="512" cy="808" rx="150" ry="18" fill="#000000" opacity="0.16"/>
+  </g>
+
+  <!-- straw -->
+  <ellipse cx="592" cy="462" rx="34" ry="11" fill="#064a2e" opacity="0.35"/>
+  <line x1="560" y1="520" x2="780" y2="135" stroke="#f7f3ea" stroke-width="46" stroke-linecap="round"/>
+  <line x1="708" y1="170" x2="728" y2="122" stroke="#ff86a5" stroke-width="46" stroke-linecap="round"/>
+  <line x1="571" y1="525" x2="741" y2="123" stroke="#ffffff" stroke-width="8" opacity="0.35" stroke-linecap="round"/>
+
+  <!-- prompt cursor in the juice -->
+  <path d="M392 568 L470 646 L392 724" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M520 712 L612 712" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round"/>
+
+  <!-- glass outline + rim -->
+  <path d="M277 190 L341 786 Q346 830 390 830 L634 830 Q678 830 683 786 L747 190"
+        fill="none" stroke="#ffffff" stroke-width="12" opacity="0.30" stroke-linecap="round" stroke-linejoin="round"/>
+  <ellipse cx="512" cy="190" rx="235" ry="30" fill="#ffffff" opacity="0.07"/>
+  <ellipse cx="512" cy="190" rx="235" ry="30" fill="none" stroke="#ffffff" stroke-width="10" opacity="0.40"/>
+  <path d="M320 252 Q512 200 704 252" fill="none" stroke="#ffffff" stroke-width="20" opacity="0.30" stroke-linecap="round"/>
+</svg>

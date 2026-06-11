@@ -1,0 +1,210 @@
+<svg viewBox="0 0 1280 920" width="1280" height="920" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <!-- ===== Gauge-glass glyph, 24x24 grid, template-style (currentColor) ===== -->
+    <path id="pj-glass" d="M6.2 4.2 L7.5 19.2 Q7.7 21.2 9.8 21.2 L14.2 21.2 Q16.3 21.2 16.5 19.2 L17.8 4.2"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <clipPath id="pj-clip">
+      <path d="M6.2 4.2 L7.5 19.2 Q7.7 21.2 9.8 21.2 L14.2 21.2 Q16.3 21.2 16.5 19.2 L17.8 4.2 Z"/>
+    </clipPath>
+    <path id="pj-straw" d="M14.2 8.6 L18.4 1.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    <path id="pj-drop-small" d="M12 9.4 C12 9.4 9.7 12.3 9.7 13.6 C9.7 14.9 10.7 15.8 12 15.8 C13.3 15.8 14.3 14.9 14.3 13.6 C14.3 12.3 12 9.4 12 9.4 Z" fill="currentColor"/>
+
+    <g id="pj-gauge-90">
+      <g clip-path="url(#pj-clip)">
+        <path fill="currentColor" d="M4 6.6 Q7.5 4.8 11.5 6.3 Q15 7.7 20 5.7 L20 22.4 L4 22.4 Z"/>
+      </g>
+      <use xlink:href="#pj-glass"/>
+    </g>
+    <g id="pj-gauge-55">
+      <g clip-path="url(#pj-clip)">
+        <path fill="currentColor" d="M4 11.8 Q7.5 10 11.5 11.5 Q15 12.9 20 10.9 L20 22.4 L4 22.4 Z"/>
+      </g>
+      <use xlink:href="#pj-glass"/>
+    </g>
+    <g id="pj-gauge-25">
+      <g clip-path="url(#pj-clip)">
+        <path fill="currentColor" d="M4 16.2 Q7.5 14.6 11.5 16 Q15 17.3 20 15.4 L20 22.4 L4 22.4 Z"/>
+      </g>
+      <use xlink:href="#pj-glass"/>
+    </g>
+    <g id="pj-gauge-6">
+      <g clip-path="url(#pj-clip)">
+        <path fill="currentColor" d="M4 19.2 Q8 18.4 12 19.1 Q15.5 19.7 20 18.9 L20 22.4 L4 22.4 Z"/>
+      </g>
+      <use xlink:href="#pj-glass"/>
+      <use xlink:href="#pj-drop-small"/>
+    </g>
+    <g id="pj-gauge-55-straw">
+      <use xlink:href="#pj-gauge-55"/>
+      <use xlink:href="#pj-straw"/>
+    </g>
+
+    <!-- ===== Comparison glyphs ===== -->
+    <path id="pj-dropfill" d="M12 3.4 C12 3.4 6.9 9.9 6.9 13.5 C6.9 16.9 9.2 19.4 12 19.4 C14.8 19.4 17.1 16.9 17.1 13.5 C17.1 9.9 12 3.4 12 3.4 Z" fill="currentColor"/>
+    <g id="pj-pill-dark">
+      <rect x="3" y="6.5" width="18" height="11.5" rx="5.2" fill="currentColor"/>
+      <path d="M4.4 11.6 Q8 9.4 12 11.2 Q16 12.9 19.6 10.9" fill="none" stroke="#15171c" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <g id="pj-pill-light">
+      <rect x="3" y="6.5" width="18" height="11.5" rx="5.2" fill="currentColor"/>
+      <path d="M4.4 11.6 Q8 9.4 12 11.2 Q16 12.9 19.6 10.9" fill="none" stroke="#f3f4f6" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <g id="pj-wifi">
+      <circle cx="12" cy="17.6" r="1.5" fill="currentColor"/>
+      <path d="M8.3 14.4 Q12 11.2 15.7 14.4 M5.6 11.5 Q12 6.2 18.4 11.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+    </g>
+    <g id="pj-battery">
+      <rect x="3.5" y="8" width="15" height="8.5" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.55"/>
+      <rect x="19.3" y="10.6" width="1.8" height="3.2" rx="0.9" fill="currentColor" opacity="0.55"/>
+      <rect x="5" y="9.5" width="8.5" height="5.5" rx="1.3" fill="currentColor"/>
+    </g>
+
+    <!-- ===== Hero app icon resources ===== -->
+    <linearGradient id="pj-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16301f"/>
+      <stop offset="0.55" stop-color="#0b1a12"/>
+      <stop offset="1" stop-color="#050b07"/>
+    </linearGradient>
+    <linearGradient id="pj-juice" x1="0" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#eaff45"/>
+      <stop offset="0.45" stop-color="#6fe21a"/>
+      <stop offset="1" stop-color="#0a9a58"/>
+    </linearGradient>
+    <filter id="pj-soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+    <clipPath id="pj-hero-clip">
+      <path d="M277 190 L341 786 Q346 830 390 830 L634 830 Q678 830 683 786 L747 190 Z"/>
+    </clipPath>
+
+    <g id="pj-hero-icon">
+      <rect x="0" y="0" width="1024" height="1024" rx="229" fill="url(#pj-bg)"/>
+      <ellipse cx="512" cy="600" rx="340" ry="200" fill="#c8ff3c" opacity="0.16" filter="url(#pj-soft)"/>
+      <!-- glass body -->
+      <path d="M277 190 L341 786 Q346 830 390 830 L634 830 Q678 830 683 786 L747 190 Z" fill="#ffffff" opacity="0.12"/>
+      <!-- juice -->
+      <g clip-path="url(#pj-hero-clip)">
+        <path d="M250 470 Q390 420 512 462 Q640 502 790 444 L790 860 L250 860 Z" fill="url(#pj-juice)"/>
+        <path d="M285 468 Q400 424 512 462 Q636 500 740 450" fill="none" stroke="#ffffff" stroke-width="9" opacity="0.35" stroke-linecap="round"/>
+        <circle cx="430" cy="560" r="16" fill="#ffffff" opacity="0.16"/>
+        <circle cx="585" cy="640" r="11" fill="#ffffff" opacity="0.14"/>
+        <circle cx="500" cy="720" r="8" fill="#ffffff" opacity="0.12"/>
+        <ellipse cx="512" cy="808" rx="150" ry="18" fill="#000000" opacity="0.16"/>
+      </g>
+      <!-- straw -->
+      <ellipse cx="592" cy="462" rx="34" ry="11" fill="#064a2e" opacity="0.35"/>
+      <line x1="560" y1="520" x2="780" y2="135" stroke="#f7f3ea" stroke-width="46" stroke-linecap="round"/>
+      <line x1="708" y1="170" x2="728" y2="122" stroke="#ff86a5" stroke-width="46" stroke-linecap="round"/>
+      <line x1="571" y1="525" x2="741" y2="123" stroke="#ffffff" stroke-width="8" opacity="0.35" stroke-linecap="round"/>
+      <!-- prompt cursor in the juice -->
+      <path d="M392 568 L470 646 L392 724" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M520 712 L612 712" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round"/>
+      <!-- glass outline + rim -->
+      <path d="M277 190 L341 786 Q346 830 390 830 L634 830 Q678 830 683 786 L747 190"
+            fill="none" stroke="#ffffff" stroke-width="12" opacity="0.30" stroke-linecap="round" stroke-linejoin="round"/>
+      <ellipse cx="512" cy="190" rx="235" ry="30" fill="#ffffff" opacity="0.07"/>
+      <ellipse cx="512" cy="190" rx="235" ry="30" fill="none" stroke="#ffffff" stroke-width="10" opacity="0.40"/>
+      <path d="M320 252 Q512 200 704 252" fill="none" stroke="#ffffff" stroke-width="20" opacity="0.30" stroke-linecap="round"/>
+    </g>
+  </defs>
+
+  <!-- ================= sheet ================= -->
+  <rect x="0" y="0" width="1280" height="920" fill="#0c1118"/>
+  <text x="60" y="64" font-size="26" font-weight="600" fill="#e8edf4">PromptJuice — “gauge glass” concept</text>
+  <text x="60" y="92" font-size="13" fill="#93a0b4">One shape system: the glass IS the gauge. Menu bar = monochrome template glyph with live fill · Dock = hero render of the same glass.</text>
+
+  <!-- Section 1 -->
+  <text x="60" y="146" font-size="15" font-weight="600" fill="#c7d2e0">1 · Actual size in the menu bar</text>
+  <text x="60" y="166" font-size="12" fill="#7d8a9e">18 pt glyphs on simulated dark and light bars</text>
+
+  <rect x="60" y="178" width="560" height="30" rx="7" fill="#15171c" stroke="#2a2f3a"/>
+  <g color="#f2f4f7">
+    <g transform="translate(81,184) scale(0.75)"><use xlink:href="#pj-dropfill"/></g>
+    <g transform="translate(141,184) scale(0.75)"><use xlink:href="#pj-pill-dark"/></g>
+    <g transform="translate(201,184) scale(0.75)"><use xlink:href="#pj-gauge-55"/></g>
+    <g transform="translate(261,184) scale(0.75)"><use xlink:href="#pj-gauge-55-straw"/></g>
+    <g transform="translate(351,184) scale(0.75)"><use xlink:href="#pj-wifi"/></g>
+    <g transform="translate(395,184) scale(0.75)"><use xlink:href="#pj-battery"/></g>
+  </g>
+  <text x="440" y="197" font-size="12" fill="#e6e9ef">Thu 11:10 AM</text>
+
+  <rect x="660" y="178" width="560" height="30" rx="7" fill="#f3f4f6" stroke="#d8dce3"/>
+  <g color="#20242b">
+    <g transform="translate(741,184) scale(0.75)"><use xlink:href="#pj-dropfill"/></g>
+    <g transform="translate(801,184) scale(0.75)"><use xlink:href="#pj-pill-light"/></g>
+    <g transform="translate(861,184) scale(0.75)"><use xlink:href="#pj-gauge-55"/></g>
+    <g transform="translate(921,184) scale(0.75)"><use xlink:href="#pj-gauge-55-straw"/></g>
+    <g transform="translate(1011,184) scale(0.75)"><use xlink:href="#pj-wifi"/></g>
+    <g transform="translate(1055,184) scale(0.75)"><use xlink:href="#pj-battery"/></g>
+  </g>
+  <text x="1100" y="197" font-size="12" fill="#20242b">Thu 11:10 AM</text>
+
+  <g stroke="#3a4150" stroke-width="1">
+    <line x1="90" y1="212" x2="90" y2="222"/>
+    <line x1="150" y1="212" x2="150" y2="238"/>
+    <line x1="210" y1="212" x2="210" y2="222"/>
+    <line x1="270" y1="212" x2="270" y2="238"/>
+  </g>
+  <g font-size="11" fill="#8b97aa" text-anchor="middle">
+    <text x="90" y="236">current droplet</text>
+    <text x="210" y="236" fill="#bdf264">gauge glass</text>
+    <text x="150" y="252">juicebar pill</text>
+    <text x="270" y="252">+ straw</text>
+  </g>
+  <text x="60" y="282" font-size="12.5" fill="#93a0b4">The pill flattens into a dash next to the battery; the droplet says “water app”. The glass keeps a vertical, ownable silhouette — and its fill is data.</text>
+
+  <!-- Section 2 -->
+  <text x="60" y="330" font-size="15" font-weight="600" fill="#c7d2e0">2 · The fill is live — like the battery icon, but juice</text>
+  <g>
+    <rect x="60" y="348" width="180" height="172" rx="12" fill="#131720" stroke="#262c38"/>
+    <rect x="264" y="348" width="180" height="172" rx="12" fill="#131720" stroke="#262c38"/>
+    <rect x="468" y="348" width="180" height="172" rx="12" fill="#131720" stroke="#262c38"/>
+    <rect x="672" y="348" width="180" height="172" rx="12" fill="#131720" stroke="#262c38"/>
+    <rect x="876" y="348" width="180" height="172" rx="12" fill="#131720" stroke="#262c38"/>
+  </g>
+  <g color="#eef1f5">
+    <g transform="translate(102,360) scale(4)"><use xlink:href="#pj-gauge-90"/></g>
+    <g transform="translate(306,360) scale(4)"><use xlink:href="#pj-gauge-55"/></g>
+    <g transform="translate(510,360) scale(4)"><use xlink:href="#pj-gauge-25"/></g>
+    <g transform="translate(714,360) scale(4)"><use xlink:href="#pj-gauge-6"/></g>
+  </g>
+  <g color="#ff9f0a">
+    <g transform="translate(918,360) scale(4)"><use xlink:href="#pj-gauge-6"/></g>
+  </g>
+  <g font-size="13" fill="#dfe6f0" text-anchor="middle" font-weight="600">
+    <text x="150" y="486">Plenty</text>
+    <text x="354" y="486">Cruising</text>
+    <text x="558" y="486">Use soon</text>
+    <text x="762" y="486">Last drops</text>
+    <text x="966" y="486">Low tint</text>
+  </g>
+  <g font-size="11" fill="#7e8b9f" text-anchor="middle">
+    <text x="150" y="504">90% left</text>
+    <text x="354" y="504">55% left</text>
+    <text x="558" y="504">25% left</text>
+    <text x="762" y="504">6% — drop returns</text>
+    <text x="966" y="504">opt-in, battery-style</text>
+  </g>
+
+  <!-- Section 3 -->
+  <text x="60" y="568" font-size="15" font-weight="600" fill="#c7d2e0">3 · Same glass, hero render — Dock &amp; Spotlight</text>
+  <svg x="60" y="586" width="220" height="220" viewBox="0 0 1024 1024"><use xlink:href="#pj-hero-icon"/></svg>
+  <svg x="320" y="742" width="64" height="64" viewBox="0 0 1024 1024"><use xlink:href="#pj-hero-icon"/></svg>
+  <svg x="408" y="774" width="32" height="32" viewBox="0 0 1024 1024"><use xlink:href="#pj-hero-icon"/></svg>
+  <g font-size="10.5" fill="#7e8b9f" text-anchor="middle">
+    <text x="352" y="822">64 px</text>
+    <text x="424" y="822">32 px</text>
+  </g>
+  <g font-size="12.5" fill="#93a0b4">
+    <text x="500" y="620">· Vertical taper = unmistakably a glass — never a pill, never the battery.</text>
+    <text x="500" y="646">· Same wave + lime-to-green juice as the Juicebar panel rows.</text>
+    <text x="500" y="672">· Straw and prompt cursor live only at hero sizes; drop them below 64 px.</text>
+    <text x="500" y="698">· Build as a layered Icon Composer (.icon) for Tahoe — the brand is literally liquid in glass.</text>
+    <text x="500" y="724">· The droplet isn’t retired: it becomes the “last drops” state and the panel’s micro-motif.</text>
+  </g>
+
+  <!-- Takeaway -->
+  <rect x="60" y="844" width="1160" height="56" rx="10" fill="#11161f" stroke="#262c38"/>
+  <text x="80" y="868" font-size="12.5" fill="#c2cddd">Ship the split: template gauge glass in the bar, hero glass in the Dock — the native pattern (battery glyph vs. app icons).</text>
+  <text x="80" y="888" font-size="12.5" fill="#8b97aa">Uniformity comes from the shared silhouette, wave and palette — not from using one rendering everywhere.</text>
+</svg>
