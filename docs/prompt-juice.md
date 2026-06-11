@@ -238,7 +238,7 @@ Suggested modules:
 
 - `PromptJuiceApp`: app entry point and menu-bar setup.
 - `JuicebarPanelController`: floating panel placement and presentation.
-- `UsageProvider`: protocol for Claude, Codex, and demo data.
+- `UsageProviderClient`: provider boundary for normalized Claude, Codex, and demo snapshots.
 - `RateWindow`: shared model for percent used, percent left, reset time, duration, and window label.
 - `ProviderSnapshot`: normalized provider state with identity, source, confidence, freshness, and error state.
 - `AlertEngine`: pacing and threshold logic.
@@ -249,28 +249,49 @@ Suggested modules:
 Provider protocol sketch:
 
 ```swift
-protocol UsageProvider {
-    var id: String { get }
-    var displayName: String { get }
-    func currentUsage() async throws -> UsageSnapshot
+protocol UsageProviderClient {
+    var source: SnapshotSource { get }
+    func snapshots(now: Date) -> [ProviderSnapshot]
 }
 ```
 
 Usage model sketch:
 
 ```swift
-struct UsageSnapshot {
-    let provider: String
-    let usedPercent: Double
-    let remainingPercent: Double
-    let resetAt: Date
-    let windowDurationMinutes: Int
-    let label: String
-    let source: String
-    let confidence: String
+struct ProviderSnapshot {
+    let identity: ProviderIdentity
+    let rateWindow: RateWindow
+    let source: SnapshotSource
+    let confidence: SnapshotConfidence
     let updatedAt: Date
 }
+
+enum SnapshotConfidence {
+    case exact
+    case estimated
+    case stale
+    case unavailable
+}
 ```
+
+### Phase 1A Implementation
+
+The architecture branch adds the first provider-ready slice while keeping the
+Juicebar UI visually stable:
+
+- `RateWindow`, `ProviderIdentity`, `ProviderSnapshot`, `SnapshotSource`, and `SnapshotConfidence` model normalized provider state.
+- `UsageProviderClient` defines the provider boundary.
+- `DemoProviderClient` supplies the existing static Claude and Codex rows through that boundary.
+- `CodexProviderClient` is a safe shell that returns an unavailable Codex snapshot. It performs zero token refresh, auth-file mutation, browser-cookie reads, secret storage, or live account access.
+- `AlertEngine` owns current `Use soon` threshold decisions and suppresses stale or unavailable snapshots.
+- `PromptJuiceViewModel` keeps presentation state, formatting, selection, Snooze, and threshold actions.
+
+Next Codex spike:
+
+- Discover read-only local Codex usage sources.
+- Prefer provider-reported reset and remaining-capacity data.
+- Label estimates and stale data clearly.
+- Cache the last good snapshot after the live source shape is proven.
 
 Provider strategy:
 

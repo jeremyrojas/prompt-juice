@@ -6,7 +6,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
     func testDefaultDemoAlertIsPending() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
-        let viewModel = PromptJuiceViewModel(settingsStore: fixture.store)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            now: { Self.fixedNow }
+        )
 
         XCTAssertTrue(viewModel.checkDemoAlert())
         XCTAssertEqual(viewModel.mode, .alert)
@@ -15,7 +18,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
     func testSnoozeSuppressesCurrentDemoWindow() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
-        let viewModel = PromptJuiceViewModel(settingsStore: fixture.store)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            now: { Self.fixedNow }
+        )
 
         XCTAssertTrue(viewModel.checkDemoAlert(force: true))
         viewModel.snooze()
@@ -27,7 +33,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
     func testManualCheckClearsCurrentDemoSnooze() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
-        let viewModel = PromptJuiceViewModel(settingsStore: fixture.store)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            now: { Self.fixedNow }
+        )
 
         XCTAssertTrue(viewModel.checkDemoAlert(force: true))
         viewModel.snooze()
@@ -40,7 +49,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
     func testThresholdsAffectDemoAlert() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
-        let viewModel = PromptJuiceViewModel(settingsStore: fixture.store)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            now: { Self.fixedNow }
+        )
 
         viewModel.setRemainingMinutesThreshold(30)
         viewModel.setRemainingPercentThreshold(80)
@@ -60,4 +72,6 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let store = PromptJuiceSettingsStore(defaults: defaults)
         return (suiteName, defaults, store)
     }
+
+    private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
 }

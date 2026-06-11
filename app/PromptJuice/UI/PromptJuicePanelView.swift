@@ -169,7 +169,7 @@ private struct ProviderUsageRow: View {
                 HStack(spacing: 8) {
                     providerDot
 
-                    Text(snapshot.provider.rawValue)
+                    Text(snapshot.displayName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.88))
 
@@ -200,9 +200,9 @@ private struct ProviderUsageRow: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(snapshot.provider.rawValue) usage")
+        .accessibilityLabel("\(snapshot.displayName) usage")
         .accessibilityValue("\(viewModel.percentText(for: snapshot)), \(viewModel.resetText(for: snapshot)) before reset")
-        .accessibilityHint("Shows details for \(snapshot.provider.rawValue).")
+        .accessibilityHint("Shows details for \(snapshot.displayName).")
     }
 
     private var providerDot: some View {
