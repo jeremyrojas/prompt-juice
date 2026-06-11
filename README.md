@@ -10,7 +10,6 @@ It helps answer one question while you work: how much useful AI capacity is left
 
 - **PromptJuice** is the app.
 - **Juice Bar** is the floating menu-bar window that opens from the PromptJuice droplet — pull up a stool and check your levels.
-- `Juicebar` appears in implementation names where the codebase uses a single-word identifier.
 
 ## Status
 
