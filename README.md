@@ -10,11 +10,11 @@ PromptJuice is an early open-source prototype. It currently includes:
 
 - A native macOS accessory app with a menu-bar droplet.
 - A floating Juicebar panel with Claude and Codex rows.
-- Demo usage data for quick local testing.
+- Fixture usage data for tests and previews.
 - Live Codex rate-limit reads through the local Codex app-server.
 - Claude usage reads through a Claude Code statusline cache, with a local-log estimate fallback.
 - Source and confidence labels for exact, estimated, stale, and unavailable data.
-- Snooze, refresh, threshold, and notification controls.
+- Snooze, refresh, and threshold controls.
 
 ## Build And Run
 
@@ -58,7 +58,7 @@ app/
     App/          App entry points and app lifecycle
     UI/           Juicebar panel, menu-bar views, settings UI
     Models/       Usage windows, snapshots, alert state
-    Providers/    Demo, Codex, and Claude usage sources
+    Providers/    Fixture, Codex, and Claude usage sources
     Services/     Notifications and local settings
     Resources/    Info.plist and app resources
   PromptJuiceTests/

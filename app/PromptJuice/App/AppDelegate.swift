@@ -3,7 +3,6 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = PromptJuiceViewModel()
-    private let notificationService = PromptJuiceNotificationService()
     private lazy var panelController = JuicebarPanelController(viewModel: viewModel)
     private var statusItem: NSStatusItem?
     private var ticker: Timer?
@@ -82,16 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(refreshUsage),
             keyEquivalent: "r"
         ).target = self
-        addUsageSourceMenu(to: menu)
         menu.addItem(.separator())
         addThresholdMenus(to: menu)
-        menu.addItem(.separator())
-        menu.addItem(
-            withTitle: "Request Notifications",
-            action: #selector(requestNotifications),
-            keyEquivalent: ""
-        ).target = self
-        menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit PromptJuice",
             action: #selector(quit),
@@ -121,16 +112,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.show()
     }
 
-    @objc private func setUsageSourceMode(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let mode = UsageSourceMode(rawValue: rawValue) else {
-            return
-        }
-
-        viewModel.setUsageSourceMode(mode)
-        panelController.show()
-    }
-
     @objc private func setRemainingMinutesThreshold(_ sender: NSMenuItem) {
         viewModel.setRemainingMinutesThreshold(sender.tag)
         panelController.show()
@@ -141,32 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.show()
     }
 
-    @objc private func requestNotifications() {
-        notificationService.requestAuthorization()
-    }
-
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-
-    private func addUsageSourceMenu(to menu: NSMenu) {
-        let sourceMenuItem = NSMenuItem(title: "Usage Source", action: nil, keyEquivalent: "")
-        let sourceMenu = NSMenu(title: "Usage Source")
-
-        for mode in UsageSourceMode.userFacingModes {
-            let item = NSMenuItem(
-                title: mode.title,
-                action: #selector(setUsageSourceMode(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = mode.rawValue
-            item.state = viewModel.sourceMode == mode ? .on : .off
-            sourceMenu.addItem(item)
-        }
-
-        menu.setSubmenu(sourceMenu, for: sourceMenuItem)
-        menu.addItem(sourceMenuItem)
     }
 
     private func addThresholdMenus(to menu: NSMenu) {

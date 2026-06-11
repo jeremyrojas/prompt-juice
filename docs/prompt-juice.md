@@ -14,7 +14,7 @@ PromptJuice focuses on a simple workflow:
 4. Show the current Claude and Codex windows in a native macOS panel.
 5. Nudge the user when meaningful capacity remains close to reset.
 
-The current app supports manual refresh, demo data, live provider reads, threshold controls, native notifications, and one-window Snooze behavior.
+The current app supports manual refresh, live provider reads, fixture-backed tests and previews, threshold controls, native notifications, and one-window Snooze behavior.
 
 ## Usage Model
 
@@ -31,13 +31,13 @@ struct ProviderSnapshot {
 }
 ```
 
-`RateWindow` carries the current used percentage, reset time, duration, remaining percentage, and a stable window id. The UI uses that normalized shape for Claude, Codex, and demo data.
+`RateWindow` carries the current used percentage, reset time, duration, remaining percentage, and a stable window id. The UI uses that normalized shape for Claude, Codex, and fixture data.
 
 ## Source And Confidence
 
 PromptJuice shows provider data with explicit source labels:
 
-- `demo`: built-in prototype values.
+- `fixture`: built-in test and preview values.
 - `codexAppServer`: live Codex data from `codex app-server`.
 - `codexCache`: cached last-good Codex window.
 - `claudeStatusline`: live Claude Code statusline cache.
@@ -94,10 +94,10 @@ PromptJuice is local-first:
 - Launches as a macOS accessory app.
 - Shows a droplet in the menu bar.
 - Opens a rounded Juicebar panel with Claude and Codex rows.
-- Supports demo usage and live usage modes.
+- Uses live usage in production and fixture usage in tests/previews.
 - Lets users refresh usage from the menu.
 - Displays source and confidence in the detail line.
-- Uses native notifications for demo alerts.
+- Uses native notifications for use-soon alerts.
 - Lets users Snooze the current alert window.
 
 ## Development

@@ -55,7 +55,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         switch mode {
         case .manual:
-            return "Prompt juice check"
+            return "PromptJuice check"
         case .alert:
             guard let alertSnapshot else {
                 return "Plenty of prompt juice left"
