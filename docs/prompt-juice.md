@@ -288,10 +288,66 @@ Juicebar UI visually stable:
 
 Next Codex spike:
 
-- Discover read-only local Codex usage sources.
-- Prefer provider-reported reset and remaining-capacity data.
+- Use `codex app-server` as the primary read-only integration path.
+- Prefer `account/rateLimits/read` provider data for reset and
+  remaining-capacity state.
 - Label estimates and stale data clearly.
 - Cache the last good snapshot after the live source shape is proven.
+
+### Phase 1B Codex Integration Plan
+
+Official Codex docs describe `codex app-server` as the interface for deep
+product integrations. The rate-limit method returns `usedPercent`,
+`windowDurationMins`, `resetsAt`, `rateLimitReachedType`, and optional
+`rateLimitsByLimitId` buckets. That maps directly onto the Phase 1A
+`RateWindow` and `ProviderSnapshot` types.
+
+Primary source:
+
+- `codex app-server` over local stdio or a local Unix socket.
+- JSON-RPC handshake: `initialize`, `initialized`.
+- Read method: `account/rateLimits/read`.
+- Bucket priority: `rateLimitsByLimitId["codex"]`, then `rateLimits`.
+- Snapshot confidence: `.exact` for complete provider fields,
+  `.unavailable` for absent/unreadable app-server state, `.stale` for cached
+  last-good data after freshness expires.
+
+Implementation slices:
+
+1. `CodexAppServerClient`
+   - Launch or connect to app-server.
+   - Send the initialization handshake with PromptJuice client metadata.
+   - Send `account/rateLimits/read`.
+   - Handle request IDs, response matching, timeout, process cleanup, and
+     structured provider errors.
+2. `CodexRateLimitResponse`
+   - Decode single-bucket and multi-bucket responses.
+   - Map `primary.usedPercent`, `primary.windowDurationMins`, and
+     `primary.resetsAt` into `RateWindow`.
+   - Preserve `rateLimitReachedType` for future UI detail.
+3. `CodexProviderClient`
+   - Return normalized Codex snapshots from the app-server client.
+   - Keep current unavailable shell behavior as the fallback.
+   - Add last-good snapshot caching after the exact path is verified.
+4. UI/settings
+   - Add a small source selector or developer toggle for Demo vs Live Codex.
+   - Surface source/confidence/freshness in compact detail text.
+   - Keep provider row interactions, Snooze, thresholds, and alert copy stable.
+5. Tests and smoke
+   - Parser fixture tests for backward-compatible and multi-bucket payloads.
+   - Provider tests for exact, unavailable, stale, malformed, and timeout paths.
+   - View-model tests for live Codex display and fallback behavior.
+   - Manual smoke with app-server available, absent, and timing out.
+
+Safety rules:
+
+- Read rate-limit state only.
+- Skip login/logout, auth mutation, token refresh, browser cookies, and secret
+  storage.
+- Treat `CODEX_HOME` JSONL history as optional estimated context.
+- Store last-good snapshots and freshness metadata only.
+- Keep live Codex behind an explicit local setting until the smoke path feels
+  reliable.
 
 Provider strategy:
 

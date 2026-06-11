@@ -144,6 +144,68 @@ Acceptance criteria:
 - ✅ Provider snapshots can represent exact, estimated, stale, and unavailable states.
 - ✅ Real Codex work can start from `CodexProviderClient`.
 
+## Phase 1B: Codex Provider Integration
+
+Goal: show live Codex quota/reset data through the provider boundary while
+preserving the current demo fallback and read-only safety posture.
+
+Source anchor:
+
+- Primary path: `codex app-server`.
+- Official method: `account/rateLimits/read`.
+- Key fields: `usedPercent`, `windowDurationMins`, `resetsAt`,
+  `rateLimitReachedType`, and optional `rateLimitsByLimitId`.
+- Preferred bucket: `rateLimitsByLimitId["codex"]` when available; otherwise
+  the backward-compatible `rateLimits` bucket.
+
+Safety rails:
+
+- Live Codex source starts behind a local setting or developer flag.
+- Use local stdio or Unix-socket app-server transport for the first slice.
+- Read rate-limit state only.
+- Skip login/logout, auth-file mutation, token refresh, browser cookies, and
+  secret storage.
+- Store only last-good normalized snapshots and freshness metadata.
+- Treat local session history as estimated context only.
+
+Implementation slices:
+
+1. Add `CodexAppServerClient`.
+   - Launch or connect to `codex app-server`.
+   - Send `initialize` and `initialized`.
+   - Send `account/rateLimits/read`.
+   - Add request IDs, timeout handling, process cleanup, and structured errors.
+2. Add Codex rate-limit DTOs and parser tests.
+   - Decode single-bucket and `rateLimitsByLimitId` responses.
+   - Map `primary.usedPercent` to `RateWindow.usedPercent`.
+   - Map `primary.windowDurationMins` to `RateWindow.durationMinutes`.
+   - Map `primary.resetsAt` to `RateWindow.resetAt`.
+   - Represent missing or malformed data as `.unavailable`.
+3. Wire `CodexProviderClient` to the client/parser.
+   - Return `.exact` when provider rate-limit fields are complete.
+   - Return `.unavailable` with an inspectable error when app-server is absent
+     or unreachable.
+   - Cache the last-good snapshot after the exact path works.
+4. Add minimal UI/settings support.
+   - Add a menu option for Demo vs Live Codex source.
+   - Surface source/confidence in a compact detail line.
+   - Keep provider rows, Snooze, thresholds, and alert copy stable.
+5. Validate with layered tests and one opt-in smoke.
+   - Parser fixture tests for single-bucket and multi-bucket responses.
+   - Provider tests for exact, unavailable, stale, and timeout states.
+   - View-model tests for live Codex snapshot display and fallback behavior.
+   - Manual smoke: live app-server available, app-server absent, and app-server
+     timeout.
+
+Acceptance criteria:
+
+- PromptJuice shows a real Codex reset window when app-server returns a complete
+  rate-limit response.
+- App-server absence produces a calm unavailable Codex row.
+- Local session history, if used, is labeled as estimated context.
+- PromptJuice stores snapshots and freshness metadata only.
+- `swift build`, `swift test`, and the macOS app build pass.
+
 ## Phase 2: Local Behavior
 
 Goal: make the demo app behave like a real assistant before account integration.
@@ -164,29 +226,32 @@ Acceptance criteria:
 - Alerts fire once per threshold crossing.
 - The user can see whether data is fresh, stale, estimated, or unavailable.
 
-## Phase 3: Codex Provider Spike
+## Phase 3: Provider Expansion
 
-Goal: find the cleanest path to real Codex usage and reset data.
+Goal: build on the Codex path with Claude support, history views, and richer
+provider context.
 
 Investigation:
 
-- Detect `CODEX_HOME`.
-- Inspect local Codex auth/session files.
-- Investigate `codex app-server` for account and rate-limit data.
-- Read local Codex JSONL sessions for history and cost context.
-- Document which fields are exact provider data and which fields are estimates.
+- Add `ClaudeProviderClient`.
+- Compare provider-reported usage with local history estimates.
+- Read local Codex JSONL sessions for history and cost context after the exact
+  rate-limit path is stable.
+- Document which fields are exact provider data and which fields are estimates
+  for every provider.
 
 Implementation:
 
-- Add `CodexProviderClient`.
-- Return normalized `ProviderSnapshot`.
-- Cache last-good Codex snapshot.
-- Surface source and confidence in the UI.
+- Add Claude normalized snapshots.
+- Add provider details view with source, confidence, freshness, and last update.
+- Add history/cost context where the data source supports it.
+- Surface source and confidence in the UI for every provider.
 
 Acceptance criteria:
 
-- PromptJuice can show a real Codex reset window or clearly labeled fallback.
-- Local history/cost data never pretends to be exact remaining quota.
+- PromptJuice can show Codex and Claude reset windows or clearly labeled
+  fallbacks.
+- Local history/cost data is labeled as context or estimate.
 - Provider failure produces a calm, inspectable state.
 
 ## Phase 4: Claude Provider
