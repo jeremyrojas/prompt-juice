@@ -9,7 +9,7 @@ enum UsageSourceMode: String, CaseIterable, Equatable {
         case .demo:
             return "Demo Usage"
         case .liveCodex:
-            return "Live Codex"
+            return "Live Usage"
         }
     }
 }
