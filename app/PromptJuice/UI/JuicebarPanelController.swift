@@ -80,6 +80,7 @@ private enum PanelClickRouter {
 @MainActor
 private protocol PanelToolTipRefreshing: AnyObject {
     func refreshToolTips()
+    func hidePanelToolTip()
 }
 
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, NSViewToolTipOwner, PanelToolTipRefreshing {
@@ -90,6 +91,11 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     private let onCancel: () -> Void
     private var toolTipTags: [NSView.ToolTipTag] = []
     private var toolTipTextByTag: [NSView.ToolTipTag: String] = [:]
+    private var trackingArea: NSTrackingArea?
+    private var pendingToolTipTask: Task<Void, Never>?
+    private var pendingToolTipText: String?
+    private var visibleToolTipText: String?
+    private var visibleToolTipWindow: NSWindow?
 
     required init(rootView: Content) {
         self.modeProvider = { .manual }
@@ -138,7 +144,25 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         refreshToolTips()
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
     override func mouseDown(with event: NSEvent) {
+        hidePanelToolTip()
         window?.makeKey()
         window?.makeFirstResponder(self)
     }
@@ -155,11 +179,28 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     }
 
     override func keyDown(with event: NSEvent) {
+        hidePanelToolTip()
         interpretKeyEvents([event])
     }
 
     override func cancelOperation(_ sender: Any?) {
+        hidePanelToolTip()
         onCancel()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+
+        guard let text = rowToolTipText(at: point) else {
+            hidePanelToolTip()
+            return
+        }
+
+        schedulePanelToolTip(text)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hidePanelToolTip()
     }
 
     func refreshToolTips() {
@@ -197,6 +238,15 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         toolTipTextByTag[tag] ?? ""
     }
 
+    func hidePanelToolTip() {
+        pendingToolTipTask?.cancel()
+        pendingToolTipTask = nil
+        pendingToolTipText = nil
+        visibleToolTipText = nil
+        visibleToolTipWindow?.orderOut(nil)
+        visibleToolTipWindow = nil
+    }
+
     private func clickTarget(at point: NSPoint) -> PanelClickTarget? {
         PanelClickRouter.target(
             at: point,
@@ -204,6 +254,121 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             mode: modeProvider(),
             providers: providers()
         )
+    }
+
+    private func rowToolTipText(at point: NSPoint) -> String? {
+        for row in PanelClickRouter.rowRects(in: bounds, mode: modeProvider(), providers: providers()) {
+            guard row.rect.contains(point) else {
+                continue
+            }
+
+            return toolTipProvider(row.provider)
+        }
+
+        return nil
+    }
+
+    private func schedulePanelToolTip(_ text: String) {
+        guard visibleToolTipText != text, pendingToolTipText != text else {
+            return
+        }
+
+        pendingToolTipTask?.cancel()
+        pendingToolTipText = text
+        pendingToolTipTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard let self, !Task.isCancelled, self.pendingToolTipText == text else {
+                return
+            }
+
+            self.showPanelToolTip(text)
+        }
+    }
+
+    private func showPanelToolTip(_ text: String) {
+        visibleToolTipWindow?.orderOut(nil)
+
+        let tooltipView = PanelToolTipView(text: text)
+        let fittingSize = tooltipView.fittingSize
+        let mouseLocation = NSEvent.mouseLocation
+        let frame = NSRect(
+            x: mouseLocation.x + 12,
+            y: mouseLocation.y - fittingSize.height - 12,
+            width: fittingSize.width,
+            height: fittingSize.height
+        )
+        let tooltipWindow = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        tooltipWindow.level = .floating
+        tooltipWindow.backgroundColor = .clear
+        tooltipWindow.isOpaque = false
+        tooltipWindow.hasShadow = true
+        tooltipWindow.ignoresMouseEvents = true
+        tooltipWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        tooltipWindow.contentView = tooltipView
+        tooltipWindow.orderFront(nil)
+
+        visibleToolTipText = text
+        visibleToolTipWindow = tooltipWindow
+    }
+}
+
+private final class PanelToolTipView: NSView {
+    private let label: NSTextField
+    private let contentInsets = NSEdgeInsets(top: 5, left: 8, bottom: 6, right: 8)
+
+    override var fittingSize: NSSize {
+        frame.size
+    }
+
+    init(text: String) {
+        let font = NSFont.systemFont(ofSize: 12)
+        let maxTextWidth: CGFloat = 280
+        let textRect = (text as NSString).boundingRect(
+            with: NSSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font]
+        )
+        let textSize = NSSize(
+            width: ceil(textRect.width),
+            height: ceil(textRect.height)
+        )
+        let size = NSSize(
+            width: textSize.width + contentInsets.left + contentInsets.right,
+            height: textSize.height + contentInsets.top + contentInsets.bottom
+        )
+
+        label = NSTextField(wrappingLabelWithString: text)
+        label.font = font
+        label.textColor = .labelColor
+        label.maximumNumberOfLines = 2
+        label.drawsBackground = false
+        label.isBezeled = false
+        label.isEditable = false
+        label.isSelectable = false
+
+        super.init(frame: NSRect(origin: .zero, size: size))
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.borderWidth = 0.5
+        addSubview(label)
+        label.frame = NSRect(
+            x: contentInsets.left,
+            y: contentInsets.bottom,
+            width: textSize.width,
+            height: textSize.height
+        )
+    }
+
+    @available(*, unavailable)
+    @MainActor dynamic required init?(coder: NSCoder) {
+        nil
     }
 }
 
@@ -291,6 +456,7 @@ final class JuicebarPanelController {
 
     func hide() {
         snoozeAutoHideTask?.cancel()
+        (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
         removeEventMonitors()
         panel?.orderOut(nil)
     }
@@ -318,6 +484,7 @@ final class JuicebarPanelController {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.ignoresMouseEvents = false
+        panel.acceptsMouseMovedEvents = true
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
         panel.setAccessibilityElement(true)
