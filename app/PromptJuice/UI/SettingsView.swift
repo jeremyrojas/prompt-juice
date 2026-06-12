@@ -341,14 +341,13 @@ private struct ClaudeSetupConsentView: View {
     }
 
     private func codeBox(_ text: String) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Text(text)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .lineLimit(1)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 7)
-        }
+        Text(text)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 6)
