@@ -79,18 +79,15 @@ private enum PanelClickRouter {
 
 @MainActor
 private protocol PanelToolTipRefreshing: AnyObject {
-    func refreshToolTips()
     func hidePanelToolTip()
 }
 
-private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, NSViewToolTipOwner, PanelToolTipRefreshing {
+private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let modeProvider: () -> PanelMode
     private let providers: () -> [UsageProvider]
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onCancel: () -> Void
-    private var toolTipTags: [NSView.ToolTipTag] = []
-    private var toolTipTextByTag: [NSView.ToolTipTag: String] = [:]
     private var trackingArea: NSTrackingArea?
     private var pendingToolTipTask: Task<Void, Never>?
     private var pendingToolTipText: String?
@@ -137,11 +134,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         bounds.contains(point) ? self : nil
-    }
-
-    override func layout() {
-        super.layout()
-        refreshToolTips()
     }
 
     override func updateTrackingAreas() {
@@ -201,41 +193,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseExited(with event: NSEvent) {
         hidePanelToolTip()
-    }
-
-    func refreshToolTips() {
-        toolTipTags.forEach(removeToolTip)
-        toolTipTags = []
-        toolTipTextByTag = [:]
-
-        guard bounds.width > 0, bounds.height > 0 else {
-            return
-        }
-
-        let rows = PanelClickRouter.rowRects(
-            in: bounds,
-            mode: modeProvider(),
-            providers: providers()
-        )
-
-        for row in rows {
-            guard let text = toolTipProvider(row.provider), !text.isEmpty else {
-                continue
-            }
-
-            let tag = addToolTip(row.rect, owner: self, userData: nil)
-            toolTipTags.append(tag)
-            toolTipTextByTag[tag] = text
-        }
-    }
-
-    func view(
-        _ view: NSView,
-        stringForToolTip tag: NSView.ToolTipTag,
-        point: NSPoint,
-        userData data: UnsafeMutableRawPointer?
-    ) -> String {
-        toolTipTextByTag[tag] ?? ""
     }
 
     func hidePanelToolTip() {
@@ -408,7 +365,6 @@ final class JuicebarPanelController {
                 }
 
                 self.position(panel)
-                self.refreshPanelToolTips()
             }
             .store(in: &cancellables)
 
@@ -420,14 +376,6 @@ final class JuicebarPanelController {
                 }
 
                 self.position(panel)
-                self.refreshPanelToolTips()
-            }
-            .store(in: &cancellables)
-
-        viewModel.$snapshots
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshPanelToolTips()
             }
             .store(in: &cancellables)
     }
@@ -448,7 +396,6 @@ final class JuicebarPanelController {
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
         position(panel)
-        refreshPanelToolTips()
         installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(panel.contentView)
@@ -666,7 +613,6 @@ final class JuicebarPanelController {
         let x = frame.midX - panelSize.width / 2
         let y = frame.maxY - panelSize.height - 10
         panel.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
-        refreshPanelToolTips()
     }
 
     private func targetScreen() -> NSScreen? {
@@ -677,9 +623,5 @@ final class JuicebarPanelController {
         }
 
         return NSScreen.main ?? NSScreen.screens.first
-    }
-
-    private func refreshPanelToolTips() {
-        (panel?.contentView as? PanelToolTipRefreshing)?.refreshToolTips()
     }
 }
