@@ -105,6 +105,20 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertFalse(plan.newCommand.contains("/tmp/old-worktree"))
     }
 
+    func testWrapsForeignCommandThatSetsPromptJuiceDelegateEnv() throws {
+        let original = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/mine.sh' bash ~/.claude/foreign-statusline.sh"
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(original)" } }
+        """#)
+
+        let plan = try installer().makePlan()
+
+        XCTAssertTrue(plan.isWrappingExisting)
+        XCTAssertEqual(plan.previousCommand, original)
+        XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(original)'"))
+        XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
+    }
+
     func testJQStatusFlowsIntoPlanAndSummary() throws {
         let missing = try installer(jq: false).makePlan()
         XCTAssertFalse(missing.jqInstalled)

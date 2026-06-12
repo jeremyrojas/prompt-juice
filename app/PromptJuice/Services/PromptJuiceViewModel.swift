@@ -184,7 +184,7 @@ final class PromptJuiceViewModel: ObservableObject {
     private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
         snapshot.provider == .claude
             ? "\(snapshot.displayName) not set up"
-            : "\(snapshot.displayName) n/a"
+            : "\(snapshot.displayName) not detected"
     }
 
     var headline: String {

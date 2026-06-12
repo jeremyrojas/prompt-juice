@@ -1,8 +1,7 @@
 # PromptJuice — States & Colors Reference
 
 Canonical reference for every Juicebar state, its trigger, and its color. Kept for
-tracking and future work. Reflects the implementation on branch
-`codex/settings-and-providers`.
+tracking and future work. Reflects the implementation on main (PR #13).
 
 A row's appearance is the product of **two independent axes**:
 

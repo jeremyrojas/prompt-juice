@@ -14,7 +14,7 @@ final class SettingsWindowState: ObservableObject {
 }
 
 @MainActor
-final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+final class SettingsWindowController: NSWindowController {
     private let viewModel: PromptJuiceViewModel
     private let state = SettingsWindowState()
     private var didCenter = false
@@ -82,7 +82,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         )
         window.title = "PromptJuice Settings"
         window.isReleasedWhenClosed = false
-        window.delegate = self
         window.contentMinSize = NSSize(width: 430, height: 400)
         window.contentMaxSize = NSSize(width: 430, height: 400)
         window.setAccessibilityElement(true)

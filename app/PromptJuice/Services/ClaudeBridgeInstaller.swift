@@ -179,6 +179,11 @@ struct ClaudeBridgeInstaller {
             return nil
         }
 
+        let remainder = command[closingQuote...]
+        guard remainder.contains("claude-statusline-bridge.sh") else {
+            return nil
+        }
+
         let valueStart = command.index(command.startIndex, offsetBy: prefix.count)
         return String(command[valueStart..<closingQuote])
     }

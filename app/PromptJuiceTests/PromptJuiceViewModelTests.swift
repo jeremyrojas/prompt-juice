@@ -151,6 +151,21 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.detail.contains("Claude n/a"))
     }
 
+    func testManualSubtitleNamesUnavailableCodexAsNotDetected() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeHealthyCodexUnavailableSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertTrue(viewModel.detail.contains("Codex not detected"))
+        XCTAssertFalse(viewModel.detail.contains("Codex n/a"))
+    }
+
     func testEnabledProvidersDefaultToAllWhenKeyIsAbsent() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -509,6 +524,28 @@ final class PromptJuiceViewModelTests: XCTestCase {
             source: .fixture,
             confidence: .exact,
             updatedAt: fixedNow
+        )
+    ]
+
+    private static let claudeHealthyCodexUnavailableSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexAppServer,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Codex app-server unavailable"
         )
     ]
 
