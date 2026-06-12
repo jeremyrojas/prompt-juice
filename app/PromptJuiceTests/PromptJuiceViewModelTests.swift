@@ -136,6 +136,59 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
     }
 
+    func testEnabledProvidersDefaultToAllWhenKeyIsAbsent() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        XCTAssertTrue(fixture.store.isFirstRun)
+        XCTAssertEqual(fixture.store.enabledProviders, Set(UsageProvider.allCases))
+    }
+
+    func testEnabledProvidersEmptyWriteKeepsPreviousSelection() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        fixture.store.enabledProviders = [.claude]
+        fixture.store.enabledProviders = []
+
+        XCTAssertFalse(fixture.store.isFirstRun)
+        XCTAssertEqual(fixture.store.enabledProviders, [.claude])
+    }
+
+    func testHiddenClaudeIsIgnoredByAggregateAndPanelInputs() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.codex]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUseSoonCodexHealthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.enabledProviders, [.codex])
+        XCTAssertEqual(viewModel.visibleSnapshots.map(\.provider), [.codex])
+        XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertEqual(viewModel.detail, "Codex 65% · resets in 3h 0m")
+        XCTAssertEqual(viewModel.menuBarRemainingPercent, 65)
+    }
+
+    func testSetProviderEnabledKeepsOneProviderEnabled() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.codex]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.setProviderEnabled(.codex, false)
+
+        XCTAssertEqual(viewModel.enabledProviders, [.codex])
+        XCTAssertEqual(fixture.store.enabledProviders, [.codex])
+    }
+
     func testSavedFixtureSourceFallsBackToLiveUsage() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -260,6 +313,44 @@ final class PromptJuiceViewModelTests: XCTestCase {
             updatedAt: fixedNow
         )
     ]
+
+    private static let claudeUseSoonCodexHealthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(20 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 35,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private struct StaticUsageProviderClient: UsageProviderClient {
+        let source: SnapshotSource = .fixture
+        let storedSnapshots: [ProviderSnapshot]
+
+        init(snapshots: [ProviderSnapshot]) {
+            self.storedSnapshots = snapshots
+        }
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            storedSnapshots
+        }
+    }
 
     private final class BlockingUsageProviderClient: UsageProviderClient, @unchecked Sendable {
         let source: SnapshotSource = .fixture

@@ -5,6 +5,7 @@ final class PromptJuiceSettingsStore {
     static let shared = PromptJuiceSettingsStore()
 
     private enum Key {
+        static let enabledProviders = "enabledProviders"
         static let remainingMinutesThreshold = "remainingMinutesThreshold"
         static let remainingPercentThreshold = "remainingPercentThreshold"
         static let snoozedUsageWindowID = "snoozedUsageWindowID"
@@ -23,6 +24,31 @@ final class PromptJuiceSettingsStore {
             remainingMinutes: defaults.integer(forKey: Key.remainingMinutesThreshold),
             remainingPercent: defaults.integer(forKey: Key.remainingPercentThreshold)
         )
+    }
+
+    var enabledProviders: Set<UsageProvider> {
+        get {
+            guard let rawValues = defaults.stringArray(forKey: Key.enabledProviders) else {
+                return Set(UsageProvider.allCases)
+            }
+
+            let providers = Set(rawValues.compactMap(UsageProvider.init(rawValue:)))
+            return providers.isEmpty ? Set(UsageProvider.allCases) : providers
+        }
+        set {
+            guard !newValue.isEmpty else {
+                return
+            }
+
+            let rawValues = UsageProvider.allCases
+                .filter { newValue.contains($0) }
+                .map(\.rawValue)
+            defaults.set(rawValues, forKey: Key.enabledProviders)
+        }
+    }
+
+    var isFirstRun: Bool {
+        defaults.object(forKey: Key.enabledProviders) == nil
     }
 
     var snoozedUsageWindowID: String? {

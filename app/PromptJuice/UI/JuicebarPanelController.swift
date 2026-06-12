@@ -50,8 +50,8 @@ private enum PanelClickRouter {
             }
         }
 
-        let rowHeight: CGFloat = 48
-        let rowSpacing: CGFloat = 7
+        let rowHeight = PromptJuicePanelMetrics.rowHeight
+        let rowSpacing = PromptJuicePanelMetrics.rowSpacing
         let bottomY: CGFloat = mode == .alert ? 47 : 14
 
         for index in providers.indices {
@@ -158,13 +158,30 @@ final class JuicebarPanelController {
     private var snoozeAutoHideTask: Task<Void, Never>?
 
     private var panelSize: NSSize {
-        NSSize(width: 384, height: viewModel.mode == .alert ? 198 : 166)
+        NSSize(
+            width: PromptJuicePanelMetrics.width,
+            height: PromptJuicePanelMetrics.height(
+                mode: viewModel.mode,
+                rowCount: viewModel.visibleSnapshots.count
+            )
+        )
     }
 
     init(viewModel: PromptJuiceViewModel) {
         self.viewModel = viewModel
 
         viewModel.$mode
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, let panel = self.panel, panel.isVisible else {
+                    return
+                }
+
+                self.position(panel)
+            }
+            .store(in: &cancellables)
+
+        viewModel.$enabledProviders
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self, let panel = self.panel, panel.isVisible else {
@@ -248,7 +265,7 @@ final class JuicebarPanelController {
                 viewModel?.mode ?? .manual
             },
             providers: { [weak viewModel] in
-                viewModel?.snapshots.map(\.provider) ?? []
+                viewModel?.visibleSnapshots.map(\.provider) ?? []
             },
             onPanelClick: { [weak self] target in
                 self?.handleClick(target)
@@ -423,7 +440,7 @@ final class JuicebarPanelController {
             at: localPoint,
             in: NSRect(origin: .zero, size: panel.frame.size),
             mode: viewModel.mode,
-            providers: viewModel.snapshots.map(\.provider)
+            providers: viewModel.visibleSnapshots.map(\.provider)
         ) else {
             return false
         }

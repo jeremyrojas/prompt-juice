@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -7,10 +8,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var ticker: Timer?
     private var lastGlyphKey: String?
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.applicationIconImage = PromptJuiceIcon.appIconImage()
         configureStatusItem()
+        observeViewModel()
         startTicker()
         preparePanelAfterLaunch()
 
@@ -48,6 +51,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.updateStatusItemGlyph()
             }
         }
+    }
+
+    private func observeViewModel() {
+        viewModel.$enabledProviders
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateStatusItemGlyph(force: true)
+            }
+            .store(in: &cancellables)
     }
 
     /// Redraws the menu-bar droplet from the current aggregate. The fill is the
