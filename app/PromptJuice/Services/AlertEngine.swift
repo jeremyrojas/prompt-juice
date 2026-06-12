@@ -62,12 +62,13 @@ struct AlertEngine {
             return .empty
         }
 
-        if remaining < Double(UsageSeverity.lowRemainingFloor) {
-            return .low
-        }
-
+        // The amber nudge takes priority; below it, "running low" is a calm state.
         if shouldUseSoon(for: snapshot, thresholds: thresholds, now: now) {
             return .useSoon
+        }
+
+        if remaining < Double(UsageSeverity.lowRemainingFloor) {
+            return .low
         }
 
         return .healthy
@@ -105,11 +106,7 @@ struct AlertEngine {
             return "Empty"
         }
 
-        if snapshot.remainingPercent >= 40 {
-            return "Lots left"
-        }
-
-        if snapshot.remainingPercent >= 15 {
+        if snapshot.remainingPercent >= Double(UsageSeverity.lowRemainingFloor) {
             return "Some left"
         }
 

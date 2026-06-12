@@ -23,43 +23,42 @@ enum UsageSeverity: Equatable {
 
     /// Short chip label. `nil` means no chip is shown — the healthy state stays
     /// silent so the alerting states stand out.
+    /// One-alert model: only `useSoon` (the amber "use it before it resets" nudge)
+    /// gets a chip. Low/empty are calm — the short bar already tells the story.
     var chipText: String? {
         switch self {
-        case .unavailable:
-            return "Unavailable"
-        case .empty:
-            return "Empty"
-        case .low:
-            return "Low"
         case .useSoon:
             return "Use soon"
-        case .healthy:
+        case .healthy, .unavailable, .low, .empty:
             return nil
         }
     }
 
-    /// True when the severity should pull attention (colored chip + bar).
+    /// True when the severity should pull attention (amber chip + tint). Only the
+    /// use-soon nudge does; "running low" stays calm (no action to take).
     var isAlerting: Bool {
         switch self {
-        case .useSoon, .low, .empty:
+        case .useSoon:
             return true
-        case .healthy, .unavailable:
+        case .healthy, .unavailable, .low, .empty:
             return false
         }
     }
 
-    /// Worst-wins ordering for aggregating across providers (higher = louder).
+    /// Worst-wins ordering for aggregating across providers (higher = louder). The
+    /// amber `useSoon` nudge outranks everything so it always surfaces in the
+    /// header/glyph, even when the other provider is low.
     var rank: Int {
         switch self {
         case .healthy:
             return 0
         case .unavailable:
             return 1
-        case .useSoon:
-            return 2
         case .low:
-            return 3
+            return 2
         case .empty:
+            return 3
+        case .useSoon:
             return 4
         }
     }

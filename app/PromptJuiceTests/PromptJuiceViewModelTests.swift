@@ -115,7 +115,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.headline, "Use it before reset")
+        XCTAssertEqual(viewModel.headline, "Use prompt juice soon")
         XCTAssertTrue(viewModel.detail.contains("Claude 43%"))
         XCTAssertTrue(viewModel.detail.contains("Codex 69%"))
         XCTAssertTrue(viewModel.detail.contains("resets in"))
@@ -134,25 +134,6 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
         XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
-    }
-
-    func testProviderSelectionStaysSticky() {
-        let fixture = makeFixture()
-        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
-        let viewModel = PromptJuiceViewModel(
-            settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
-            now: { Self.fixedNow }
-        )
-
-        viewModel.selectProvider(.codex)
-        XCTAssertEqual(viewModel.headline, "Codex: 69% to use")
-
-        viewModel.selectProvider(.claude)
-        XCTAssertEqual(viewModel.headline, "Claude: 43% to use")
-
-        viewModel.selectProvider(.claude)
-        XCTAssertEqual(viewModel.headline, "Claude: 43% to use")
     }
 
     func testSavedFixtureSourceFallsBackToLiveUsage() {

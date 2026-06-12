@@ -6,7 +6,6 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var snapshots: [UsageSnapshot]
     @Published private(set) var mode: PanelMode = .manual
     @Published private(set) var actionMessage: String?
-    @Published private(set) var selectedProvider: UsageProvider?
     @Published private(set) var thresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
 
@@ -52,6 +51,14 @@ final class PromptJuiceViewModel: ObservableObject {
             }
     }
 
+    /// True when a provider has no usable reading (the "Not measured yet" state).
+    func isUnavailable(_ provider: UsageProvider) -> Bool {
+        guard let snapshot = snapshots.first(where: { $0.provider == provider }) else {
+            return true
+        }
+        return !snapshot.isAvailable
+    }
+
     // MARK: - Severity
 
     /// Per-provider judgment for the row chip, bar color, and header tint.
@@ -64,23 +71,14 @@ final class PromptJuiceViewModel: ObservableObject {
         alertEngine.aggregateSeverity(in: snapshots, thresholds: thresholds, now: now())
     }
 
-    /// Header droplet follows selection: the selected provider when one is
-    /// chosen, otherwise the aggregate.
+    /// Header droplet tint — the aggregate judgment across providers.
     var headerSeverity: UsageSeverity {
-        if let selectedSnapshot {
-            return severity(for: selectedSnapshot)
-        }
-
-        return aggregateSeverity
+        aggregateSeverity
     }
 
     /// Fill level for the header droplet (0...100), matching `headerSeverity`.
     var headerRemainingPercent: Double {
-        if let selectedSnapshot {
-            return selectedSnapshot.isAvailable ? selectedSnapshot.remainingPercent : 0
-        }
-
-        return menuBarRemainingPercent
+        menuBarRemainingPercent
     }
 
     /// Tint for the menu-bar glyph — the worst judgment across providers.
@@ -91,6 +89,13 @@ final class PromptJuiceViewModel: ObservableObject {
     /// Fill for the menu-bar glyph — the binding constraint (lowest remaining
     /// among available providers). 100 when nothing is available yet.
     var menuBarRemainingPercent: Double {
+        // Clash rule: when a use-soon nudge is active, the fill follows the nudged
+        // provider (the actionable one), not the lowest — so an amber droplet
+        // matches its "use it" headline instead of showing the other provider's low %.
+        if aggregateSeverity == .useSoon, let alertSnapshot {
+            return alertSnapshot.remainingPercent
+        }
+
         let available = snapshots.filter(\.isAvailable)
 
         guard !available.isEmpty else {
@@ -106,14 +111,40 @@ final class PromptJuiceViewModel: ObservableObject {
         case .healthy:
             return "Plenty of prompt juice left"
         case .useSoon:
-            return "Use it before reset"
+            let soon = alertingSnapshots
+            if soon.count > 1 {
+                return "Use prompt juice soon"
+            }
+            if let one = soon.first {
+                return "Use \(one.displayName) before it resets"
+            }
+            return "Use prompt juice soon"
         case .low:
+            let lows = lowSnapshots
+            if lows.count > 1 {
+                return "Running low on both"
+            }
+            if let one = lows.first {
+                return "\(one.displayName) is running low"
+            }
             return "Running low on juice"
         case .empty:
+            let outs = emptySnapshots
+            if outs.count == 1, let one = outs.first {
+                return "\(one.displayName) is out"
+            }
             return "Out of prompt juice"
         case .unavailable:
-            return "Usage unavailable"
+            return "Not measured yet"
         }
+    }
+
+    private var lowSnapshots: [UsageSnapshot] {
+        snapshots.filter { $0.isAvailable && severity(for: $0) == .low }
+    }
+
+    private var emptySnapshots: [UsageSnapshot] {
+        snapshots.filter { severity(for: $0) == .empty }
     }
 
     /// Manual-mode subtitle — the live aggregate the static label used to hide.
@@ -136,14 +167,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var headline: String {
-        if let selectedSnapshot {
-            if shouldUseSoon(for: selectedSnapshot) {
-                return "\(selectedSnapshot.displayName): \(remainingPercentValueText(for: selectedSnapshot)) to use"
-            }
-
-            return "\(selectedSnapshot.displayName) has \(remainingPercentText(for: selectedSnapshot))"
-        }
-
         switch mode {
         case .manual:
             return manualVerdict
@@ -169,22 +192,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var detail: String {
-        if let selectedSnapshot {
-            let sourceText = sourceText(for: selectedSnapshot)
-
-            if !selectedSnapshot.isAvailable {
-                return [sourceText, selectedSnapshot.statusDetail]
-                    .compactMap { $0 }
-                    .joined(separator: " · ")
-            }
-
-            if shouldUseSoon(for: selectedSnapshot) {
-                return "\(fullResetText(for: selectedSnapshot)) · \(sourceText)"
-            }
-
-            return "\(remainingPercentText(for: selectedSnapshot)) · \(fullResetText(for: selectedSnapshot))"
-        }
-
         switch mode {
         case .manual:
             return manualSubtitle
@@ -211,14 +218,6 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
-    private var selectedSnapshot: UsageSnapshot? {
-        guard let selectedProvider else {
-            return nil
-        }
-
-        return snapshots.first { $0.provider == selectedProvider }
-    }
-
     private var alertSnapshot: UsageSnapshot? {
         alertEngine.preferredSnapshot(
             in: snapshots,
@@ -238,7 +237,6 @@ final class PromptJuiceViewModel: ObservableObject {
     func showManualCheck() {
         mode = .manual
         actionMessage = nil
-        selectedProvider = nil
         clearSnoozeForCurrentWindow()
         refreshSnapshotsInBackground()
     }
@@ -246,7 +244,6 @@ final class PromptJuiceViewModel: ObservableObject {
     @discardableResult
     func checkUsageAlert(force: Bool = false) -> Bool {
         actionMessage = nil
-        selectedProvider = nil
 
         if force {
             clearSnoozeForCurrentWindow()
@@ -270,12 +267,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
         mode = .snoozed
         actionMessage = nil
-        selectedProvider = nil
     }
 
     func dismissCurrentWindow() {
         actionMessage = nil
-        selectedProvider = nil
     }
 
     func setRemainingMinutesThreshold(_ value: Int) {
@@ -320,16 +315,6 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func setUsageSourceMode(_ mode: UsageSourceMode) {
         setUsageSourceMode(mode, persist: true, announce: true)
-    }
-
-    func selectProvider(_ provider: UsageProvider) {
-        selectedProvider = provider
-        actionMessage = nil
-    }
-
-    func clearSelection() {
-        selectedProvider = nil
-        actionMessage = nil
     }
 
     func tick() {
@@ -408,25 +393,38 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
-    func sourceText(for snapshot: UsageSnapshot) -> String {
-        let source = switch snapshot.source {
-        case .fixture:
-            "fixture"
-        case .codexStub:
-            "Codex stub"
-        case .codexAppServer:
-            "Codex app-server"
-        case .codexCache:
-            "Codex cache"
-        case .claudeStatusline:
-            "Claude statusline"
+    /// Friendly hover text for a row — where the reading came from, stated as a
+    /// fact (never a promise). Lives in a tooltip, never inline.
+    func sourceTooltip(for snapshot: UsageSnapshot) -> String {
+        let label: String
+        switch snapshot.source {
+        case .claudeStatusline, .claudeCache:
+            label = "Claude Code"
         case .claudeLocalLogs:
-            "Claude local logs"
-        case .claudeCache:
-            "Claude cache"
+            label = "local Claude Code activity"
+        case .codexAppServer, .codexCache:
+            label = "Codex app-server"
+        case .codexStub, .fixture:
+            label = "a fixture"
         }
 
-        return "\(source) · \(snapshot.confidence.rawValue)"
+        switch snapshot.confidence {
+        case .exact:
+            return "Read from \(label)"
+        case .estimated:
+            return "Estimated from \(label)"
+        case .stale:
+            return "Read from \(label) · \(clockTime(snapshot.updatedAt))"
+        case .unavailable:
+            return snapshot.statusDetail ?? "Not measured yet"
+        }
+    }
+
+    private func clockTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     private var hasPendingAlert: Bool {
@@ -452,7 +450,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func refreshModeForThresholds() {
-        actionMessage = "Alerts: \(thresholds.remainingMinutes)m / \(thresholds.remainingPercent)%"
+        actionMessage = nil
 
         if mode == .alert && !hasPendingAlert {
             mode = .manual

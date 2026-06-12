@@ -269,8 +269,49 @@ final class JuicebarPanelController {
             viewModel.snooze()
             scheduleSnoozeAutoHide()
         case .provider(let provider):
-            viewModel.selectProvider(provider)
+            if provider == .claude, viewModel.isUnavailable(.claude) {
+                presentClaudeSetup()
+            }
         }
+    }
+
+    /// Shows the exact `~/.claude/settings.json` change and only writes it after
+    /// the user approves — "set it up for me, after I see it."
+    private func presentClaudeSetup() {
+        let installer = ClaudeBridgeInstaller()
+        let plan: ClaudeBridgeInstaller.Plan
+        do {
+            plan = try installer.makePlan()
+        } catch {
+            presentSetupError(error)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Set up Claude usage"
+        alert.informativeText = plan.summary
+        alert.addButton(withTitle: "Add to Claude Code")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        do {
+            try installer.apply(plan)
+            viewModel.refreshUsage()
+        } catch {
+            presentSetupError(error)
+        }
+    }
+
+    private func presentSetupError(_ error: Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Couldn't set up Claude"
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func dismissSurface() {
