@@ -138,7 +138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "r"
         ).target = self
         menu.addItem(.separator())
-        addThresholdMenus(to: menu)
+        menu.addItem(
+            withTitle: "Settings…",
+            action: #selector(showSettings),
+            keyEquivalent: ","
+        ).target = self
+        menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit PromptJuice",
             action: #selector(quit),
@@ -147,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.popUp(
             positioning: nil,
-            at: NSPoint(x: 0, y: button.bounds.height + 4),
+            at: NSPoint(x: 0, y: 0),
             in: button
         )
     }
@@ -165,67 +170,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func showSettings() {
+        settingsWindowController.show()
+    }
+
     @objc private func refreshUsage() {
         viewModel.refreshUsage()
         panelController.show()
     }
 
-    @objc private func setRemainingMinutesThreshold(_ sender: NSMenuItem) {
-        viewModel.setRemainingMinutesThreshold(sender.tag)
-        panelController.show()
-    }
-
-    @objc private func setRemainingPercentThreshold(_ sender: NSMenuItem) {
-        viewModel.setRemainingPercentThreshold(sender.tag)
-        panelController.show()
-    }
-
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-
-    private func addThresholdMenus(to menu: NSMenu) {
-        // Read as one sentence: "Nudge me to use juice when reset is within [60
-        // minutes] and I still have [at least 40%]." Not a low-alarm — the only
-        // alert this app raises is the amber use-it-before-it-resets nudge.
-        let header = NSMenuItem(title: "Nudge me to use juice when…", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-
-        let minutesMenuItem = NSMenuItem(title: "Reset is within", action: nil, keyEquivalent: "")
-        let minutesMenu = NSMenu(title: "Reset is within")
-
-        for minutes in [30, 45, 60, 90] {
-            let item = NSMenuItem(
-                title: "\(minutes) minutes",
-                action: #selector(setRemainingMinutesThreshold(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.tag = minutes
-            item.state = viewModel.thresholds.remainingMinutes == minutes ? .on : .off
-            minutesMenu.addItem(item)
-        }
-
-        menu.setSubmenu(minutesMenu, for: minutesMenuItem)
-        menu.addItem(minutesMenuItem)
-
-        let percentMenuItem = NSMenuItem(title: "…and I still have", action: nil, keyEquivalent: "")
-        let percentMenu = NSMenu(title: "…and I still have")
-
-        for percent in [25, 40, 50, 60] {
-            let item = NSMenuItem(
-                title: "at least \(percent)%",
-                action: #selector(setRemainingPercentThreshold(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.tag = percent
-            item.state = viewModel.thresholds.remainingPercent == percent ? .on : .off
-            percentMenu.addItem(item)
-        }
-
-        menu.setSubmenu(percentMenu, for: percentMenuItem)
-        menu.addItem(percentMenuItem)
     }
 }

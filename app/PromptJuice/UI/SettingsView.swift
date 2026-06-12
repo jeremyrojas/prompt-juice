@@ -13,7 +13,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 430, height: 340)
+        .frame(width: 430, height: 400)
         .sheet(isPresented: $state.isClaudeSetupPresented) {
             ClaudeSetupConsentView(
                 viewModel: viewModel,
