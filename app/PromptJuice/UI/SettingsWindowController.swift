@@ -30,6 +30,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func show(presentingClaudeSetup: Bool = false) {
+        viewModel.refreshUsageQuietly()
+
         let window = ensureWindow()
         state.mode = .settings
         window.title = "PromptJuice Settings"
@@ -51,6 +53,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func showFirstRun() {
+        viewModel.refreshUsageQuietly()
+
         let window = ensureWindow()
         state.mode = .firstRun
         state.firstRunEnabledProviders = viewModel.enabledProviders

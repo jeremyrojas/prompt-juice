@@ -349,6 +349,10 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
+    func refreshUsageQuietly() {
+        refreshSnapshotsInBackground()
+    }
+
     func refreshUsageAlertInBackground(
         completion: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
@@ -470,8 +474,15 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func settingsStatusText(for provider: UsageProvider) -> String {
-        guard let snapshot = snapshots.first(where: { $0.provider == provider }),
-              snapshot.isAvailable else {
+        guard let snapshot = snapshots.first(where: { $0.provider == provider }) else {
+            return provider == .claude ? "Not set up yet" : "Not detected"
+        }
+
+        guard snapshot.isAvailable else {
+            if snapshot.statusDetail == "Refreshing usage" {
+                return "Checking…"
+            }
+
             return provider == .claude ? "Not set up yet" : "Not detected"
         }
 

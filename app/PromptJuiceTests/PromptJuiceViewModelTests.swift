@@ -222,6 +222,19 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.store.enabledProviders, [.claude])
     }
 
+    func testSettingsStatusShowsCheckingForInFlightUnavailableSnapshot() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.refreshingUnavailableSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Checking…")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .codex), "Checking…")
+    }
+
     func testSavedFixtureSourceFallsBackToLiveUsage() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -252,6 +265,78 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
 
         provider.releaseRefresh()
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testQuietRefreshRunsBackgroundFetchWithoutModeOrMessageSideEffects() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
+        viewModel.refreshUsageQuietly()
+
+        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertNil(viewModel.actionMessage)
+        XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
+
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+
+        XCTAssertEqual(provider.callCount, 2)
+        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertNil(viewModel.actionMessage)
+    }
+
+    func testSettingsWindowShowStartsExactlyOneQuietRefresh() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+        let controller = SettingsWindowController(viewModel: viewModel)
+
+        controller.show()
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+        controller.close()
+
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testFirstRunWindowShowStartsExactlyOneQuietRefresh() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+        let controller = SettingsWindowController(viewModel: viewModel)
+
+        controller.showFirstRun()
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+        controller.close()
+
         XCTAssertEqual(provider.callCount, 2)
     }
 
@@ -293,6 +378,20 @@ final class PromptJuiceViewModelTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         let store = PromptJuiceSettingsStore(defaults: defaults)
         return (suiteName, defaults, store)
+    }
+
+    private func waitForSnapshots(
+        _ expected: [ProviderSnapshot],
+        in viewModel: PromptJuiceViewModel,
+        timeout: TimeInterval = 1
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while viewModel.snapshots != expected && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(viewModel.snapshots, expected)
     }
 
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
@@ -369,6 +468,25 @@ final class PromptJuiceViewModelTests: XCTestCase {
             source: .fixture,
             confidence: .exact,
             updatedAt: fixedNow
+        )
+    ]
+
+    private static let refreshingUnavailableSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Refreshing usage"
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexAppServer,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Refreshing usage"
         )
     ]
 
