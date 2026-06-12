@@ -167,7 +167,7 @@ final class PromptJuiceViewModel: ObservableObject {
         var parts = visibleSnapshots.map { snapshot -> String in
             snapshot.isAvailable
                 ? "\(snapshot.displayName) \(remainingPercentValueText(for: snapshot))"
-                : "\(snapshot.displayName) n/a"
+                : unavailableHeaderSubtitle(for: snapshot)
         }
 
         if let soonest = primarySnapshot {
@@ -175,6 +175,12 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return parts.joined(separator: " · ")
+    }
+
+    private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
+        snapshot.provider == .claude
+            ? "\(snapshot.displayName) not set up"
+            : "\(snapshot.displayName) n/a"
     }
 
     var headline: String {
