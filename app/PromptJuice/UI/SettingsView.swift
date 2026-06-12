@@ -3,16 +3,17 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
     @ObservedObject var state: SettingsWindowState
+    let onFirstRunContinue: () -> Void
 
     var body: some View {
-        Form {
+        Group {
             switch state.mode {
             case .settings:
-                providersSection
-                nudgeSection
+                settingsForm
+            case .firstRun:
+                firstRunView
             }
         }
-        .formStyle(.grouped)
         .frame(width: 430, height: 400)
         .sheet(isPresented: $state.isClaudeSetupPresented) {
             ClaudeSetupConsentView(
@@ -22,12 +23,78 @@ struct SettingsView: View {
         }
     }
 
+    private var settingsForm: some View {
+        Form {
+            providersSection
+            nudgeSection
+        }
+        .formStyle(.grouped)
+    }
+
+    private var firstRunView: some View {
+        VStack(spacing: 0) {
+            welcomeHeader
+
+            Form {
+                firstRunProvidersSection
+            }
+            .formStyle(.grouped)
+            .frame(height: 174)
+
+            HStack {
+                Text("Keep at least one on")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button("Continue", action: onFirstRunContinue)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(state.firstRunEnabledProviders.isEmpty)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 18)
+        }
+    }
+
+    private var welcomeHeader: some View {
+        VStack(spacing: 9) {
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.16))
+                    .frame(width: 54, height: 54)
+
+                DropletGauge(
+                    remaining: 0.66,
+                    tint: .orange,
+                    lineWidth: 2
+                )
+                .frame(width: 25, height: 29)
+            }
+
+            Text("Welcome to PromptJuice")
+                .font(.title3.weight(.semibold))
+
+            Text("Pick the providers you use. The Juicebar only watches what you turn on — change it anytime in Settings.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 28)
+        }
+        .padding(.top, 22)
+        .padding(.bottom, 4)
+    }
+
     private var providersSection: some View {
         Section {
             ForEach(UsageProvider.allCases) { provider in
                 ProviderSettingsRow(
                     provider: provider,
                     viewModel: viewModel,
+                    isEnabled: settingsProviderBinding(for: provider),
+                    isToggleDisabled: isLastEnabledProvider(provider),
                     onSetUpClaude: {
                         state.isClaudeSetupPresented = true
                     }
@@ -41,6 +108,22 @@ struct SettingsView: View {
         }
     }
 
+    private var firstRunProvidersSection: some View {
+        Section {
+            ForEach(UsageProvider.allCases) { provider in
+                ProviderSettingsRow(
+                    provider: provider,
+                    viewModel: viewModel,
+                    isEnabled: firstRunProviderBinding(for: provider),
+                    isToggleDisabled: false,
+                    onSetUpClaude: {
+                        state.isClaudeSetupPresented = true
+                    }
+                )
+            }
+        }
+    }
+
     private var nudgeSection: some View {
         Section {
             NudgeSettingsRow(viewModel: viewModel)
@@ -51,14 +134,8 @@ struct SettingsView: View {
                 .font(.footnote)
         }
     }
-}
 
-private struct ProviderSettingsRow: View {
-    let provider: UsageProvider
-    @ObservedObject var viewModel: PromptJuiceViewModel
-    let onSetUpClaude: () -> Void
-
-    private var isEnabled: Binding<Bool> {
+    private func settingsProviderBinding(for provider: UsageProvider) -> Binding<Bool> {
         Binding {
             viewModel.enabledProviders.contains(provider)
         } set: { enabled in
@@ -66,10 +143,32 @@ private struct ProviderSettingsRow: View {
         }
     }
 
-    private var isLastEnabledProvider: Bool {
+    private func firstRunProviderBinding(for provider: UsageProvider) -> Binding<Bool> {
+        Binding {
+            state.firstRunEnabledProviders.contains(provider)
+        } set: { enabled in
+            var next = state.firstRunEnabledProviders
+            if enabled {
+                next.insert(provider)
+            } else {
+                next.remove(provider)
+            }
+            state.firstRunEnabledProviders = next
+        }
+    }
+
+    private func isLastEnabledProvider(_ provider: UsageProvider) -> Bool {
         viewModel.enabledProviders.count == 1
             && viewModel.enabledProviders.contains(provider)
     }
+}
+
+private struct ProviderSettingsRow: View {
+    let provider: UsageProvider
+    @ObservedObject var viewModel: PromptJuiceViewModel
+    let isEnabled: Binding<Bool>
+    let isToggleDisabled: Bool
+    let onSetUpClaude: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -95,7 +194,7 @@ private struct ProviderSettingsRow: View {
             Toggle("", isOn: isEnabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .disabled(isLastEnabledProvider)
+                .disabled(isToggleDisabled)
         }
         .padding(.vertical, 2)
     }

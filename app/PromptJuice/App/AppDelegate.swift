@@ -23,8 +23,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startTicker()
         preparePanelAfterLaunch()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.showLaunchAlertIfNeeded()
+        if viewModel.isFirstRun {
+            DispatchQueue.main.async { [weak self] in
+                self?.settingsWindowController.showFirstRun()
+            }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                self?.showLaunchAlertIfNeeded()
+            }
         }
     }
 

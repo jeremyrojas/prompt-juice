@@ -50,6 +50,10 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
 
+    var isFirstRun: Bool {
+        settingsStore.isFirstRun
+    }
+
     var primarySnapshot: UsageSnapshot? {
         visibleSnapshots
             .filter(\.isAvailable)
@@ -317,6 +321,16 @@ final class PromptJuiceViewModel: ObservableObject {
 
         settingsStore.enabledProviders = next
         enabledProviders = settingsStore.enabledProviders
+        refreshModeForThresholds()
+    }
+
+    func completeFirstRun(enabledProviders: Set<UsageProvider>) {
+        guard !enabledProviders.isEmpty else {
+            return
+        }
+
+        settingsStore.enabledProviders = enabledProviders
+        self.enabledProviders = settingsStore.enabledProviders
         refreshModeForThresholds()
     }
 

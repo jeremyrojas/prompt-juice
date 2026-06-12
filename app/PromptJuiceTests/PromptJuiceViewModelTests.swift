@@ -204,6 +204,24 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.store.enabledProviders, [.codex])
     }
 
+    func testCompleteFirstRunPersistsEnabledProviders() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(viewModel.isFirstRun)
+
+        viewModel.completeFirstRun(enabledProviders: [.claude])
+
+        XCTAssertFalse(fixture.store.isFirstRun)
+        XCTAssertEqual(viewModel.enabledProviders, [.claude])
+        XCTAssertEqual(fixture.store.enabledProviders, [.claude])
+    }
+
     func testSavedFixtureSourceFallsBackToLiveUsage() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

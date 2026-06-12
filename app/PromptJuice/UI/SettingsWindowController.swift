@@ -3,12 +3,14 @@ import SwiftUI
 
 enum SettingsWindowMode {
     case settings
+    case firstRun
 }
 
 @MainActor
 final class SettingsWindowState: ObservableObject {
     @Published var mode: SettingsWindowMode = .settings
     @Published var isClaudeSetupPresented = false
+    @Published var firstRunEnabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases)
 }
 
 @MainActor
@@ -30,6 +32,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func show(presentingClaudeSetup: Bool = false) {
         let window = ensureWindow()
         state.mode = .settings
+        window.title = "PromptJuice Settings"
         NSApp.activate(ignoringOtherApps: true)
 
         if !didCenter {
@@ -45,6 +48,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 self?.state.isClaudeSetupPresented = true
             }
         }
+    }
+
+    func showFirstRun() {
+        let window = ensureWindow()
+        state.mode = .firstRun
+        state.firstRunEnabledProviders = viewModel.enabledProviders
+        window.title = "PromptJuice"
+        NSApp.activate(ignoringOtherApps: true)
+
+        if !didCenter {
+            window.center()
+            didCenter = true
+        }
+
+        window.makeKeyAndOrderFront(nil)
     }
 
     private func ensureWindow() -> NSWindow {
@@ -67,9 +85,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.setAccessibilityRole(.window)
         window.setAccessibilityLabel("PromptJuice Settings")
         window.contentView = NSHostingView(
-            rootView: SettingsView(viewModel: viewModel, state: state)
+            rootView: SettingsView(
+                viewModel: viewModel,
+                state: state,
+                onFirstRunContinue: { [weak self] in
+                    self?.completeFirstRun()
+                }
+            )
         )
         self.window = window
         return window
+    }
+
+    private func completeFirstRun() {
+        viewModel.completeFirstRun(enabledProviders: state.firstRunEnabledProviders)
+        window?.close()
+        state.mode = .settings
     }
 }
