@@ -449,6 +449,27 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
+    func settingsStatusText(for provider: UsageProvider) -> String {
+        guard let snapshot = snapshots.first(where: { $0.provider == provider }),
+              snapshot.isAvailable else {
+            return provider == .claude ? "Not set up yet" : "Not detected"
+        }
+
+        switch snapshot.confidence {
+        case .exact:
+            if provider == .codex {
+                return "Live · \(fullResetText(for: snapshot))"
+            }
+            return "Live"
+        case .estimated:
+            return "Estimate"
+        case .stale:
+            return "Read earlier · \(clockTime(snapshot.updatedAt))"
+        case .unavailable:
+            return provider == .claude ? "Not set up yet" : "Not detected"
+        }
+    }
+
     private func clockTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short

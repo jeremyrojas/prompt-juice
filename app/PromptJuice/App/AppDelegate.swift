@@ -4,7 +4,13 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = PromptJuiceViewModel()
-    private lazy var panelController = JuicebarPanelController(viewModel: viewModel)
+    private lazy var settingsWindowController = SettingsWindowController(viewModel: viewModel)
+    private lazy var panelController = JuicebarPanelController(
+        viewModel: viewModel,
+        onClaudeSetupRequested: { [weak self] in
+            self?.settingsWindowController.show(presentingClaudeSetup: true)
+        }
+    )
     private var statusItem: NSStatusItem?
     private var ticker: Timer?
     private var lastGlyphKey: String?
