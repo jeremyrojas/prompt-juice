@@ -62,14 +62,47 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
     }
 
     func testIdempotentWhenAlreadyInstalled() throws {
+        let installedCommand = "bash '\(installer().installedScriptURL.path)'"
         try writeSettings(#"""
-        { "statusLine": { "type": "command", "command": "bash '/x/claude-statusline-bridge.sh'" } }
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)" } }
         """#)
 
         let plan = try installer().makePlan()
 
         XCTAssertFalse(plan.isWrappingExisting)
-        XCTAssertEqual(plan.newCommand, "bash '/x/claude-statusline-bridge.sh'")
+        XCTAssertEqual(plan.newCommand, installedCommand)
+    }
+
+    func testRewritesStalePromptJuiceBridgeAndPreservesDelegate() throws {
+        try writeSettings(#"""
+        {
+          "statusLine": {
+            "type": "command",
+            "command": "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/statusline-command.sh' bash /tmp/old-worktree/scripts/claude-statusline-bridge.sh"
+          }
+        }
+        """#)
+
+        let plan = try installer().makePlan()
+
+        XCTAssertTrue(plan.isWrappingExisting)
+        XCTAssertEqual(plan.previousCommand, "bash ~/.claude/statusline-command.sh")
+        XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/statusline-command.sh'"))
+        XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
+        XCTAssertFalse(plan.newCommand.contains("/tmp/old-worktree"))
+    }
+
+    func testRewritesStalePromptJuiceBridgeWithoutDelegate() throws {
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "bash /tmp/old-worktree/scripts/claude-statusline-bridge.sh" } }
+        """#)
+
+        let plan = try installer().makePlan()
+
+        XCTAssertFalse(plan.isWrappingExisting)
+        XCTAssertNil(plan.previousCommand)
+        XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
+        XCTAssertFalse(plan.newCommand.contains("/tmp/old-worktree"))
     }
 
     func testJQStatusFlowsIntoPlanAndSummary() throws {
