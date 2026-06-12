@@ -2,7 +2,7 @@
 
 Canonical reference for every Juicebar state, its trigger, and its color. Kept for
 tracking and future work. Reflects the implementation on branch
-`juicebar-states-redesign` (draft PR #12).
+`codex/settings-and-providers`.
 
 A row's appearance is the product of **two independent axes**:
 
@@ -59,7 +59,7 @@ Notes:
 
 ## 3. Thresholds — what drives the nudge
 
-Source: [`AlertThresholds.swift`](../../app/PromptJuice/Models/AlertThresholds.swift) · menu in [`AppDelegate.swift`](../../app/PromptJuice/App/AppDelegate.swift)
+Source: [`AlertThresholds.swift`](../../app/PromptJuice/Models/AlertThresholds.swift) · Settings UI in [`SettingsView.swift`](../../app/PromptJuice/UI/SettingsView.swift)
 
 | Setting | Default | Options | Drives |
 |---|---|---|---|
@@ -101,10 +101,27 @@ Source: [`AppDelegate.updateStatusItemGlyph`](../../app/PromptJuice/App/AppDeleg
 
 ---
 
-## 6. Aggregate / multi-provider (header verdict + droplet)
+## 6. Enabled providers
+
+Source: [`PromptJuiceSettingsStore.swift`](../../app/PromptJuice/Services/PromptJuiceSettingsStore.swift) · [`PromptJuiceViewModel.visibleSnapshots`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
+
+The enabled provider set is the boundary for downstream state. Rows, header verdict,
+aggregate severity, menu-bar glyph, snooze identity, and click routing all use enabled
+providers only.
+
+Rules:
+- Hidden providers leave no Juicebar row, no header contribution, no glyph contribution,
+  and no setup nudge.
+- Hiding a provider keeps its bridge/install state intact; re-enabling resumes from the
+  latest fetch state.
+- At least one provider is always enabled. The store clamps empty writes, so zero-provider
+  panel and glyph states are unrepresentable.
+
+## 7. Aggregate / multi-provider (header verdict + droplet)
 
 Rows are always independent; clashes only affect the **header** and the **menu-bar glyph**.
 Symmetric — swap the two providers and it holds.
+The matrix applies after the enabled-provider filter.
 
 | Provider A | Provider B | Header verdict | Droplet |
 |---|---|---|---|
