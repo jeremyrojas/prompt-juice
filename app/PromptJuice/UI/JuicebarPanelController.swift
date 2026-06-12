@@ -29,6 +29,23 @@ private enum PanelClickTarget {
 }
 
 private enum PanelClickRouter {
+    static func rowRects(
+        in bounds: NSRect,
+        mode: PanelMode,
+        providers: [UsageProvider]
+    ) -> [(provider: UsageProvider, rect: NSRect)] {
+        let rowHeight = PromptJuicePanelMetrics.rowHeight
+        let rowSpacing = PromptJuicePanelMetrics.rowSpacing
+        let bottomY: CGFloat = mode == .alert ? 47 : 14
+
+        return providers.indices.map { index in
+            let bottomUpIndex = providers.count - 1 - index
+            let rowY = bottomY + CGFloat(bottomUpIndex) * (rowHeight + rowSpacing)
+            let rowRect = NSRect(x: 12, y: rowY, width: bounds.width - 24, height: rowHeight)
+            return (provider: providers[index], rect: rowRect)
+        }
+    }
+
     static func target(
         at point: NSPoint,
         in bounds: NSRect,
@@ -50,17 +67,9 @@ private enum PanelClickRouter {
             }
         }
 
-        let rowHeight = PromptJuicePanelMetrics.rowHeight
-        let rowSpacing = PromptJuicePanelMetrics.rowSpacing
-        let bottomY: CGFloat = mode == .alert ? 47 : 14
-
-        for index in providers.indices {
-            let bottomUpIndex = providers.count - 1 - index
-            let rowY = bottomY + CGFloat(bottomUpIndex) * (rowHeight + rowSpacing)
-            let rowRect = NSRect(x: 12, y: rowY, width: width - 24, height: rowHeight)
-
+        for (provider, rowRect) in rowRects(in: bounds, mode: mode, providers: providers) {
             if rowRect.contains(point) {
-                return .provider(providers[index])
+                return .provider(provider)
             }
         }
 
@@ -68,15 +77,24 @@ private enum PanelClickRouter {
     }
 }
 
-private final class ClickReadyHostingView<Content: View>: NSHostingView<Content> {
+@MainActor
+private protocol PanelToolTipRefreshing: AnyObject {
+    func refreshToolTips()
+}
+
+private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, NSViewToolTipOwner, PanelToolTipRefreshing {
     private let modeProvider: () -> PanelMode
     private let providers: () -> [UsageProvider]
+    private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onCancel: () -> Void
+    private var toolTipTags: [NSView.ToolTipTag] = []
+    private var toolTipTextByTag: [NSView.ToolTipTag: String] = [:]
 
     required init(rootView: Content) {
         self.modeProvider = { .manual }
         self.providers = { [] }
+        self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
         self.onCancel = {}
         super.init(rootView: rootView)
@@ -86,11 +104,13 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         rootView: Content,
         modeProvider: @escaping () -> PanelMode,
         providers: @escaping () -> [UsageProvider],
+        toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.modeProvider = modeProvider
         self.providers = providers
+        self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
         self.onCancel = onCancel
         super.init(rootView: rootView)
@@ -111,6 +131,11 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         bounds.contains(point) ? self : nil
+    }
+
+    override func layout() {
+        super.layout()
+        refreshToolTips()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -135,6 +160,41 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func cancelOperation(_ sender: Any?) {
         onCancel()
+    }
+
+    func refreshToolTips() {
+        toolTipTags.forEach(removeToolTip)
+        toolTipTags = []
+        toolTipTextByTag = [:]
+
+        guard bounds.width > 0, bounds.height > 0 else {
+            return
+        }
+
+        let rows = PanelClickRouter.rowRects(
+            in: bounds,
+            mode: modeProvider(),
+            providers: providers()
+        )
+
+        for row in rows {
+            guard let text = toolTipProvider(row.provider), !text.isEmpty else {
+                continue
+            }
+
+            let tag = addToolTip(row.rect, owner: self, userData: nil)
+            toolTipTags.append(tag)
+            toolTipTextByTag[tag] = text
+        }
+    }
+
+    func view(
+        _ view: NSView,
+        stringForToolTip tag: NSView.ToolTipTag,
+        point: NSPoint,
+        userData data: UnsafeMutableRawPointer?
+    ) -> String {
+        toolTipTextByTag[tag] ?? ""
     }
 
     private func clickTarget(at point: NSPoint) -> PanelClickTarget? {
@@ -183,6 +243,7 @@ final class JuicebarPanelController {
                 }
 
                 self.position(panel)
+                self.refreshPanelToolTips()
             }
             .store(in: &cancellables)
 
@@ -194,6 +255,14 @@ final class JuicebarPanelController {
                 }
 
                 self.position(panel)
+                self.refreshPanelToolTips()
+            }
+            .store(in: &cancellables)
+
+        viewModel.$snapshots
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshPanelToolTips()
             }
             .store(in: &cancellables)
     }
@@ -214,6 +283,7 @@ final class JuicebarPanelController {
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
         position(panel)
+        refreshPanelToolTips()
         installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(panel.contentView)
@@ -271,6 +341,13 @@ final class JuicebarPanelController {
             },
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
+            },
+            toolTipProvider: { [weak viewModel] provider in
+                guard let snapshot = viewModel?.visibleSnapshots.first(where: { $0.provider == provider }) else {
+                    return nil
+                }
+
+                return viewModel?.sourceTooltip(for: snapshot)
             },
             onPanelClick: { [weak self] target in
                 self?.handleClick(target)
@@ -422,6 +499,7 @@ final class JuicebarPanelController {
         let x = frame.midX - panelSize.width / 2
         let y = frame.maxY - panelSize.height - 10
         panel.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
+        refreshPanelToolTips()
     }
 
     private func targetScreen() -> NSScreen? {
@@ -432,5 +510,9 @@ final class JuicebarPanelController {
         }
 
         return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func refreshPanelToolTips() {
+        (panel?.contentView as? PanelToolTipRefreshing)?.refreshToolTips()
     }
 }

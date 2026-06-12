@@ -190,7 +190,6 @@ private struct ProviderUsageRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .glassInset(cornerRadius: 14, accentColor: nil, isSelected: false)
-        .help(viewModel.sourceTooltip(for: snapshot))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(snapshot.displayName) juice")
         .accessibilityValue(accessibilityValue)
