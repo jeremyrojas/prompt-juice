@@ -166,12 +166,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func addThresholdMenus(to menu: NSMenu) {
-        let minutesMenuItem = NSMenuItem(title: "Remaining Time Threshold", action: nil, keyEquivalent: "")
-        let minutesMenu = NSMenu(title: "Remaining Time Threshold")
+        // Read as one sentence: "Nudge me to use juice when reset is within [60
+        // minutes] and I still have [at least 40%]." Not a low-alarm — the only
+        // alert this app raises is the amber use-it-before-it-resets nudge.
+        let header = NSMenuItem(title: "Nudge me to use juice when…", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+
+        let minutesMenuItem = NSMenuItem(title: "Reset is within", action: nil, keyEquivalent: "")
+        let minutesMenu = NSMenu(title: "Reset is within")
 
         for minutes in [30, 45, 60, 90] {
             let item = NSMenuItem(
-                title: "\(minutes)m remaining",
+                title: "\(minutes) minutes",
                 action: #selector(setRemainingMinutesThreshold(_:)),
                 keyEquivalent: ""
             )
@@ -184,12 +191,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.setSubmenu(minutesMenu, for: minutesMenuItem)
         menu.addItem(minutesMenuItem)
 
-        let percentMenuItem = NSMenuItem(title: "Remaining Juice Threshold", action: nil, keyEquivalent: "")
-        let percentMenu = NSMenu(title: "Remaining Juice Threshold")
+        let percentMenuItem = NSMenuItem(title: "…and I still have", action: nil, keyEquivalent: "")
+        let percentMenu = NSMenu(title: "…and I still have")
 
         for percent in [25, 40, 50, 60] {
             let item = NSMenuItem(
-                title: "\(percent)% left",
+                title: "at least \(percent)%",
                 action: #selector(setRemainingPercentThreshold(_:)),
                 keyEquivalent: ""
             )

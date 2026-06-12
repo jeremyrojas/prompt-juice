@@ -40,10 +40,6 @@ struct PromptJuicePanelView: View {
 
                 headerGlyph
             }
-            .contentShape(Circle())
-            .onTapGesture {
-                viewModel.clearSelection()
-            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.headline)
@@ -55,10 +51,6 @@ struct PromptJuicePanelView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.58))
                     .lineLimit(1)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.clearSelection()
             }
 
             Spacer()
@@ -86,11 +78,7 @@ struct PromptJuicePanelView: View {
     private var usageRows: some View {
         VStack(spacing: 7) {
             ForEach(viewModel.snapshots) { snapshot in
-                ProviderUsageRow(
-                    snapshot: snapshot,
-                    isSelected: viewModel.selectedProvider == snapshot.provider,
-                    viewModel: viewModel
-                )
+                ProviderUsageRow(snapshot: snapshot, viewModel: viewModel)
             }
         }
     }
@@ -159,54 +147,86 @@ private struct ActionButton: View {
 
 private struct ProviderUsageRow: View {
     let snapshot: UsageSnapshot
-    let isSelected: Bool
     @ObservedObject var viewModel: PromptJuiceViewModel
 
     var body: some View {
-        Button {
-            viewModel.selectProvider(snapshot.provider)
-        } label: {
-            VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    providerDot
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                providerDot
 
-                    Text(snapshot.displayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.88))
+                Text(snapshot.displayName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(snapshot.isAvailable ? 0.88 : 0.6))
 
-                    statusChip
+                statusChip
 
-                    Spacer()
+                Spacer()
 
-                    Text(percentLabel)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.54))
-                        .monospacedDigit()
-
-                    resetLabel
-                }
-
-                CapacityBar(remainingPercent: snapshot.remainingPercent, color: severityColor)
+                trailing
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .glassInset(
-                cornerRadius: 14,
-                accentColor: isSelected ? severityColor : nil,
-                isSelected: isSelected
-            )
+
+            if snapshot.isAvailable {
+                CapacityBar(remainingPercent: snapshot.remainingPercent, color: severityColor)
+            } else {
+                ghostBar
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .glassInset(cornerRadius: 14, accentColor: nil, isSelected: false)
+        .help(viewModel.sourceTooltip(for: snapshot))
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(snapshot.displayName) juice")
-        .accessibilityValue("\(viewModel.percentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))")
-        .accessibilityHint("Shows details for \(snapshot.displayName).")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        if snapshot.isAvailable {
+            Text(percentLabel)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.54))
+                .monospacedDigit()
+
+            resetLabel
+        } else {
+            Text("Not measured yet")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.4))
+
+            if snapshot.provider == .claude {
+                setUpCue
+            }
+        }
+    }
+
+    private var setUpCue: some View {
+        Text("Set up")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.85))
+            .padding(.horizontal, 9)
+            .frame(height: 20)
+            .background(
+                Capsule(style: .continuous).fill(Color.white.opacity(0.10))
+            )
+            .overlay(
+                Capsule(style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+    }
+
+    private var ghostBar: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.06))
+            .frame(height: 6)
+            .accessibilityHidden(true)
     }
 
     private var providerDot: some View {
         Circle()
             .fill(providerColor)
             .frame(width: 7, height: 7)
-            .shadow(color: providerColor.opacity(0.55), radius: 5)
+            .opacity(snapshot.isAvailable ? 1 : 0.4)
+            .shadow(color: providerColor.opacity(snapshot.isAvailable ? 0.55 : 0), radius: 5)
     }
 
     private var providerColor: Color {
@@ -221,10 +241,10 @@ private struct ProviderUsageRow: View {
         severity.tint
     }
 
+    /// Estimates get a leading `~`; the only visible tell that a reading is a guess.
     private var percentLabel: String {
-        snapshot.isAvailable
-            ? viewModel.remainingPercentValueText(for: snapshot)
-            : "Unavailable"
+        let value = viewModel.remainingPercentValueText(for: snapshot)
+        return snapshot.confidence == .estimated ? "~\(value)" : value
     }
 
     private var resetColor: Color {
@@ -244,6 +264,7 @@ private struct ProviderUsageRow: View {
         .frame(width: 62, alignment: .trailing)
     }
 
+    /// One-alert model: only the amber use-soon nudge gets a chip.
     @ViewBuilder
     private var statusChip: some View {
         if let label = severity.chipText {
@@ -262,6 +283,12 @@ private struct ProviderUsageRow: View {
                         .stroke(severityColor.opacity(0.20), lineWidth: 1)
                 )
         }
+    }
+
+    private var accessibilityValue: String {
+        snapshot.isAvailable
+            ? "\(viewModel.percentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
+            : "Not measured yet"
     }
 }
 

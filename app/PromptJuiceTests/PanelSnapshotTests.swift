@@ -18,6 +18,9 @@ final class PanelSnapshotTests: XCTestCase {
         try render("healthy", FixtureUsageProviderClient(scenario: .quiet))
         try render("usesoon", FixtureUsageProviderClient(scenario: .underusedCodex))
         try render("low", LowFixtureClient())
+        try render("estimate", EstimateFixtureClient())
+        try render("notmeasured", NotMeasuredFixtureClient())
+        try render("clash", ClashFixtureClient())
     }
 
     private func render(_ name: String, _ client: any UsageProviderClient) throws {
@@ -57,6 +60,20 @@ final class PanelSnapshotTests: XCTestCase {
     }
 }
 
+private func codexExact(_ now: Date, usedPercent: Double = 1) -> ProviderSnapshot {
+    ProviderSnapshot(
+        identity: .codex,
+        rateWindow: .available(
+            usedPercent: usedPercent,
+            resetAt: now.addingTimeInterval(180 * 60),
+            durationMinutes: 300
+        ),
+        source: .codexAppServer,
+        confidence: .exact,
+        updatedAt: now
+    )
+}
+
 private struct LowFixtureClient: UsageProviderClient {
     let source: SnapshotSource = .fixture
 
@@ -77,6 +94,76 @@ private struct LowFixtureClient: UsageProviderClient {
                 identity: .codex,
                 rateWindow: .available(
                     usedPercent: 42,
+                    resetAt: now.addingTimeInterval(180 * 60),
+                    durationMinutes: 300
+                ),
+                source: .fixture,
+                confidence: .exact,
+                updatedAt: now
+            )
+        ]
+    }
+}
+
+private struct EstimateFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .claudeLocalLogs
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .available(
+                    usedPercent: 65,
+                    resetAt: now.addingTimeInterval(100 * 60),
+                    durationMinutes: 300
+                ),
+                source: .claudeLocalLogs,
+                confidence: .estimated,
+                updatedAt: now
+            ),
+            codexExact(now)
+        ]
+    }
+}
+
+private struct NotMeasuredFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .claudeStatusline
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .unavailable,
+                source: .claudeStatusline,
+                confidence: .unavailable,
+                updatedAt: now,
+                statusDetail: "Claude statusline and local usage unavailable"
+            ),
+            codexExact(now)
+        ]
+    }
+}
+
+private struct ClashFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .fixture
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .available(
+                    usedPercent: 22,
+                    resetAt: now.addingTimeInterval(20 * 60),
+                    durationMinutes: 300
+                ),
+                source: .fixture,
+                confidence: .exact,
+                updatedAt: now
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .available(
+                    usedPercent: 92,
                     resetAt: now.addingTimeInterval(180 * 60),
                     durationMinutes: 300
                 ),

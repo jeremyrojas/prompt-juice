@@ -23,9 +23,7 @@ extension UsageSeverity {
             return JuicePalette.green
         case .useSoon:
             return JuicePalette.amber
-        case .low, .empty:
-            return JuicePalette.red
-        case .unavailable:
+        case .low, .empty, .unavailable:
             return JuicePalette.muted
         }
     }
@@ -36,9 +34,7 @@ extension UsageSeverity {
         switch self {
         case .useSoon:
             return JuicePalette.nsAmber
-        case .low, .empty:
-            return JuicePalette.nsRed
-        case .healthy, .unavailable:
+        case .healthy, .unavailable, .low, .empty:
             return nil
         }
     }
