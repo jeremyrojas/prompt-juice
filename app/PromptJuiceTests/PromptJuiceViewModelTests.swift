@@ -316,6 +316,29 @@ final class PromptJuiceViewModelTests: XCTestCase {
         )
     }
 
+    func testClaudeStalePopoverNamesLastExactReading() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeStaleCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+        let time = clockTime(Self.staleClaudeUpdatedAt)
+
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: claude),
+            "Read from Claude Code · \(time)"
+        )
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "Right now it's showing your last exact reading from \(time). It'll refresh when you next use Claude Code in the terminal."
+        )
+    }
+
     func testClaudeUnavailableSetupUsesShortButtonLabel() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -493,7 +516,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, expected)
     }
 
+    private func clockTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
+    }
+
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
+    private static let staleClaudeUpdatedAt = fixedNow.addingTimeInterval(-10 * 60)
 
     private static let healthySnapshots = [
         ProviderSnapshot(
@@ -581,6 +612,31 @@ final class PromptJuiceViewModelTests: XCTestCase {
             source: .claudeLocalLogs,
             confidence: .estimated,
             updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private static let claudeStaleCodexHealthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 58,
+                resetAt: fixedNow.addingTimeInterval(150 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeCache,
+            confidence: .stale,
+            updatedAt: staleClaudeUpdatedAt
         ),
         ProviderSnapshot(
             identity: .codex,

@@ -529,6 +529,11 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var claudeMeasurementPopoverDetail: String {
+        if let snapshot = snapshots.first(where: { $0.provider == .claude }),
+           snapshot.confidence == .stale {
+            return "Right now it's showing your last exact reading from \(clockTime(snapshot.updatedAt)). It'll refresh when you next use Claude Code in the terminal."
+        }
+
         switch claudeLiveUpgrade {
         case .live:
             return "Right now it's exact, current as of your last terminal session."

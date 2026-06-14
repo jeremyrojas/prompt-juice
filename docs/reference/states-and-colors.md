@@ -74,7 +74,8 @@ The `low` boundary (`< 15%`) is a fixed constant (`UsageSeverity.lowRemainingFlo
 
 Source: [`SnapshotConfidence.swift`](../../app/PromptJuice/Models/SnapshotConfidence.swift) · row in [`PromptJuicePanelView.swift`](../../app/PromptJuice/UI/PromptJuicePanelView.swift) · tooltip in [`PromptJuiceViewModel.sourceTooltip`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
-Codex is always exact/Live, no estimate path. The matrix below is Claude-only.
+Codex is normally exact/Live; it can be stale or unavailable, but never estimated.
+The matrix below is Claude-only.
 "Bridge current" means `statusLine.command` points at the installed Application Support
 script and that file exists.
 
@@ -84,7 +85,7 @@ script and that file exists.
 | 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
 | 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity · updates when you use Claude Code in the terminal | open Settings |
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
-| 5 | unavailable, bridge missing | Not set up yet | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
+| 5 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
 | 6 | unavailable, bridge current | Not set up yet + ⓘ | — | — ghost | (existing status detail) | open Settings |
 | 7 | refreshing | Checking… | — | (prev) | — | — |
 
