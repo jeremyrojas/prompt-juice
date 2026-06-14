@@ -21,11 +21,39 @@ final class PanelSnapshotTests: XCTestCase {
         try render("estimate", EstimateFixtureClient())
         try render("notmeasured", NotMeasuredFixtureClient())
         try render("clash", ClashFixtureClient())
+        try render("codexonly", CodexOnlyFixtureClient(), enabledProviders: [.codex])
+        try render(
+            "claudeonly-notmeasured",
+            ClaudeOnlyNotMeasuredFixtureClient(),
+            enabledProviders: [.claude]
+        )
     }
 
-    private func render(_ name: String, _ client: any UsageProviderClient) throws {
-        let viewModel = PromptJuiceViewModel(providerClient: client, now: { self.now })
+    private func render(
+        _ name: String,
+        _ client: any UsageProviderClient,
+        enabledProviders: Set<UsageProvider>? = nil
+    ) throws {
+        let suiteName = "PanelSnapshotTests.\(name).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        if let enabledProviders {
+            store.enabledProviders = enabledProviders
+        }
+
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: client,
+            now: { self.now }
+        )
         viewModel.showManualCheck()
+        let panelHeight = PromptJuicePanelMetrics.height(
+            mode: viewModel.mode,
+            rowCount: viewModel.visibleSnapshots.count
+        )
 
         let content = ZStack {
             LinearGradient(
@@ -40,7 +68,7 @@ final class PanelSnapshotTests: XCTestCase {
             PromptJuicePanelView(viewModel: viewModel, onClose: {}, onSnooze: {})
                 .padding(40)
         }
-        .frame(width: 464, height: 246)
+        .frame(width: 464, height: panelHeight + 80)
 
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
@@ -168,6 +196,65 @@ private struct ClashFixtureClient: UsageProviderClient {
                     durationMinutes: 300
                 ),
                 source: .fixture,
+                confidence: .exact,
+                updatedAt: now
+            )
+        ]
+    }
+}
+
+private struct CodexOnlyFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .fixture
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .available(
+                    usedPercent: 12,
+                    resetAt: now.addingTimeInterval(180 * 60),
+                    durationMinutes: 300
+                ),
+                source: .fixture,
+                confidence: .exact,
+                updatedAt: now
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .available(
+                    usedPercent: 30,
+                    resetAt: now.addingTimeInterval(20 * 60),
+                    durationMinutes: 300
+                ),
+                source: .codexAppServer,
+                confidence: .exact,
+                updatedAt: now
+            )
+        ]
+    }
+}
+
+private struct ClaudeOnlyNotMeasuredFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .claudeStatusline
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .unavailable,
+                source: .claudeStatusline,
+                confidence: .unavailable,
+                updatedAt: now,
+                statusDetail: "Claude statusline and local usage unavailable"
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .available(
+                    usedPercent: 28,
+                    resetAt: now.addingTimeInterval(22 * 60),
+                    durationMinutes: 300
+                ),
+                source: .codexAppServer,
                 confidence: .exact,
                 updatedAt: now
             )

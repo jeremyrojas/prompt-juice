@@ -100,9 +100,15 @@ struct ClaudeBridgeInstaller {
         if let statusLine = root["statusLine"] as? [String: Any],
            let existing = (statusLine["command"] as? String),
            !existing.isEmpty {
-            if existing.contains("claude-statusline-bridge.sh") {
-                // Already installed — leave the command untouched (idempotent).
+            if existing.contains(installedScriptURL.path) {
+                // The installed Application Support bridge is current; keep the plan idempotent.
                 newCommand = existing
+            } else if let wrapped = wrappedStatusLineCommand(from: existing) {
+                isWrap = true
+                previous = wrapped
+                newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(wrapped)' \(bridgeInvocation)"
+            } else if existing.contains("claude-statusline-bridge.sh") {
+                newCommand = bridgeInvocation
             } else {
                 isWrap = true
                 previous = existing
@@ -164,5 +170,21 @@ struct ClaudeBridgeInstaller {
         } catch {
             return false
         }
+    }
+
+    private func wrappedStatusLineCommand(from command: String) -> String? {
+        let prefix = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='"
+        guard command.hasPrefix(prefix),
+              let closingQuote = command.dropFirst(prefix.count).firstIndex(of: "'") else {
+            return nil
+        }
+
+        let remainder = command[closingQuote...]
+        guard remainder.contains("claude-statusline-bridge.sh") else {
+            return nil
+        }
+
+        let valueStart = command.index(command.startIndex, offsetBy: prefix.count)
+        return String(command[valueStart..<closingQuote])
     }
 }

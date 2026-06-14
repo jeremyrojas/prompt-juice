@@ -8,6 +8,7 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var actionMessage: String?
     @Published private(set) var thresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
+    @Published private(set) var enabledProviders: Set<UsageProvider>
 
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
@@ -23,10 +24,12 @@ final class PromptJuiceViewModel: ObservableObject {
         now: @escaping () -> Date = Date.init
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
+        let initialEnabledProviders = settingsStore.enabledProviders
 
         self.settingsStore = settingsStore
         self.injectedProviderClient = providerClient
         self.sourceMode = initialSourceMode
+        self.enabledProviders = initialEnabledProviders
         self.providerClient = providerClient ?? Self.makeProviderClient(
             sourceMode: initialSourceMode
         )
@@ -43,8 +46,16 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
+    var visibleSnapshots: [UsageSnapshot] {
+        snapshots.filter { enabledProviders.contains($0.provider) }
+    }
+
+    var isFirstRun: Bool {
+        settingsStore.isFirstRun
+    }
+
     var primarySnapshot: UsageSnapshot? {
-        snapshots
+        visibleSnapshots
             .filter(\.isAvailable)
             .min { first, second in
                 first.resetAt < second.resetAt
@@ -68,7 +79,11 @@ final class PromptJuiceViewModel: ObservableObject {
 
     /// Worst-wins judgment across all providers.
     var aggregateSeverity: UsageSeverity {
-        alertEngine.aggregateSeverity(in: snapshots, thresholds: thresholds, now: now())
+        alertEngine.aggregateSeverity(
+            in: visibleSnapshots,
+            thresholds: thresholds,
+            now: now()
+        )
     }
 
     /// Header droplet tint — the aggregate judgment across providers.
@@ -96,7 +111,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return alertSnapshot.remainingPercent
         }
 
-        let available = snapshots.filter(\.isAvailable)
+        let available = visibleSnapshots.filter(\.isAvailable)
 
         guard !available.isEmpty else {
             return 100
@@ -140,23 +155,23 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private var lowSnapshots: [UsageSnapshot] {
-        snapshots.filter { $0.isAvailable && severity(for: $0) == .low }
+        visibleSnapshots.filter { $0.isAvailable && severity(for: $0) == .low }
     }
 
     private var emptySnapshots: [UsageSnapshot] {
-        snapshots.filter { severity(for: $0) == .empty }
+        visibleSnapshots.filter { severity(for: $0) == .empty }
     }
 
     /// Manual-mode subtitle — the live aggregate the static label used to hide.
     private var manualSubtitle: String {
-        guard snapshots.contains(where: \.isAvailable) else {
+        guard visibleSnapshots.contains(where: \.isAvailable) else {
             return "Usage unavailable"
         }
 
-        var parts = snapshots.map { snapshot -> String in
+        var parts = visibleSnapshots.map { snapshot -> String in
             snapshot.isAvailable
                 ? "\(snapshot.displayName) \(remainingPercentValueText(for: snapshot))"
-                : "\(snapshot.displayName) n/a"
+                : unavailableHeaderSubtitle(for: snapshot)
         }
 
         if let soonest = primarySnapshot {
@@ -164,6 +179,12 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return parts.joined(separator: " · ")
+    }
+
+    private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
+        snapshot.provider == .claude
+            ? "\(snapshot.displayName) not set up"
+            : "\(snapshot.displayName) not detected"
     }
 
     var headline: String {
@@ -220,7 +241,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
     private var alertSnapshot: UsageSnapshot? {
         alertEngine.preferredSnapshot(
-            in: snapshots,
+            in: visibleSnapshots,
             thresholds: thresholds,
             now: now()
         )
@@ -228,7 +249,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
     private var alertingSnapshots: [UsageSnapshot] {
         alertEngine.alertingSnapshots(
-            in: snapshots,
+            in: visibleSnapshots,
             thresholds: thresholds,
             now: now()
         )
@@ -285,6 +306,34 @@ final class PromptJuiceViewModel: ObservableObject {
         refreshModeForThresholds()
     }
 
+    func setProviderEnabled(_ provider: UsageProvider, _ enabled: Bool) {
+        var next = enabledProviders
+
+        if enabled {
+            next.insert(provider)
+        } else {
+            next.remove(provider)
+        }
+
+        guard !next.isEmpty, next != enabledProviders else {
+            return
+        }
+
+        settingsStore.enabledProviders = next
+        enabledProviders = settingsStore.enabledProviders
+        refreshModeForThresholds()
+    }
+
+    func completeFirstRun(enabledProviders: Set<UsageProvider>) {
+        guard !enabledProviders.isEmpty else {
+            return
+        }
+
+        settingsStore.enabledProviders = enabledProviders
+        self.enabledProviders = settingsStore.enabledProviders
+        refreshModeForThresholds()
+    }
+
     func refreshUsage() {
         actionMessage = "Refreshing \(sourceMode.title.lowercased())."
         refreshSnapshotsInBackground(
@@ -298,6 +347,10 @@ final class PromptJuiceViewModel: ObservableObject {
                 self.mode = .manual
             }
         }
+    }
+
+    func refreshUsageQuietly() {
+        refreshSnapshotsInBackground()
     }
 
     func refreshUsageAlertInBackground(
@@ -420,6 +473,34 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
+    func settingsStatusText(for provider: UsageProvider) -> String {
+        guard let snapshot = snapshots.first(where: { $0.provider == provider }) else {
+            return provider == .claude ? "Not set up yet" : "Not detected"
+        }
+
+        guard snapshot.isAvailable else {
+            if snapshot.statusDetail == "Refreshing usage" {
+                return "Checking…"
+            }
+
+            return provider == .claude ? "Not set up yet" : "Not detected"
+        }
+
+        switch snapshot.confidence {
+        case .exact:
+            if provider == .codex {
+                return "Live · \(fullResetText(for: snapshot))"
+            }
+            return "Live"
+        case .estimated:
+            return "Estimate"
+        case .stale:
+            return "Read earlier · \(clockTime(snapshot.updatedAt))"
+        case .unavailable:
+            return provider == .claude ? "Not set up yet" : "Not detected"
+        }
+    }
+
     private func clockTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -436,7 +517,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private var currentWindowID: String {
-        let windowParts = snapshots
+        let windowParts = visibleSnapshots
             .map(\.resetWindowID)
             .joined(separator: "|")
 

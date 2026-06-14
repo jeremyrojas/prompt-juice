@@ -136,6 +136,120 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
     }
 
+    func testManualSubtitleNamesUnavailableClaudeAsNotSetUp() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertTrue(viewModel.detail.contains("Claude not set up"))
+        XCTAssertFalse(viewModel.detail.contains("Claude n/a"))
+    }
+
+    func testManualSubtitleNamesUnavailableCodexAsNotDetected() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeHealthyCodexUnavailableSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertTrue(viewModel.detail.contains("Codex not detected"))
+        XCTAssertFalse(viewModel.detail.contains("Codex n/a"))
+    }
+
+    func testEnabledProvidersDefaultToAllWhenKeyIsAbsent() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        XCTAssertTrue(fixture.store.isFirstRun)
+        XCTAssertEqual(fixture.store.enabledProviders, Set(UsageProvider.allCases))
+    }
+
+    func testEnabledProvidersEmptyWriteKeepsPreviousSelection() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        fixture.store.enabledProviders = [.claude]
+        fixture.store.enabledProviders = []
+
+        XCTAssertFalse(fixture.store.isFirstRun)
+        XCTAssertEqual(fixture.store.enabledProviders, [.claude])
+    }
+
+    func testHiddenClaudeIsIgnoredByAggregateAndPanelInputs() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.codex]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUseSoonCodexHealthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.enabledProviders, [.codex])
+        XCTAssertEqual(viewModel.visibleSnapshots.map(\.provider), [.codex])
+        XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertEqual(viewModel.detail, "Codex 65% · resets in 3h 0m")
+        XCTAssertEqual(viewModel.menuBarRemainingPercent, 65)
+    }
+
+    func testSetProviderEnabledKeepsOneProviderEnabled() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.codex]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.setProviderEnabled(.codex, false)
+
+        XCTAssertEqual(viewModel.enabledProviders, [.codex])
+        XCTAssertEqual(fixture.store.enabledProviders, [.codex])
+    }
+
+    func testCompleteFirstRunPersistsEnabledProviders() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(viewModel.isFirstRun)
+
+        viewModel.completeFirstRun(enabledProviders: [.claude])
+
+        XCTAssertFalse(fixture.store.isFirstRun)
+        XCTAssertEqual(viewModel.enabledProviders, [.claude])
+        XCTAssertEqual(fixture.store.enabledProviders, [.claude])
+    }
+
+    func testSettingsStatusShowsCheckingForInFlightUnavailableSnapshot() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.refreshingUnavailableSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Checking…")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .codex), "Checking…")
+    }
+
     func testSavedFixtureSourceFallsBackToLiveUsage() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -166,6 +280,78 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
 
         provider.releaseRefresh()
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testQuietRefreshRunsBackgroundFetchWithoutModeOrMessageSideEffects() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
+        viewModel.refreshUsageQuietly()
+
+        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertNil(viewModel.actionMessage)
+        XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
+
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+
+        XCTAssertEqual(provider.callCount, 2)
+        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertNil(viewModel.actionMessage)
+    }
+
+    func testSettingsWindowShowStartsExactlyOneQuietRefresh() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+        let controller = SettingsWindowController(viewModel: viewModel)
+
+        controller.show()
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+        controller.close()
+
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testFirstRunWindowShowStartsExactlyOneQuietRefresh() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+        let controller = SettingsWindowController(viewModel: viewModel)
+
+        controller.showFirstRun()
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+        controller.close()
+
         XCTAssertEqual(provider.callCount, 2)
     }
 
@@ -207,6 +393,20 @@ final class PromptJuiceViewModelTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         let store = PromptJuiceSettingsStore(defaults: defaults)
         return (suiteName, defaults, store)
+    }
+
+    private func waitForSnapshots(
+        _ expected: [ProviderSnapshot],
+        in viewModel: PromptJuiceViewModel,
+        timeout: TimeInterval = 1
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while viewModel.snapshots != expected && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(viewModel.snapshots, expected)
     }
 
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
@@ -260,6 +460,107 @@ final class PromptJuiceViewModelTests: XCTestCase {
             updatedAt: fixedNow
         )
     ]
+
+    private static let claudeUseSoonCodexHealthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(20 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 35,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private static let refreshingUnavailableSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Refreshing usage"
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexAppServer,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Refreshing usage"
+        )
+    ]
+
+    private static let claudeUnavailableCodexHealthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Claude statusline and local usage unavailable"
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private static let claudeHealthyCodexUnavailableSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexAppServer,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Codex app-server unavailable"
+        )
+    ]
+
+    private struct StaticUsageProviderClient: UsageProviderClient {
+        let source: SnapshotSource = .fixture
+        let storedSnapshots: [ProviderSnapshot]
+
+        init(snapshots: [ProviderSnapshot]) {
+            self.storedSnapshots = snapshots
+        }
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            storedSnapshots
+        }
+    }
 
     private final class BlockingUsageProviderClient: UsageProviderClient, @unchecked Sendable {
         let source: SnapshotSource = .fixture

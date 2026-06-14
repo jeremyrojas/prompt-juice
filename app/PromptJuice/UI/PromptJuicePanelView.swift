@@ -1,13 +1,29 @@
 import SwiftUI
 
+enum PromptJuicePanelMetrics {
+    static let width: CGFloat = 384
+    static let rowHeight: CGFloat = 48
+    static let rowSpacing: CGFloat = 7
+
+    static func height(mode: PanelMode, rowCount: Int) -> CGFloat {
+        let rows = max(rowCount, 1)
+        let rowBlockHeight = CGFloat(rows) * rowHeight
+            + CGFloat(max(rows - 1, 0)) * rowSpacing
+        let chromeHeight: CGFloat = mode == .alert ? 95 : 63
+        return chromeHeight + rowBlockHeight
+    }
+}
+
 struct PromptJuicePanelView: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
     let onClose: () -> Void
     let onSnooze: () -> Void
 
-    private let panelWidth: CGFloat = 384
     private var panelHeight: CGFloat {
-        viewModel.mode == .alert ? 198 : 166
+        PromptJuicePanelMetrics.height(
+            mode: viewModel.mode,
+            rowCount: viewModel.visibleSnapshots.count
+        )
     }
     private let panelCornerRadius: CGFloat = 22
 
@@ -21,7 +37,7 @@ struct PromptJuicePanelView: View {
             }
         }
         .padding(14)
-        .frame(width: panelWidth, height: panelHeight)
+        .frame(width: PromptJuicePanelMetrics.width, height: panelHeight)
         .glassPanel(cornerRadius: panelCornerRadius)
     }
 
@@ -77,7 +93,7 @@ struct PromptJuicePanelView: View {
 
     private var usageRows: some View {
         VStack(spacing: 7) {
-            ForEach(viewModel.snapshots) { snapshot in
+            ForEach(viewModel.visibleSnapshots) { snapshot in
                 ProviderUsageRow(snapshot: snapshot, viewModel: viewModel)
             }
         }
@@ -174,7 +190,6 @@ private struct ProviderUsageRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .glassInset(cornerRadius: 14, accentColor: nil, isSelected: false)
-        .help(viewModel.sourceTooltip(for: snapshot))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(snapshot.displayName) juice")
         .accessibilityValue(accessibilityValue)
