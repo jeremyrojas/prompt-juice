@@ -332,7 +332,7 @@ private final class PanelToolTipView: NSView {
 @MainActor
 final class JuicebarPanelController {
     private let viewModel: PromptJuiceViewModel
-    private let onClaudeSetupRequested: () -> Void
+    private let onClaudeSettingsRequested: (Bool) -> Void
     private var panel: NSWindow?
     private var cancellables = Set<AnyCancellable>()
     private var localClickMonitor: Any?
@@ -352,10 +352,10 @@ final class JuicebarPanelController {
 
     init(
         viewModel: PromptJuiceViewModel,
-        onClaudeSetupRequested: @escaping () -> Void = {}
+        onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in }
     ) {
         self.viewModel = viewModel
-        self.onClaudeSetupRequested = onClaudeSetupRequested
+        self.onClaudeSettingsRequested = onClaudeSettingsRequested
 
         viewModel.$mode
             .receive(on: RunLoop.main)
@@ -482,9 +482,12 @@ final class JuicebarPanelController {
             viewModel.snooze()
             scheduleSnoozeAutoHide()
         case .provider(let provider):
-            if provider == .claude, viewModel.isUnavailable(.claude) {
+            if provider == .claude,
+               !viewModel.isRefreshing(.claude),
+               viewModel.visibleSnapshots.contains(where: { $0.provider == .claude }) {
+                let shouldPresentSetup = viewModel.claudeLiveUpgrade == .setupAvailable
                 dismissSurface()
-                onClaudeSetupRequested()
+                onClaudeSettingsRequested(shouldPresentSetup)
             }
         }
     }

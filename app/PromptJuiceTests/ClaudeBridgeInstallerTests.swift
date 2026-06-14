@@ -24,6 +24,12 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         try json.write(to: dir.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
     }
 
+    private func writeInstalledScript() throws {
+        let installer = installer()
+        try FileManager.default.createDirectory(at: installer.installDirectory, withIntermediateDirectories: true)
+        try "#!/bin/sh\n".write(to: installer.installedScriptURL, atomically: true, encoding: .utf8)
+    }
+
     private func parse(_ data: Data) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
@@ -71,6 +77,36 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
 
         XCTAssertFalse(plan.isWrappingExisting)
         XCTAssertEqual(plan.newCommand, installedCommand)
+    }
+
+    func testBridgeCurrentFalseForStalePath() throws {
+        try writeInstalledScript()
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "bash /tmp/old-worktree/scripts/claude-statusline-bridge.sh" } }
+        """#)
+
+        XCTAssertFalse(installer().isBridgeCurrent())
+    }
+
+    func testBridgeCurrentTrueWhenInstalledScriptExists() throws {
+        let installer = installer()
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try writeInstalledScript()
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)" } }
+        """#)
+
+        XCTAssertTrue(installer.isBridgeCurrent())
+    }
+
+    func testBridgeCurrentFalseWhenInstalledScriptIsMissing() throws {
+        let installer = installer()
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)" } }
+        """#)
+
+        XCTAssertFalse(installer.isBridgeCurrent())
     }
 
     func testRewritesStalePromptJuiceBridgeAndPreservesDelegate() throws {

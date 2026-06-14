@@ -74,17 +74,28 @@ The `low` boundary (`< 15%`) is a fixed constant (`UsageSeverity.lowRemainingFlo
 
 Source: [`SnapshotConfidence.swift`](../../app/PromptJuice/Models/SnapshotConfidence.swift) · row in [`PromptJuicePanelView.swift`](../../app/PromptJuice/UI/PromptJuicePanelView.swift) · tooltip in [`PromptJuiceViewModel.sourceTooltip`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
-| Confidence | Shown as | Number | Hover tooltip | CTA |
-|---|---|---|---|---|
-| `exact` | Live | `41%` (plain) | "Read from Claude Code" | — |
-| `estimated` | Estimate | `~41%` (tilde prefix) | "Estimated from local Claude Code activity" | — |
-| `stale` | Earlier | `41%` (plain) | "Read from Claude Code · 9:46" | — |
-| `unavailable` | Not measured yet | — (no number, dimmed dot, ghost bar) | the status detail, e.g. "Claude statusline and local usage unavailable" | **Set up** (Claude only) |
+Codex is normally exact/Live; it can be stale or unavailable, but never estimated.
+The matrix below is Claude-only.
+"Bridge current" means `statusLine.command` points at the installed Application Support
+script and that file exists.
+
+| # | Condition | Settings status | Settings affordance | Juicebar # | Juicebar tooltip | Row click |
+|---|---|---|---|---|---|---|
+| 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | open Settings |
+| 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
+| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity · updates when you use Claude Code in the terminal | open Settings |
+| 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
+| 5 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
+| 6 | unavailable, bridge current | Not set up yet + ⓘ | — | — ghost | (existing status detail) | open Settings |
+| 7 | refreshing | Checking… | — | (prev) | — | — |
+
+Root cause: Live needs Claude Code's status line, terminal CLI only; desktop app ignores
+`statusLine` ([anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456)).
+Desktop-only users stay on Estimate by design.
 
 Notes:
 - The fetch axis only changes the **number presentation + hover**, never the color (that's the severity axis).
 - The only at-rest visible tell of a guess is the `~`. Source/age live in the hover tooltip only — facts, never promises.
-- **Codex** is normally `exact` (Live); it can be `stale` or `unavailable`, but never `estimated` (the `~`/estimate path is Claude-logs-only). Its tooltip/setup copy is Codex-worded.
 
 ---
 

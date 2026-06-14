@@ -250,6 +250,113 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.settingsStatusText(for: .codex), "Checking…")
     }
 
+    func testClaudeLiveUpgradeIsLiveForExactSnapshot() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .live)
+        XCTAssertNil(viewModel.claudeSetupButtonTitle)
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "Right now it's exact, current as of your last terminal session."
+        )
+    }
+
+    func testClaudeLiveUpgradeOffersSetupWhenBridgeIsMissing() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeEstimatedCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .setupAvailable)
+        XCTAssertEqual(viewModel.claudeSetupButtonTitle, "Set up live readings")
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: claude),
+            "Estimated from local Claude Code activity · open Settings to set up live"
+        )
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers."
+        )
+    }
+
+    func testClaudeLiveUpgradeAwaitsTerminalSessionWhenBridgeIsCurrent() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeEstimatedCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
+        XCTAssertNil(viewModel.claudeSetupButtonTitle)
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: claude),
+            "Estimated from local Claude Code activity · updates when you use Claude Code in the terminal"
+        )
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "Right now it's estimating. It'll go live when you next use Claude Code in the terminal."
+        )
+    }
+
+    func testClaudeStalePopoverNamesLastExactReading() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeStaleCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+        let time = clockTime(Self.staleClaudeUpdatedAt)
+
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: claude),
+            "Read from Claude Code · \(time)"
+        )
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "Right now it's showing your last exact reading from \(time). It'll refresh when you next use Claude Code in the terminal."
+        )
+    }
+
+    func testClaudeUnavailableSetupUsesShortButtonLabel() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .setupAvailable)
+        XCTAssertEqual(viewModel.claudeSetupButtonTitle, "Set Up…")
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "It's not set up yet. Set it up, then use Claude Code in the terminal for exact numbers."
+        )
+    }
+
     func testSavedFixtureSourceFallsBackToLiveUsage() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -409,7 +516,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, expected)
     }
 
+    private func clockTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
+    }
+
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
+    private static let staleClaudeUpdatedAt = fixedNow.addingTimeInterval(-10 * 60)
 
     private static let healthySnapshots = [
         ProviderSnapshot(
@@ -477,6 +592,56 @@ final class PromptJuiceViewModelTests: XCTestCase {
             identity: .codex,
             rateWindow: .available(
                 usedPercent: 35,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private static let claudeEstimatedCodexHealthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 58,
+                resetAt: fixedNow.addingTimeInterval(150 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+
+    private static let claudeStaleCodexHealthySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 58,
+                resetAt: fixedNow.addingTimeInterval(150 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeCache,
+            confidence: .stale,
+            updatedAt: staleClaudeUpdatedAt
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 20,
                 resetAt: fixedNow.addingTimeInterval(180 * 60),
                 durationMinutes: 300
             ),
