@@ -7,8 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var settingsWindowController = SettingsWindowController(viewModel: viewModel)
     private lazy var panelController = JuicebarPanelController(
         viewModel: viewModel,
-        onClaudeSetupRequested: { [weak self] in
-            self?.settingsWindowController.show(presentingClaudeSetup: true)
+        onClaudeSettingsRequested: { [weak self] presentingSetup in
+            self?.settingsWindowController.show(presentingClaudeSetup: presentingSetup)
         }
     )
     private var statusItem: NSStatusItem?

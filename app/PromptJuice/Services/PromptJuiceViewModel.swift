@@ -1,6 +1,12 @@
 import Foundation
 import SwiftUI
 
+enum ClaudeLiveUpgrade: Equatable {
+    case live
+    case setupAvailable
+    case awaitingSession
+}
+
 @MainActor
 final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var snapshots: [UsageSnapshot]
@@ -13,6 +19,7 @@ final class PromptJuiceViewModel: ObservableObject {
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
     private let now: () -> Date
+    private let isClaudeBridgeCurrent: () -> Bool
     private let injectedProviderClient: (any UsageProviderClient)?
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
@@ -21,7 +28,10 @@ final class PromptJuiceViewModel: ObservableObject {
         settingsStore: PromptJuiceSettingsStore = .shared,
         providerClient: (any UsageProviderClient)? = nil,
         alertEngine: AlertEngine = AlertEngine(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        isClaudeBridgeCurrent: @escaping () -> Bool = {
+            ClaudeBridgeInstaller().isBridgeCurrent()
+        }
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
         let initialEnabledProviders = settingsStore.enabledProviders
@@ -35,6 +45,7 @@ final class PromptJuiceViewModel: ObservableObject {
         )
         self.alertEngine = alertEngine
         self.now = now
+        self.isClaudeBridgeCurrent = isClaudeBridgeCurrent
         thresholds = settingsStore.thresholds
         snapshots = if let providerClient {
             providerClient.snapshots(now: now())
@@ -62,12 +73,24 @@ final class PromptJuiceViewModel: ObservableObject {
             }
     }
 
+    var claudeLiveUpgrade: ClaudeLiveUpgrade {
+        if snapshots.first(where: { $0.provider == .claude })?.confidence == .exact {
+            return .live
+        }
+
+        return isClaudeBridgeCurrent() ? .awaitingSession : .setupAvailable
+    }
+
     /// True when a provider has no usable reading (the "Not measured yet" state).
     func isUnavailable(_ provider: UsageProvider) -> Bool {
         guard let snapshot = snapshots.first(where: { $0.provider == provider }) else {
             return true
         }
         return !snapshot.isAvailable
+    }
+
+    func isRefreshing(_ provider: UsageProvider) -> Bool {
+        snapshots.first(where: { $0.provider == provider })?.statusDetail == "Refreshing usage"
     }
 
     // MARK: - Severity
@@ -449,6 +472,26 @@ final class PromptJuiceViewModel: ObservableObject {
     /// Friendly hover text for a row — where the reading came from, stated as a
     /// fact (never a promise). Lives in a tooltip, never inline.
     func sourceTooltip(for snapshot: UsageSnapshot) -> String {
+        if snapshot.provider == .claude {
+            switch snapshot.confidence {
+            case .exact:
+                return "Read from Claude Code"
+            case .estimated:
+                switch claudeLiveUpgrade {
+                case .live:
+                    return "Read from Claude Code"
+                case .setupAvailable:
+                    return "Estimated from local Claude Code activity · open Settings to set up live"
+                case .awaitingSession:
+                    return "Estimated from local Claude Code activity · updates when you use Claude Code in the terminal"
+                }
+            case .stale:
+                return "Read from Claude Code · \(clockTime(snapshot.updatedAt))"
+            case .unavailable:
+                return snapshot.statusDetail ?? "Not measured yet"
+            }
+        }
+
         let label: String
         switch snapshot.source {
         case .claudeStatusline, .claudeCache:
@@ -470,6 +513,33 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Read from \(label) · \(clockTime(snapshot.updatedAt))"
         case .unavailable:
             return snapshot.statusDetail ?? "Not measured yet"
+        }
+    }
+
+    var shouldShowClaudeMeasurementInfo: Bool {
+        !isRefreshing(.claude)
+    }
+
+    var claudeSetupButtonTitle: String? {
+        guard claudeLiveUpgrade == .setupAvailable, !isRefreshing(.claude) else {
+            return nil
+        }
+
+        return isUnavailable(.claude) ? "Set Up…" : "Set up live readings"
+    }
+
+    var claudeMeasurementPopoverDetail: String {
+        switch claudeLiveUpgrade {
+        case .live:
+            return "Right now it's exact, current as of your last terminal session."
+        case .setupAvailable:
+            if isUnavailable(.claude) {
+                return "It's not set up yet. Set it up, then use Claude Code in the terminal for exact numbers."
+            }
+
+            return "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers."
+        case .awaitingSession:
+            return "Right now it's estimating. It'll go live when you next use Claude Code in the terminal."
         }
     }
 

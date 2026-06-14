@@ -43,6 +43,18 @@ You can also run the test suite directly:
 swift test
 ```
 
+## How PromptJuice Reads Usage
+
+PromptJuice shows each provider reading with a confidence label:
+
+**Live -> Earlier -> Estimate -> Not set up**
+
+For Claude, Live readings are exact usage numbers from Claude Code's status line. That status line runs only in the Claude Code terminal CLI, and PromptJuice receives the latest exact number after Claude Code finishes an assistant message. It is current as of your last terminal assistant message, not real-time.
+
+If the desktop app is your only Claude surface, PromptJuice stays on Estimate because the desktop app does not support status lines yet. The upstream Claude Code issue is [anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456).
+
+To get Live readings for Claude: open **Settings -> Claude -> Set up live readings**, approve the status line bridge, then use Claude Code in the terminal.
+
 ## Provider Integrations
 
 PromptJuice treats every provider snapshot as local state with a source and confidence label. Think of confidence as freshness: exact is fresh-squeezed, estimated is from concentrate, and stale is past its date.

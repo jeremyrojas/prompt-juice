@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -169,6 +170,7 @@ private struct ProviderSettingsRow: View {
     let isEnabled: Binding<Bool>
     let isToggleDisabled: Bool
     let onSetUpClaude: () -> Void
+    @State private var isClaudeInfoPresented = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -179,15 +181,38 @@ private struct ProviderSettingsRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.rawValue)
                     .font(.body)
-                Text(viewModel.settingsStatusText(for: provider))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text(viewModel.settingsStatusText(for: provider))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if provider == .claude, viewModel.shouldShowClaudeMeasurementInfo {
+                        Button {
+                            isClaudeInfoPresented = true
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("How this number is measured")
+                        .popover(isPresented: $isClaudeInfoPresented, arrowEdge: .trailing) {
+                            ClaudeMeasurementPopover(
+                                viewModel: viewModel,
+                                onSetUpClaude: {
+                                    isClaudeInfoPresented = false
+                                    onSetUpClaude()
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(minLength: 12)
 
-            if provider == .claude, viewModel.isUnavailable(.claude) {
-                Button("Set Up…", action: onSetUpClaude)
+            if provider == .claude, let title = viewModel.claudeSetupButtonTitle {
+                Button(title, action: onSetUpClaude)
                     .controlSize(.small)
             }
 
@@ -197,6 +222,46 @@ private struct ProviderSettingsRow: View {
                 .disabled(isToggleDisabled)
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct ClaudeMeasurementPopover: View {
+    @ObservedObject var viewModel: PromptJuiceViewModel
+    let onSetUpClaude: () -> Void
+
+    private static let learnMoreURL = URL(
+        string: "https://github.com/jtrojas24/prompt-juice#how-promptjuice-reads-usage"
+    )!
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("How this number is measured")
+                .font(.headline)
+
+            Text("PromptJuice reads Claude's exact usage from Claude Code's status line, which runs only in the terminal — not the desktop app yet. Otherwise it estimates from your local activity.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(viewModel.claudeMeasurementPopoverDetail)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button("Learn more") {
+                    NSWorkspace.shared.open(Self.learnMoreURL)
+                }
+
+                Spacer()
+
+                if let title = viewModel.claudeSetupButtonTitle {
+                    Button(title, action: onSetUpClaude)
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .font(.callout)
+        .padding(14)
+        .frame(width: 340)
     }
 }
 
@@ -308,6 +373,9 @@ private struct ClaudeSetupConsentView: View {
 
     private func planDetails(_ plan: ClaudeBridgeInstaller.Plan) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            Text("Live readings appear when you use Claude Code in the terminal. The desktop app doesn't support status lines yet.")
+                .foregroundStyle(.secondary)
+
             if plan.isWrappingExisting, let previousCommand = plan.previousCommand {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Your existing status line keeps working. PromptJuice runs first, then hands off.")

@@ -155,6 +155,19 @@ struct ClaudeBridgeInstaller {
         try plan.newSettingsData.write(to: settingsURL, options: .atomic)
     }
 
+    func isBridgeCurrent() -> Bool {
+        guard fileManager.fileExists(atPath: installedScriptURL.path),
+              let data = try? Data(contentsOf: settingsURL),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let statusLine = root["statusLine"] as? [String: Any],
+              let command = statusLine["command"] as? String else {
+            return false
+        }
+
+        return command.contains(installedScriptURL.path)
+    }
+
     /// Probe for `jq` on the user's PATH (a login shell, matching how Claude Code
     /// invokes the bridge).
     static func systemHasJQ() -> Bool {
