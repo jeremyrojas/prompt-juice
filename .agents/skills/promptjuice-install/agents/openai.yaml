@@ -1,0 +1,4 @@
+interface:
+  display_name: "PromptJuice Install"
+  short_description: "Install PromptJuice from source"
+  default_prompt: "Use $promptjuice-install to install PromptJuice from this repository."
