@@ -6,6 +6,38 @@ PromptJuice is a native macOS menu-bar app that shows Claude and Codex usage win
 
 It helps answer one question while you work: how much useful AI capacity is left before the current window resets?
 
+## Installation
+
+PromptJuice is early preview software. Install it from source with the bundled install workflow:
+
+```bash
+git clone https://github.com/jtrojas24/prompt-juice.git
+cd prompt-juice
+.agents/skills/promptjuice-install/scripts/install_promptjuice.sh
+```
+
+You can also point an AI coding agent at the repository and the install skill file:
+
+```text
+Go to https://github.com/jtrojas24/prompt-juice, read README.md, then use the install skill at .agents/skills/promptjuice-install/SKILL.md to set up PromptJuice on this Mac.
+```
+
+The install skill builds `PromptJuice.app`, copies it into `/Applications` when possible, falls back to `~/Applications`, and opens the app.
+
+To update later, run this from your local PromptJuice checkout:
+
+```bash
+.agents/skills/promptjuice-update/scripts/update_promptjuice.sh
+```
+
+Or ask your AI coding agent:
+
+```text
+Read .agents/skills/promptjuice-update/SKILL.md and follow it to update my installed PromptJuice app from GitHub.
+```
+
+If macOS shows a security prompt for this preview build, right-click `PromptJuice.app`, choose **Open**, and approve the prompt.
+
 ## Naming
 
 - **PromptJuice** is the app.
@@ -22,28 +54,6 @@ PromptJuice is an early open-source prototype. It currently includes:
 - Claude usage reads through a Claude Code statusline cache, with a local-log estimate fallback.
 - Source and confidence labels for exact, estimated, stale, and unavailable data.
 - Snooze, refresh, and threshold controls — set your sweet spot and get nudged when juice dips below it.
-
-## Install With AI Agents
-
-PromptJuice is early preview software. The fastest way to try it is to let an AI coding agent install it from source.
-
-Give Codex or another local coding agent this prompt:
-
-```text
-Clone https://github.com/jtrojas24/prompt-juice, open the checkout, read README.md, then read and follow the install workflow at .agents/skills/promptjuice-install/SKILL.md to set up PromptJuice on this Mac.
-```
-
-The install workflow lives at [.agents/skills/promptjuice-install/SKILL.md](.agents/skills/promptjuice-install/SKILL.md). It builds `PromptJuice.app`, copies it into `/Applications` when possible, falls back to `~/Applications`, and opens the app.
-
-When you want the latest version, give your agent this prompt from your local PromptJuice checkout:
-
-```text
-Read .agents/skills/promptjuice-update/SKILL.md and follow it to update my installed PromptJuice app from GitHub.
-```
-
-The update workflow lives at [.agents/skills/promptjuice-update/SKILL.md](.agents/skills/promptjuice-update/SKILL.md). It fetches the latest repo state, rebuilds the app, replaces the installed copy, and opens the app again.
-
-If macOS shows a security prompt for this preview build, right-click `PromptJuice.app`, choose **Open**, and approve the prompt.
 
 ## Build And Run
 
