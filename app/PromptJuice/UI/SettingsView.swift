@@ -373,29 +373,23 @@ private struct ClaudeSetupConsentView: View {
 
     private func planDetails(_ plan: ClaudeBridgeInstaller.Plan) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Live readings appear when you use Claude Code in the terminal. The desktop app doesn't support status lines yet.")
-                .foregroundStyle(.secondary)
+            supportingText("Live readings appear when you use Claude Code in the terminal. The desktop app doesn't support status lines yet.")
+
+            labeledCodeBox(label: "Claude settings file", text: plan.settingsPath.path)
 
             if plan.isWrappingExisting, let previousCommand = plan.previousCommand {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Your existing status line keeps working. PromptJuice runs first, then hands off.")
-                        .foregroundStyle(.secondary)
-                    codeBox(previousCommand)
+                    labeledCodeBox(label: "Current Claude status line", text: previousCommand)
+                    supportingText("The PromptJuice bridge writes the usage cache, then runs this command so your status line keeps rendering.")
                 }
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Command")
+                Text("New Claude statusLine.command")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                supportingText("PromptJuice will save this full command in Claude settings.")
                 codeBox(plan.newCommand)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("File")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                codeBox(plan.settingsPath.path)
             }
 
             if !plan.jqInstalled {
@@ -408,6 +402,22 @@ private struct ClaudeSetupConsentView: View {
         }
     }
 
+    private func labeledCodeBox(label: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            codeBox(text)
+        }
+    }
+
+    private func supportingText(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private func codeBox(_ text: String) -> some View {
         Text(text)
             .font(.system(.caption, design: .monospaced))
@@ -416,11 +426,11 @@ private struct ClaudeSetupConsentView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.secondary.opacity(0.10))
-        )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.secondary.opacity(0.10))
+            )
     }
 
     private func warningRow(_ text: String) -> some View {
