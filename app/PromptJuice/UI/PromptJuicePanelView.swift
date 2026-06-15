@@ -258,8 +258,7 @@ private struct ProviderUsageRow: View {
 
     /// Estimates get a leading `~`; the only visible tell that a reading is a guess.
     private var percentLabel: String {
-        let value = viewModel.remainingPercentValueText(for: snapshot)
-        return snapshot.confidence == .estimated ? "~\(value)" : value
+        viewModel.remainingPercentDisplayValueText(for: snapshot)
     }
 
     private var resetColor: Color {

@@ -222,6 +222,23 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testSeverityPresentationContract() {
+        let cases: [(UsageSeverity, String?, Bool, Bool, Int)] = [
+            (.healthy, nil, false, false, 0),
+            (.unavailable, nil, false, false, 1),
+            (.low, nil, false, false, 2),
+            (.empty, nil, false, false, 3),
+            (.useSoon, "Use soon", true, true, 4)
+        ]
+
+        for (severity, chipText, isAlerting, hasMenuBarTint, rank) in cases {
+            XCTAssertEqual(severity.chipText, chipText, "\(severity)")
+            XCTAssertEqual(severity.isAlerting, isAlerting, "\(severity)")
+            XCTAssertEqual(severity.menuBarTint != nil, hasMenuBarTint, "\(severity)")
+            XCTAssertEqual(severity.rank, rank, "\(severity)")
+        }
+    }
+
     private func makeSnapshot(
         identity: ProviderIdentity = .codex,
         usedPercent: Double,
