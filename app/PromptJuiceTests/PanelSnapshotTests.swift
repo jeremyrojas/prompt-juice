@@ -29,6 +29,29 @@ final class PanelSnapshotTests: XCTestCase {
         )
     }
 
+    func testRenderClaudeSetupSnapshots() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
+            "Set PROMPTJUICE_SNAPSHOT=1 to render setup snapshots."
+        )
+
+        let outputDirectory = URL(fileURLWithPath: "/tmp/promptjuice-verification", isDirectory: true)
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
+        try renderClaudeSetup(
+            "preview-nostatusline",
+            plan: claudeSetupPlan(isWrappingExisting: false, jqInstalled: true),
+            showsCommand: true,
+            outputDirectory: outputDirectory
+        )
+        try renderClaudeSetup(
+            "preview-jqmissing",
+            plan: claudeSetupPlan(isWrappingExisting: true, jqInstalled: false),
+            showsCommand: false,
+            outputDirectory: outputDirectory
+        )
+    }
+
     private func render(
         _ name: String,
         _ client: any UsageProviderClient,
@@ -85,6 +108,65 @@ final class PanelSnapshotTests: XCTestCase {
         let url = URL(fileURLWithPath: "/tmp/promptjuice-panel-\(name).png")
         try png.write(to: url)
         print("wrote \(url.path)")
+    }
+
+    private func renderClaudeSetup(
+        _ name: String,
+        plan: ClaudeBridgeInstaller.Plan,
+        showsCommand: Bool,
+        outputDirectory: URL
+    ) throws {
+        let content = ClaudeSetupPlanPreviewShell(
+            plan: plan,
+            showsCommand: showsCommand
+        )
+        .environment(\.colorScheme, .dark)
+
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+
+        guard
+            let image = renderer.nsImage,
+            let tiff = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiff),
+            let png = bitmap.representation(using: .png, properties: [:])
+        else {
+            throw XCTSkip("ImageRenderer produced no image on this platform.")
+        }
+
+        let url = outputDirectory.appendingPathComponent("\(name).png")
+        try png.write(to: url)
+        print("wrote \(url.path)")
+    }
+
+    private func claudeSetupPlan(
+        isWrappingExisting: Bool,
+        jqInstalled: Bool
+    ) -> ClaudeBridgeInstaller.Plan {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let settingsPath = home
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("settings.json")
+        let installedScriptPath = home
+            .appendingPathComponent("Library/Application Support/PromptJuice", isDirectory: true)
+            .appendingPathComponent("claude-statusline-bridge.sh")
+        let previousCommand = isWrappingExisting ? "bash ~/.claude/statusline-command.sh" : nil
+        let newCommand: String
+        if let previousCommand {
+            newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(previousCommand)' bash '\(installedScriptPath.path)'"
+        } else {
+            newCommand = "bash '\(installedScriptPath.path)'"
+        }
+
+        return ClaudeBridgeInstaller.Plan(
+            settingsPath: settingsPath,
+            installedScriptPath: installedScriptPath,
+            isWrappingExisting: isWrappingExisting,
+            previousCommand: previousCommand,
+            newCommand: newCommand,
+            newSettingsData: Data(),
+            jqInstalled: jqInstalled
+        )
     }
 }
 
