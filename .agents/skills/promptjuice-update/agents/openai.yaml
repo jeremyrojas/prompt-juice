@@ -1,0 +1,4 @@
+interface:
+  display_name: "PromptJuice Update"
+  short_description: "Update a local PromptJuice app"
+  default_prompt: "Use $promptjuice-update to update PromptJuice from this repository."
