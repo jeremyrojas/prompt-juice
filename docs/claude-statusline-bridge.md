@@ -34,6 +34,8 @@ Users without an existing statusline command can run only the bridge:
 }
 ```
 
+If you create `~/.claude/statusline-command.sh` after PromptJuice setup, the bridge will automatically delegate to it after writing PromptJuice's usage cache.
+
 Claude Code reloads statusline changes on the next interaction. After a Claude assistant response, verify the cache:
 
 ```bash
