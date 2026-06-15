@@ -339,10 +339,11 @@ private struct ClaudeSetupConsentView: View {
     @State private var plan: ClaudeBridgeInstaller.Plan?
     @State private var errorMessage: String?
     @State private var isApplying = false
+    @State private var showsCommand = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Set up Claude usage")
+            Text("Set up live Claude readings")
                 .font(.title3.weight(.semibold))
 
             if let plan {
@@ -359,7 +360,7 @@ private struct ClaudeSetupConsentView: View {
                 Button("Cancel") {
                     isPresented = false
                 }
-                Button("Add to Claude Code") {
+                Button("Enable Live Readings") {
                     applyPlan()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -372,65 +373,11 @@ private struct ClaudeSetupConsentView: View {
     }
 
     private func planDetails(_ plan: ClaudeBridgeInstaller.Plan) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Live readings appear when you use Claude Code in the terminal. The desktop app doesn't support status lines yet.")
-                .foregroundStyle(.secondary)
-
-            if plan.isWrappingExisting, let previousCommand = plan.previousCommand {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Your existing status line keeps working. PromptJuice runs first, then hands off.")
-                        .foregroundStyle(.secondary)
-                    codeBox(previousCommand)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Command")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                codeBox(plan.newCommand)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("File")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                codeBox(plan.settingsPath.path)
-            }
-
-            if !plan.jqInstalled {
-                warningRow("jq is required. Install it with: brew install jq")
-            }
-
-            if let errorMessage {
-                errorRow(errorMessage)
-            }
-        }
-    }
-
-    private func codeBox(_ text: String) -> some View {
-        Text(text)
-            .font(.system(.caption, design: .monospaced))
-            .textSelection(.enabled)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.secondary.opacity(0.10))
+        ClaudeSetupPlanBody(
+            plan: plan,
+            errorMessage: errorMessage,
+            showsCommand: $showsCommand
         )
-    }
-
-    private func warningRow(_ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text(text)
-                .foregroundStyle(.secondary)
-        }
-        .font(.caption)
     }
 
     private func errorRow(_ text: String) -> some View {
@@ -471,3 +418,366 @@ private struct ClaudeSetupConsentView: View {
         }
     }
 }
+
+private struct ClaudeSetupPlanBody: View {
+    let plan: ClaudeBridgeInstaller.Plan
+    let errorMessage: String?
+    @Binding var showsCommand: Bool
+
+    private var introText: String {
+        if plan.isWrappingExisting {
+            return "PromptJuice adds a small bridge to Claude Code so it can read your exact usage. Your current status line keeps working — the bridge runs it right after."
+        }
+
+        return "PromptJuice adds a small bridge to Claude Code so it can read your exact usage."
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(introText)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ClaudeSetupTrustRow(
+                systemImage: "lock",
+                text: "Reads only your usage percentage and reset time — never your prompts, code, or files."
+            )
+            ClaudeSetupTrustRow(
+                systemImage: "terminal",
+                text: "Live readings need Claude Code in the terminal — the desktop app isn't supported yet."
+            )
+
+            ClaudeSetupUpdatesRow(settingsPath: plan.settingsPath.path)
+
+            DisclosureGroup(isExpanded: $showsCommand) {
+                ClaudeSetupCommandDisclosureBody(plan: plan)
+                    .padding(.top, 6)
+            } label: {
+                Text(showsCommand ? "Hide the exact change" : "Show the exact change")
+            }
+
+            if !plan.jqInstalled {
+                ClaudeSetupJQWarning()
+            }
+
+            if let errorMessage {
+                ClaudeSetupErrorRow(text: errorMessage)
+            }
+        }
+    }
+}
+
+private struct ClaudeSetupTrustRow: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: systemImage)
+                .frame(width: 16)
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct ClaudeSetupUpdatesRow: View {
+    let settingsPath: String
+
+    private var abbreviatedPath: String {
+        (settingsPath as NSString).abbreviatingWithTildeInPath
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+
+            Text("Updates")
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 8)
+
+            Text(abbreviatedPath)
+                .font(.system(.caption, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .font(.callout)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.10))
+        )
+    }
+}
+
+private struct ClaudeSetupCommandDisclosureBody: View {
+    let plan: ClaudeBridgeInstaller.Plan
+
+    private static let userCommandHighlight = Color.accentColor.opacity(0.28)
+    private static let bridgeHighlight = Color.green.opacity(0.22)
+
+    private var homePath: String {
+        FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
+    private var displayCommand: String {
+        plan.newCommand.replacingOccurrences(of: homePath, with: "~")
+    }
+
+    private var displayBridgePath: String {
+        plan.installedScriptPath.path.replacingOccurrences(of: homePath, with: "~")
+    }
+
+    private var displayPreviousCommand: String? {
+        plan.previousCommand?.replacingOccurrences(of: homePath, with: "~")
+    }
+
+    private var highlightedCommand: AttributedString {
+        var command = AttributedString(displayCommand)
+
+        if let range = command.range(of: displayBridgePath) {
+            command[range].backgroundColor = Self.bridgeHighlight
+        }
+
+        if plan.isWrappingExisting,
+           let displayPreviousCommand,
+           let range = command.range(of: displayPreviousCommand) {
+            command[range].backgroundColor = Self.userCommandHighlight
+        }
+
+        return command
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            commandCaption
+            codeBox(highlightedCommand)
+            legend
+        }
+    }
+
+    private var commandCaption: some View {
+        (
+            Text("PromptJuice sets ")
+            + Text("statusLine.command").font(.system(.footnote, design: .monospaced))
+            + Text(" in ")
+            + Text("~/.claude/settings.json").font(.system(.footnote, design: .monospaced))
+            + Text(" to:")
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .lineLimit(nil)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var legend: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if plan.isWrappingExisting {
+                legendRow(
+                    color: Self.userCommandHighlight,
+                    text: "Your command — kept, runs unchanged"
+                )
+            }
+            legendRow(
+                color: Self.bridgeHighlight,
+                text: "PromptJuice bridge — installed in ~/Library/Application Support/PromptJuice"
+            )
+        }
+    }
+
+    private func codeBox(_ text: AttributedString) -> some View {
+        Text(text)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.secondary.opacity(0.10))
+            )
+    }
+
+    private func legendRow(color: Color, text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 10, height: 10)
+
+            Text(text)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+    }
+}
+
+private struct ClaudeSetupJQWarning: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            warningText
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.callout)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.orange.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.orange.opacity(0.30))
+        )
+    }
+
+    private var warningText: Text {
+        Text("PromptJuice needs ")
+        + Text("jq").font(.system(.callout, design: .monospaced))
+        + Text(" to read usage. Install it with ")
+        + Text("brew install jq").font(.system(.callout, design: .monospaced))
+        + Text(", then try again.")
+    }
+}
+
+private struct ClaudeSetupErrorRow: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(text)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+    }
+}
+
+#if DEBUG
+struct ClaudeSetupPlanPreviewShell: View {
+    let plan: ClaudeBridgeInstaller.Plan
+    @State private var showsCommand: Bool
+
+    init(plan: ClaudeBridgeInstaller.Plan, showsCommand: Bool = false) {
+        self.plan = plan
+        _showsCommand = State(initialValue: showsCommand)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Set up live Claude readings")
+                .font(.title3.weight(.semibold))
+
+            ClaudeSetupPlanBody(
+                plan: plan,
+                errorMessage: nil,
+                showsCommand: $showsCommand
+            )
+
+            HStack {
+                Spacer()
+                Button("Cancel") {}
+                Button("Enable Live Readings") {}
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 460)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+private enum ClaudeSetupPreviewPlans {
+    private static let home = FileManager.default.homeDirectoryForCurrentUser
+
+    private static var settingsPath: URL {
+        home
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("settings.json")
+    }
+
+    private static var installedScriptPath: URL {
+        home
+            .appendingPathComponent("Library/Application Support/PromptJuice", isDirectory: true)
+            .appendingPathComponent("claude-statusline-bridge.sh")
+    }
+
+    static func wrapping(jqInstalled: Bool) -> ClaudeBridgeInstaller.Plan {
+        let previousCommand = "bash ~/.claude/statusline-command.sh"
+        let newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(previousCommand)' bash '\(installedScriptPath.path)'"
+
+        return ClaudeBridgeInstaller.Plan(
+            settingsPath: settingsPath,
+            installedScriptPath: installedScriptPath,
+            isWrappingExisting: true,
+            previousCommand: previousCommand,
+            newCommand: newCommand,
+            newSettingsData: Data(),
+            jqInstalled: jqInstalled
+        )
+    }
+
+    static func additive(jqInstalled: Bool) -> ClaudeBridgeInstaller.Plan {
+        ClaudeBridgeInstaller.Plan(
+            settingsPath: settingsPath,
+            installedScriptPath: installedScriptPath,
+            isWrappingExisting: false,
+            previousCommand: nil,
+            newCommand: "bash '\(installedScriptPath.path)'",
+            newSettingsData: Data(),
+            jqInstalled: jqInstalled
+        )
+    }
+}
+
+#Preview("Claude setup — wrapping") {
+    ClaudeSetupPlanPreviewShell(
+        plan: ClaudeSetupPreviewPlans.wrapping(jqInstalled: true)
+    )
+}
+
+#Preview("Claude setup — wrapping, jq missing") {
+    ClaudeSetupPlanPreviewShell(
+        plan: ClaudeSetupPreviewPlans.wrapping(jqInstalled: false)
+    )
+}
+
+#Preview("Claude setup — no status line") {
+    ClaudeSetupPlanPreviewShell(
+        plan: ClaudeSetupPreviewPlans.additive(jqInstalled: true)
+    )
+}
+
+#Preview("Claude setup — wrapping expanded") {
+    ClaudeSetupPlanPreviewShell(
+        plan: ClaudeSetupPreviewPlans.wrapping(jqInstalled: true),
+        showsCommand: true
+    )
+}
+
+#Preview("Claude setup — no status line expanded") {
+    ClaudeSetupPlanPreviewShell(
+        plan: ClaudeSetupPreviewPlans.additive(jqInstalled: true),
+        showsCommand: true
+    )
+}
+#endif
