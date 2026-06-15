@@ -193,7 +193,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         var parts = visibleSnapshots.map { snapshot -> String in
             snapshot.isAvailable
-                ? "\(snapshot.displayName) \(remainingPercentValueText(for: snapshot))"
+                ? "\(snapshot.displayName) \(remainingPercentDisplayValueText(for: snapshot))"
                 : unavailableHeaderSubtitle(for: snapshot)
         }
 
@@ -226,7 +226,7 @@ final class PromptJuiceViewModel: ObservableObject {
             }
 
             if shouldUseSoon(for: alertSnapshot) {
-                return "\(alertSnapshot.displayName): \(remainingPercentValueText(for: alertSnapshot)) to use"
+                return "\(alertSnapshot.displayName): \(remainingPercentDisplayValueText(for: alertSnapshot)) to use"
             }
 
             return "\(alertSnapshot.displayName) has \(remainingPercentText(for: alertSnapshot))"
@@ -419,6 +419,11 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return "\(Int(snapshot.remainingPercent.rounded()))%"
+    }
+
+    func remainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
+        let value = remainingPercentValueText(for: snapshot)
+        return snapshot.confidence == .estimated ? "~\(value)" : value
     }
 
     func remainingText(for snapshot: UsageSnapshot) -> String {
