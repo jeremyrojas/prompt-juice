@@ -1,6 +1,6 @@
 ---
 name: promptjuice-install
-description: Install PromptJuice from a checked-out GitHub repository on macOS. Use when a user asks Codex or another AI coding agent to install PromptJuice, build PromptJuice.app, copy it into Applications, open it, or follow the repository's AI-agent installation instructions.
+description: Install or set up PromptJuice from a checked-out GitHub repository on macOS. Use when a user asks Codex or another AI coding agent to install PromptJuice, set up PromptJuice, build PromptJuice.app, copy it into Applications, open it, or follow the repository's AI-agent installation instructions.
 ---
 
 # PromptJuice Install
