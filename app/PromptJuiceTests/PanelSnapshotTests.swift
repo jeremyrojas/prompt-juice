@@ -52,6 +52,32 @@ final class PanelSnapshotTests: XCTestCase {
         )
     }
 
+    func testRenderClaudeAwaitingSessionUXSnapshots() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
+            "Set PROMPTJUICE_SNAPSHOT=1 to render awaiting-session snapshots."
+        )
+
+        let viewModel = awaitingSessionViewModel()
+
+        try renderView(
+            "settings-awaiting",
+            content: SettingsProviderRowPreviewShell(viewModel: viewModel)
+                .environment(\.colorScheme, .dark)
+        )
+        try renderView(
+            "popover-awaiting",
+            content: ClaudeMeasurementPopoverPreviewShell(viewModel: viewModel)
+                .environment(\.colorScheme, .dark)
+        )
+        try renderView(
+            "sheet-success",
+            content: ClaudeSetupSuccessPreviewShell()
+                .environment(\.colorScheme, .dark)
+        )
+        try renderAwaitingSessionPanel(viewModel: viewModel)
+    }
+
     private func render(
         _ name: String,
         _ client: any UsageProviderClient,
@@ -137,6 +163,66 @@ final class PanelSnapshotTests: XCTestCase {
         let url = outputDirectory.appendingPathComponent("\(name).png")
         try png.write(to: url)
         print("wrote \(url.path)")
+    }
+
+    private func renderView<Content: View>(
+        _ name: String,
+        content: Content
+    ) throws {
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+
+        guard
+            let image = renderer.nsImage,
+            let tiff = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiff),
+            let png = bitmap.representation(using: .png, properties: [:])
+        else {
+            throw XCTSkip("ImageRenderer produced no image on this platform.")
+        }
+
+        let url = URL(fileURLWithPath: "/tmp/promptjuice-\(name).png")
+        try png.write(to: url)
+        print("wrote \(url.path)")
+    }
+
+    private func renderAwaitingSessionPanel(viewModel: PromptJuiceViewModel) throws {
+        let panelHeight = PromptJuicePanelMetrics.height(
+            mode: viewModel.mode,
+            rowCount: viewModel.visibleSnapshots.count
+        )
+        let content = ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.12, blue: 0.16),
+                    Color(red: 0.04, green: 0.05, blue: 0.08)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            PromptJuicePanelView(viewModel: viewModel, onClose: {}, onSnooze: {})
+                .padding(40)
+        }
+        .frame(width: 464, height: panelHeight + 80)
+
+        try renderView("panel-awaiting", content: content)
+    }
+
+    private func awaitingSessionViewModel() -> PromptJuiceViewModel {
+        let suiteName = "PanelSnapshotTests.awaiting-session.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: EstimateFixtureClient(),
+            now: { self.now },
+            isClaudeBridgeCurrent: { true }
+        )
+        viewModel.showManualCheck()
+        return viewModel
     }
 
     private func claudeSetupPlan(

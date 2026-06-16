@@ -83,11 +83,13 @@ script and that file exists.
 |---|---|---|---|---|---|---|
 | 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | open Settings |
 | 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
-| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity · updates when you use Claude Code in the terminal | open Settings |
+| 3 | estimated, bridge current | Estimate · waiting for terminal session + ⓘ | — | ~41% | Estimated from local Claude Code activity · use Claude Code in the terminal to go live | open Settings |
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
 | 5 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
 | 6 | unavailable, bridge current | Not set up yet + ⓘ | — | — ghost | (existing status detail) | open Settings |
 | 7 | refreshing | Checking… | — | (prev) | — | — |
+
+On apply, the setup sheet shows a success + next-step confirmation ("You're almost set") before the user returns to Settings.
 
 Root cause: Live needs Claude Code's status line, terminal CLI only; desktop app ignores
 `statusLine` ([anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456)).

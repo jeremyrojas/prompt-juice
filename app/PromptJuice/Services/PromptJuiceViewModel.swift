@@ -488,7 +488,7 @@ final class PromptJuiceViewModel: ObservableObject {
                 case .setupAvailable:
                     return "Estimated from local Claude Code activity · open Settings to set up live"
                 case .awaitingSession:
-                    return "Estimated from local Claude Code activity · updates when you use Claude Code in the terminal"
+                    return "Estimated from local Claude Code activity · use Claude Code in the terminal to go live"
                 }
             case .stale:
                 return "Read from Claude Code · \(clockTime(snapshot.updatedAt))"
@@ -549,7 +549,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
             return "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers."
         case .awaitingSession:
-            return "Right now it's estimating. It'll go live when you next use Claude Code in the terminal."
+            return "The bridge is installed. You're seeing a local estimate until you next use Claude Code in the terminal, which captures the exact number."
         }
     }
 
@@ -573,6 +573,9 @@ final class PromptJuiceViewModel: ObservableObject {
             }
             return "Live"
         case .estimated:
+            if provider == .claude, claudeLiveUpgrade == .awaitingSession {
+                return "Estimate · waiting for terminal session"
+            }
             return "Estimate"
         case .stale:
             return "Read earlier · \(clockTime(snapshot.updatedAt))"

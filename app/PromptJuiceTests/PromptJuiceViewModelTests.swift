@@ -281,6 +281,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .setupAvailable)
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Estimate")
         XCTAssertEqual(viewModel.claudeSetupButtonTitle, "Set up live readings")
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
@@ -305,14 +306,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Estimate · waiting for terminal session")
         XCTAssertNil(viewModel.claudeSetupButtonTitle)
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "Estimated from local Claude Code activity · updates when you use Claude Code in the terminal"
+            "Estimated from local Claude Code activity · use Claude Code in the terminal to go live"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
-            "Right now it's estimating. It'll go live when you next use Claude Code in the terminal."
+            "The bridge is installed. You're seeing a local estimate until you next use Claude Code in the terminal, which captures the exact number."
         )
     }
 
