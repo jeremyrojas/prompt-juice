@@ -340,36 +340,43 @@ private struct ClaudeSetupConsentView: View {
     @State private var errorMessage: String?
     @State private var isApplying = false
     @State private var showsCommand = false
+    @State private var didInstall = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Set up live Claude readings")
-                .font(.title3.weight(.semibold))
-
-            if let plan {
-                planDetails(plan)
-            } else if let errorMessage {
-                errorRow(errorMessage)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
+        if didInstall {
+            ClaudeSetupSuccessView {
+                isPresented = false
             }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Set up live Claude readings")
+                    .font(.title3.weight(.semibold))
 
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    isPresented = false
+                if let plan {
+                    planDetails(plan)
+                } else if let errorMessage {
+                    errorRow(errorMessage)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
                 }
-                Button("Enable Live Readings") {
-                    applyPlan()
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                    Button("Enable Live Readings") {
+                        applyPlan()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(plan == nil || isApplying)
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(plan == nil || isApplying)
             }
+            .padding(22)
+            .frame(width: 460)
+            .onAppear(perform: loadPlan)
         }
-        .padding(22)
-        .frame(width: 460)
-        .onAppear(perform: loadPlan)
     }
 
     private func planDetails(_ plan: ClaudeBridgeInstaller.Plan) -> some View {
@@ -411,11 +418,40 @@ private struct ClaudeSetupConsentView: View {
         do {
             try installer.apply(plan)
             viewModel.refreshUsage()
-            isPresented = false
+            didInstall = true
         } catch {
             errorMessage = error.localizedDescription
             isApplying = false
         }
+    }
+}
+
+private struct ClaudeSetupSuccessView: View {
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.green)
+
+                Text("You're almost set")
+                    .font(.title3.weight(.semibold))
+            }
+
+            Text("Open Claude Code in your terminal once, and PromptJuice switches Claude from an estimate to the exact number.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Done", action: onDone)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 460)
     }
 }
 
@@ -728,6 +764,81 @@ struct ClaudeSetupPlanPreviewShell: View {
     }
 }
 
+struct ClaudeSetupSuccessPreviewShell: View {
+    var body: some View {
+        ClaudeSetupSuccessView {}
+            .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+struct ClaudeMeasurementPopoverPreviewShell: View {
+    @StateObject private var viewModel: PromptJuiceViewModel
+
+    init(viewModel: PromptJuiceViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
+
+    var body: some View {
+        ClaudeMeasurementPopover(viewModel: viewModel, onSetUpClaude: {})
+            .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+struct SettingsProviderRowPreviewShell: View {
+    @StateObject private var viewModel: PromptJuiceViewModel
+    @State private var isEnabled = true
+
+    init(viewModel: PromptJuiceViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.orange)
+                .frame(width: 9, height: 9)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Claude")
+                    .font(.body)
+                HStack(spacing: 4) {
+                    Text(viewModel.settingsStatusText(for: .claude))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            Button {
+                isEnabled.toggle()
+            } label: {
+                ZStack(alignment: isEnabled ? .trailing : .leading) {
+                    Capsule()
+                        .fill(isEnabled ? Color.accentColor : Color.secondary.opacity(0.24))
+                    Circle()
+                        .fill(Color.white.opacity(0.92))
+                        .padding(2)
+                }
+                .frame(width: 34, height: 20)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .frame(width: 390)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+        .padding(20)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
 private enum ClaudeSetupPreviewPlans {
     private static let home = FileManager.default.homeDirectoryForCurrentUser
 
@@ -801,5 +912,9 @@ private enum ClaudeSetupPreviewPlans {
         plan: ClaudeSetupPreviewPlans.additive(jqInstalled: true),
         showsCommand: true
     )
+}
+
+#Preview("Claude setup — success") {
+    ClaudeSetupSuccessPreviewShell()
 }
 #endif
