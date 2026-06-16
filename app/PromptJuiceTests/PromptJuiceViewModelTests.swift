@@ -464,6 +464,30 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testFirstRunFinishPersistsClosesAndInvokesCompletion() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: FixtureUsageProviderClient(scenario: .quiet),
+            now: { Self.fixedNow }
+        )
+        let completion = expectation(description: "first run completion")
+        let controller = SettingsWindowController(viewModel: viewModel) {
+            completion.fulfill()
+        }
+
+        controller.showFirstRun()
+        XCTAssertTrue(controller.window?.isVisible == true)
+
+        controller.finishFirstRun()
+        await fulfillment(of: [completion], timeout: 1)
+
+        XCTAssertFalse(fixture.store.isFirstRun)
+        XCTAssertFalse(controller.window?.isVisible == true)
+        controller.close()
+    }
+
     func testLaunchAlertDecisionUsesBackgroundRefreshResult() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
