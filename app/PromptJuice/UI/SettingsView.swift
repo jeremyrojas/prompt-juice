@@ -450,11 +450,33 @@ private struct ClaudeSetupPlanBody: View {
 
             ClaudeSetupUpdatesRow(settingsPath: plan.settingsPath.path)
 
-            DisclosureGroup(isExpanded: $showsCommand) {
-                ClaudeSetupCommandDisclosureBody(plan: plan)
-                    .padding(.top, 6)
-            } label: {
-                Text(showsCommand ? "Hide the exact change" : "Show the exact change")
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showsCommand.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showsCommand ? 90 : 0))
+                        Text("The exact change")
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("The exact change")
+                .accessibilityValue(showsCommand ? "Expanded" : "Collapsed")
+                .accessibilityHint("Shows the exact line PromptJuice adds to your Claude settings.")
+
+                if showsCommand {
+                    ClaudeSetupCommandDisclosureBody(plan: plan)
+                        .padding(.top, 2)
+                        .transition(.opacity)
+                }
             }
 
             if !plan.jqInstalled {
