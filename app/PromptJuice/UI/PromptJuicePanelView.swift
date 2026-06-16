@@ -205,14 +205,22 @@ private struct ProviderUsageRow: View {
 
             resetLabel
         } else {
-            Text("Not measured yet")
+            Text(unavailableLabel)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.4))
 
-            if snapshot.provider == .claude {
+            if snapshot.provider == .claude, !isRefreshing {
                 setUpCue
             }
         }
+    }
+
+    private var isRefreshing: Bool {
+        viewModel.isRefreshing(snapshot.provider)
+    }
+
+    private var unavailableLabel: String {
+        isRefreshing ? "Checking…" : "Not measured yet"
     }
 
     private var setUpCue: some View {
@@ -302,7 +310,7 @@ private struct ProviderUsageRow: View {
     private var accessibilityValue: String {
         snapshot.isAvailable
             ? "\(viewModel.percentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
-            : "Not measured yet"
+            : unavailableLabel
     }
 }
 

@@ -136,6 +136,32 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
     }
 
+    func testManualVerdictShowsCheckingWhileVisibleProvidersRefresh() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.refreshingUnavailableSnapshots,
+            refreshedSnapshots: Self.genuineUnavailableSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(viewModel.isCheckingUsage)
+        XCTAssertEqual(viewModel.headline, "Checking usage…")
+        XCTAssertEqual(viewModel.detail, "Just a moment…")
+
+        viewModel.showManualCheck()
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.genuineUnavailableSnapshots, in: viewModel)
+
+        XCTAssertFalse(viewModel.isCheckingUsage)
+        XCTAssertEqual(viewModel.headline, "Not measured yet")
+        XCTAssertEqual(viewModel.detail, "Usage unavailable")
+    }
+
     func testManualSubtitleNamesUnavailableClaudeAsNotSetUp() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -693,6 +719,25 @@ final class PromptJuiceViewModelTests: XCTestCase {
             confidence: .unavailable,
             updatedAt: fixedNow,
             statusDetail: "Refreshing usage"
+        )
+    ]
+
+    private static let genuineUnavailableSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Claude statusline and local usage unavailable"
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexAppServer,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Codex app-server unavailable"
         )
     ]
 

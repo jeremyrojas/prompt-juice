@@ -19,6 +19,7 @@ final class PanelSnapshotTests: XCTestCase {
         try render("usesoon", FixtureUsageProviderClient(scenario: .underusedCodex))
         try render("low", LowFixtureClient())
         try render("estimate", EstimateFixtureClient())
+        try render("checking", CheckingFixtureClient())
         try render("notmeasured", NotMeasuredFixtureClient())
         try render("clash", ClashFixtureClient())
         try render("codexonly", CodexOnlyFixtureClient(), enabledProviders: [.codex])
@@ -336,6 +337,31 @@ private struct NotMeasuredFixtureClient: UsageProviderClient {
                 statusDetail: "Claude statusline and local usage unavailable"
             ),
             codexExact(now)
+        ]
+    }
+}
+
+private struct CheckingFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .fixture
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .unavailable,
+                source: .claudeStatusline,
+                confidence: .unavailable,
+                updatedAt: now,
+                statusDetail: "Refreshing usage"
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .unavailable,
+                source: .codexAppServer,
+                confidence: .unavailable,
+                updatedAt: now,
+                statusDetail: "Refreshing usage"
+            )
         ]
     }
 }
