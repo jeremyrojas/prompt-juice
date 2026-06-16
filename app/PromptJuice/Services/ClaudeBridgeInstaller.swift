@@ -57,7 +57,7 @@ struct ClaudeBridgeInstaller {
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         bundledScriptURL: URL? = Bundle.main.url(forResource: "claude-statusline-bridge", withExtension: "sh"),
         fileManager: FileManager = .default,
-        jqProbe: @escaping () -> Bool = ClaudeBridgeInstaller.systemHasJQ
+        jqProbe: @escaping () -> Bool = { ClaudeBridgeInstaller.systemHasJQ() }
     ) {
         self.homeDirectory = homeDirectory
         self.bundledScriptURL = bundledScriptURL
@@ -168,21 +168,32 @@ struct ClaudeBridgeInstaller {
         return command.contains(installedScriptURL.path)
     }
 
-    /// Probe for `jq` on the user's PATH (a login shell, matching how Claude Code
-    /// invokes the bridge).
-    static func systemHasJQ() -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-lc", "command -v jq"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
+    /// Probe for `jq` without spawning a process while SwiftUI builds the setup sheet.
+    static func systemHasJQ(
+        environmentPath: String? = ProcessInfo.processInfo.environment["PATH"],
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> Bool {
+        let pathDirectories = environmentPath?
+            .split(separator: ":", omittingEmptySubsequences: true)
+            .map(String.init) ?? []
+        let fallbackDirectories = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin"
+        ]
+        var visited = Set<String>()
+
+        for directory in pathDirectories + fallbackDirectories where visited.insert(directory).inserted {
+            let candidate = URL(fileURLWithPath: directory)
+                .appendingPathComponent("jq")
+                .path
+            if isExecutable(candidate) {
+                return true
+            }
         }
+
+        return false
     }
 
     private func wrappedStatusLineCommand(from command: String) -> String? {
