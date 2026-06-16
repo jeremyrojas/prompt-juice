@@ -16,11 +16,16 @@ final class SettingsWindowState: ObservableObject {
 @MainActor
 final class SettingsWindowController: NSWindowController {
     private let viewModel: PromptJuiceViewModel
+    private let onFirstRunFinished: () -> Void
     private let state = SettingsWindowState()
     private var didCenter = false
 
-    init(viewModel: PromptJuiceViewModel) {
+    init(
+        viewModel: PromptJuiceViewModel,
+        onFirstRunFinished: @escaping () -> Void = {}
+    ) {
         self.viewModel = viewModel
+        self.onFirstRunFinished = onFirstRunFinished
         super.init(window: nil)
     }
 
@@ -92,7 +97,7 @@ final class SettingsWindowController: NSWindowController {
                 viewModel: viewModel,
                 state: state,
                 onFirstRunContinue: { [weak self] in
-                    self?.completeFirstRun()
+                    self?.finishFirstRun()
                 }
             )
         )
@@ -100,9 +105,12 @@ final class SettingsWindowController: NSWindowController {
         return window
     }
 
-    private func completeFirstRun() {
+    func finishFirstRun() {
         viewModel.completeFirstRun(enabledProviders: state.firstRunEnabledProviders)
         window?.close()
         state.mode = .settings
+        DispatchQueue.main.async { [onFirstRunFinished] in
+            onFirstRunFinished()
+        }
     }
 }

@@ -4,7 +4,13 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = PromptJuiceViewModel()
-    private lazy var settingsWindowController = SettingsWindowController(viewModel: viewModel)
+    private lazy var settingsWindowController = SettingsWindowController(
+        viewModel: viewModel,
+        onFirstRunFinished: { [weak self] in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.showUsage()
+        }
+    )
     private lazy var panelController = JuicebarPanelController(
         viewModel: viewModel,
         onClaudeSettingsRequested: { [weak self] presentingSetup in

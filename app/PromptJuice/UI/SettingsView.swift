@@ -171,6 +171,19 @@ private struct ProviderSettingsRow: View {
     let isToggleDisabled: Bool
     let onSetUpClaude: () -> Void
     @State private var isClaudeInfoPresented = false
+    @State private var isClaudeInfoPinned = false
+    @State private var closeClaudeInfoTask: Task<Void, Never>?
+
+    private var claudeInfoPresentation: Binding<Bool> {
+        Binding {
+            isClaudeInfoPresented
+        } set: { isPresented in
+            isClaudeInfoPresented = isPresented
+            if !isPresented {
+                isClaudeInfoPinned = false
+            }
+        }
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -188,7 +201,9 @@ private struct ProviderSettingsRow: View {
 
                     if provider == .claude, viewModel.shouldShowClaudeMeasurementInfo {
                         Button {
-                            isClaudeInfoPresented = true
+                            closeClaudeInfoTask?.cancel()
+                            isClaudeInfoPinned.toggle()
+                            isClaudeInfoPresented = isClaudeInfoPinned
                         } label: {
                             Image(systemName: "info.circle")
                                 .font(.system(size: 11, weight: .semibold))
@@ -196,11 +211,15 @@ private struct ProviderSettingsRow: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("How this number is measured")
-                        .popover(isPresented: $isClaudeInfoPresented, arrowEdge: .trailing) {
+                        .onHover { isHovering in
+                            handleClaudeInfoHover(isHovering)
+                        }
+                        .popover(isPresented: claudeInfoPresentation, arrowEdge: .trailing) {
                             ClaudeMeasurementPopover(
                                 viewModel: viewModel,
                                 onSetUpClaude: {
                                     isClaudeInfoPresented = false
+                                    isClaudeInfoPinned = false
                                     onSetUpClaude()
                                 }
                             )
@@ -222,6 +241,29 @@ private struct ProviderSettingsRow: View {
                 .disabled(isToggleDisabled)
         }
         .padding(.vertical, 2)
+        .onDisappear {
+            closeClaudeInfoTask?.cancel()
+        }
+    }
+
+    private func handleClaudeInfoHover(_ isHovering: Bool) {
+        closeClaudeInfoTask?.cancel()
+
+        if isHovering {
+            isClaudeInfoPresented = true
+            return
+        }
+
+        guard !isClaudeInfoPinned else {
+            return
+        }
+
+        closeClaudeInfoTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            if !isClaudeInfoPinned {
+                isClaudeInfoPresented = false
+            }
+        }
     }
 }
 
