@@ -165,6 +165,33 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertFalse(present.summary.contains("jq isn't installed"))
     }
 
+    func testSystemHasJQUsesEnvironmentPath() {
+        let found = ClaudeBridgeInstaller.systemHasJQ(
+            environmentPath: "/tmp/missing:/tmp/tools",
+            isExecutable: { $0 == "/tmp/tools/jq" }
+        )
+
+        XCTAssertTrue(found)
+    }
+
+    func testSystemHasJQUsesHomebrewFallbacks() {
+        let found = ClaudeBridgeInstaller.systemHasJQ(
+            environmentPath: "",
+            isExecutable: { $0 == "/opt/homebrew/bin/jq" }
+        )
+
+        XCTAssertTrue(found)
+    }
+
+    func testSystemHasJQReturnsFalseWhenUnavailable() {
+        let found = ClaudeBridgeInstaller.systemHasJQ(
+            environmentPath: "/tmp/missing",
+            isExecutable: { _ in false }
+        )
+
+        XCTAssertFalse(found)
+    }
+
     func testThrowsWhenSettingsIsNotAnObject() throws {
         try writeSettings("[1, 2, 3]")
         XCTAssertThrowsError(try installer().makePlan()) { error in
