@@ -61,6 +61,16 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
 
+    var isCheckingUsage: Bool {
+        let visible = visibleSnapshots
+        guard !visible.isEmpty else {
+            return false
+        }
+
+        return !visible.contains(where: \.isAvailable)
+            && visible.contains { isRefreshing($0.provider) }
+    }
+
     var isFirstRun: Bool {
         settingsStore.isFirstRun
     }
@@ -145,6 +155,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
     /// Manual-mode verdict headline — the answer, not the mechanism.
     private var manualVerdict: String {
+        if isCheckingUsage {
+            return "Checking usage…"
+        }
+
         switch aggregateSeverity {
         case .healthy:
             return "Plenty of prompt juice left"
@@ -187,6 +201,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
     /// Manual-mode subtitle — the live aggregate the static label used to hide.
     private var manualSubtitle: String {
+        if isCheckingUsage {
+            return "Just a moment…"
+        }
+
         guard visibleSnapshots.contains(where: \.isAvailable) else {
             return "Usage unavailable"
         }

@@ -87,7 +87,7 @@ script and that file exists.
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
 | 5 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
 | 6 | unavailable, bridge current | Not set up yet + ⓘ | — | — ghost | (existing status detail) | open Settings |
-| 7 | refreshing | Checking… | — | (prev) | — | — |
+| 7 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |
 
 On apply, the setup sheet shows a success + next-step confirmation ("You're almost set") before the user returns to Settings.
 
