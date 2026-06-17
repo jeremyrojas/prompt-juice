@@ -41,13 +41,13 @@ final class PanelSnapshotTests: XCTestCase {
 
         try renderClaudeSetup(
             "preview-nostatusline",
-            plan: claudeSetupPlan(isWrappingExisting: false, jqInstalled: true),
+            plan: claudeSetupPlan(isWrappingExisting: false),
             showsCommand: true,
             outputDirectory: outputDirectory
         )
         try renderClaudeSetup(
-            "preview-jqmissing",
-            plan: claudeSetupPlan(isWrappingExisting: true, jqInstalled: false),
+            "preview-wrapping",
+            plan: claudeSetupPlan(isWrappingExisting: true),
             showsCommand: false,
             outputDirectory: outputDirectory
         )
@@ -292,10 +292,7 @@ final class PanelSnapshotTests: XCTestCase {
         return viewModel
     }
 
-    private func claudeSetupPlan(
-        isWrappingExisting: Bool,
-        jqInstalled: Bool
-    ) -> ClaudeBridgeInstaller.Plan {
+    private func claudeSetupPlan(isWrappingExisting: Bool) -> ClaudeBridgeInstaller.Plan {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let settingsPath = home
             .appendingPathComponent(".claude", isDirectory: true)
@@ -317,8 +314,7 @@ final class PanelSnapshotTests: XCTestCase {
             isWrappingExisting: isWrappingExisting,
             previousCommand: previousCommand,
             newCommand: newCommand,
-            newSettingsData: Data(),
-            jqInstalled: jqInstalled
+            newSettingsData: Data()
         )
     }
 }

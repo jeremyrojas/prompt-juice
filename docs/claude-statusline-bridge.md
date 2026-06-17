@@ -40,7 +40,7 @@ Claude Code reloads statusline changes on the next interaction. After a Claude a
 
 ```bash
 stat "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"
-jq . "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"
+/usr/bin/plutil -p "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"
 ```
 
 Then use PromptJuice -> Refresh Usage. The Claude row should show `claudeStatusline` with `exact` confidence when the cache contains a complete active five-hour window.
@@ -67,6 +67,16 @@ The bridge writes the fields PromptJuice needs:
 
 - `PROMPTJUICE_CLAUDE_STATUS_CACHE` overrides the cache path.
 - `PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND` delegates rendering to an existing statusline command.
+- `PROMPTJUICE_CLAUDE_STATUSLINE_PARSER` chooses the parser:
+  - `plutil` uses macOS `/usr/bin/plutil` and is the default.
+  - `auto` tries `plutil`, then the rollback parser.
+  - `jq` uses the previous `jq` transform when `jq` is installed.
+
+Rollback example:
+
+```bash
+PROMPTJUICE_CLAUDE_STATUSLINE_PARSER=jq bash /absolute/path/to/prompt-juice/scripts/claude-statusline-bridge.sh
+```
 
 ## Safety
 

@@ -14,14 +14,24 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         try? FileManager.default.removeItem(at: home)
     }
 
-    private func installer(jq: Bool = true) -> ClaudeBridgeInstaller {
-        ClaudeBridgeInstaller(homeDirectory: home, bundledScriptURL: nil, jqProbe: { jq })
+    private func installer() -> ClaudeBridgeInstaller {
+        ClaudeBridgeInstaller(homeDirectory: home, bundledScriptURL: nil)
     }
 
     private func writeSettings(_ json: String) throws {
         let dir = home.appendingPathComponent(".claude", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try json.write(to: dir.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
+    }
+
+    private func writeSettings(statusLineCommand command: String) throws {
+        let dir = home.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let data = try JSONSerialization.data(
+            withJSONObject: ["statusLine": ["type": "command", "command": command]],
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(to: dir.appendingPathComponent("settings.json"), options: .atomic)
     }
 
     private func writeInstalledScript() throws {
@@ -48,6 +58,18 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertEqual(statusLine["command"] as? String, plan.newCommand)
     }
 
+    func testAdditiveShellQuotesInstalledPath() throws {
+        let quotedHome = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("pj-bridge-o'clock-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: quotedHome, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: quotedHome) }
+
+        let installer = ClaudeBridgeInstaller(homeDirectory: quotedHome, bundledScriptURL: nil)
+        let plan = try installer.makePlan()
+
+        XCTAssertEqual(plan.newCommand, "bash \(shellSingleQuoted(installer.installedScriptURL.path))")
+    }
+
     func testWrapsExistingStatusLineAndPreservesOtherKeys() throws {
         try writeSettings(#"""
         {
@@ -65,6 +87,40 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
 
         let root = try parse(plan.newSettingsData)
         XCTAssertEqual(root["model"] as? String, "opus", "unrelated keys must survive")
+    }
+
+    func testWrapsExistingStatusLineWithShellQuotedCommand() throws {
+        let existing = "printf 'hi there'"
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(existing)" } }
+        """#)
+
+        let plan = try installer().makePlan()
+
+        XCTAssertTrue(plan.isWrappingExisting)
+        XCTAssertEqual(plan.previousCommand, existing)
+        XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND=\(shellSingleQuoted(existing))"))
+    }
+
+    func testGeneratedWrappedCommandRunsWithShellQuotedDelegate() throws {
+        let existing = "printf 'hi there'"
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(existing)" } }
+        """#)
+
+        let installer = installer()
+        let plan = try installer.makePlan()
+        try FileManager.default.createDirectory(at: installer.installDirectory, withIntermediateDirectories: true)
+        try """
+        #!/usr/bin/env bash
+        printf '%s' "$PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND"
+        """.write(to: installer.installedScriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installer.installedScriptURL.path)
+
+        let result = try runShell(plan.newCommand)
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.output, existing)
     }
 
     func testIdempotentWhenAlreadyInstalled() throws {
@@ -109,6 +165,22 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertFalse(installer.isBridgeCurrent())
     }
 
+    func testBridgeCurrentTrueWhenInstalledCommandUsesEscapedPath() throws {
+        let quotedHome = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("pj-bridge-o'clock-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: quotedHome, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: quotedHome) }
+
+        home = quotedHome
+        let installer = installer()
+        let installedCommand = "bash \(shellSingleQuoted(installer.installedScriptURL.path))"
+        try writeInstalledScript()
+        try writeSettings(statusLineCommand: installedCommand)
+
+        XCTAssertTrue(installer.isBridgeCurrent())
+        XCTAssertEqual(try installer.makePlan().newCommand, installedCommand)
+    }
+
     func testRewritesStalePromptJuiceBridgeAndPreservesDelegate() throws {
         try writeSettings(#"""
         {
@@ -151,45 +223,15 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
 
         XCTAssertTrue(plan.isWrappingExisting)
         XCTAssertEqual(plan.previousCommand, original)
-        XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(original)'"))
+        XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND=\(shellSingleQuoted(original))"))
         XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
     }
 
-    func testJQStatusFlowsIntoPlanAndSummary() throws {
-        let missing = try installer(jq: false).makePlan()
-        XCTAssertFalse(missing.jqInstalled)
-        XCTAssertTrue(missing.summary.contains("jq"))
+    func testSummaryDoesNotRequireJQ() throws {
+        let plan = try installer().makePlan()
 
-        let present = try installer(jq: true).makePlan()
-        XCTAssertTrue(present.jqInstalled)
-        XCTAssertFalse(present.summary.contains("jq isn't installed"))
-    }
-
-    func testSystemHasJQUsesEnvironmentPath() {
-        let found = ClaudeBridgeInstaller.systemHasJQ(
-            environmentPath: "/tmp/missing:/tmp/tools",
-            isExecutable: { $0 == "/tmp/tools/jq" }
-        )
-
-        XCTAssertTrue(found)
-    }
-
-    func testSystemHasJQUsesHomebrewFallbacks() {
-        let found = ClaudeBridgeInstaller.systemHasJQ(
-            environmentPath: "",
-            isExecutable: { $0 == "/opt/homebrew/bin/jq" }
-        )
-
-        XCTAssertTrue(found)
-    }
-
-    func testSystemHasJQReturnsFalseWhenUnavailable() {
-        let found = ClaudeBridgeInstaller.systemHasJQ(
-            environmentPath: "/tmp/missing",
-            isExecutable: { _ in false }
-        )
-
-        XCTAssertFalse(found)
+        XCTAssertFalse(plan.summary.contains("jq"))
+        XCTAssertFalse(plan.summary.contains("brew install"))
     }
 
     func testThrowsWhenSettingsIsNotAnObject() throws {
@@ -197,5 +239,31 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertThrowsError(try installer().makePlan()) { error in
             XCTAssertEqual(error as? ClaudeBridgeInstaller.InstallError, .settingsNotAnObject)
         }
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private func runShell(_ command: String) throws -> (status: Int32, output: String, error: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-lc", command]
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        let output = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let error = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        return (
+            process.terminationStatus,
+            String(data: output, encoding: .utf8) ?? "",
+            String(data: error, encoding: .utf8) ?? ""
+        )
     }
 }

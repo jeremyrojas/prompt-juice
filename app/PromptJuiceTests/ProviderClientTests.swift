@@ -302,9 +302,7 @@ final class ProviderClientTests: XCTestCase {
         ])
     }
 
-    func testClaudeStatuslineBridgeWritesSanitizedCacheAndPreservesDelegateOutput() throws {
-        try requireJQ()
-
+    func testClaudeStatuslineBridgeDefaultsToPlutilAndWritesSanitizedCache() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -322,8 +320,9 @@ final class ProviderClientTests: XCTestCase {
           "context_window": { "used_percentage": 42 },
           "rate_limits": {
             "five_hour": {
-              "used_percentage": 12.5,
-              "resets_at": 1800001800
+              "used_percentage": "12.5",
+              "resets_at": 1800001800,
+              "duration_minutes": "300"
             }
           }
         }
@@ -339,9 +338,12 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(result.output, "custom statusline")
         XCTAssertEqual(try String(contentsOf: delegateInputURL, encoding: .utf8), input)
 
+        let fiveHour = try bridgeCacheFiveHour(cacheURL)
+        XCTAssertEqual(fiveHour["used_percentage"] as? Double, 12.5)
+        XCTAssertEqual(fiveHour["resets_at"] as? String, "1800001800")
+        XCTAssertEqual(fiveHour["duration_minutes"] as? Int, 300)
+
         let cacheText = try String(contentsOf: cacheURL, encoding: .utf8)
-        XCTAssertTrue(cacheText.contains(#""used_percentage":12.5"#))
-        XCTAssertTrue(cacheText.contains(#""resets_at":"1800001800""#))
         XCTAssertFalse(cacheText.contains("workspace"))
         XCTAssertFalse(cacheText.contains("current_dir"))
         XCTAssertFalse(cacheText.contains("model"))
@@ -353,9 +355,120 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_001_800))
     }
 
-    func testClaudeStatuslineBridgeSkipsCacheWhenRateLimitsAreMissing() throws {
+    func testClaudeStatuslineBridgeAutoParserWritesCache() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+
+        let result = try runClaudeStatuslineBridge(
+            input: #"{"rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":"2030-01-01T00:00:00Z","window_minutes":"240"}}}"#,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL,
+            parser: "auto"
+        )
+
+        XCTAssertEqual(result.status, 0)
+        let fiveHour = try bridgeCacheFiveHour(cacheURL)
+        XCTAssertEqual(fiveHour["used_percentage"] as? Double, 12.5)
+        XCTAssertEqual(fiveHour["resets_at"] as? String, "2030-01-01T00:00:00Z")
+        XCTAssertEqual(fiveHour["duration_minutes"] as? Int, 240)
+    }
+
+    func testClaudeStatuslineBridgeDefaultsInvalidOptionalDurationToFiveHours() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+
+        let result = try runClaudeStatuslineBridge(
+            input: #"{"rate_limits":{"five_hour":{"used_percentage":"8","resets_at":"1800001800","duration_minutes":"0.5","window_minutes":"also later"}}}"#,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        let fiveHour = try bridgeCacheFiveHour(cacheURL)
+        XCTAssertEqual(fiveHour["used_percentage"] as? Double, 8)
+        XCTAssertEqual(fiveHour["duration_minutes"] as? Int, 300)
+    }
+
+    func testClaudeStatuslineBridgeJQParserRollbackWritesCache() throws {
         try requireJQ()
 
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+
+        let result = try runClaudeStatuslineBridge(
+            input: #"{"rate_limits":{"five_hour":{"used_percentage":"12.5","resets_at":1800001800}}}"#,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL,
+            parser: "jq"
+        )
+
+        XCTAssertEqual(result.status, 0)
+        let fiveHour = try bridgeCacheFiveHour(cacheURL)
+        XCTAssertEqual(fiveHour["used_percentage"] as? Double, 12.5)
+        XCTAssertEqual(fiveHour["resets_at"] as? String, "1800001800")
+        XCTAssertEqual(fiveHour["duration_minutes"] as? Int, 300)
+    }
+
+    func testClaudeStatuslineBridgeSkipsCacheForInvalidRequiredFields() throws {
+        let cases: [(name: String, input: String)] = [
+            ("missing rate limits", #"{"context_window":{"used_percentage":42}}"#),
+            ("missing used percentage", #"{"rate_limits":{"five_hour":{"resets_at":1800001800}}}"#),
+            ("negative used percentage", #"{"rate_limits":{"five_hour":{"used_percentage":-1,"resets_at":1800001800}}}"#),
+            ("non-numeric used percentage", #"{"rate_limits":{"five_hour":{"used_percentage":"soon","resets_at":1800001800}}}"#),
+            ("overflow used percentage", #"{"rate_limits":{"five_hour":{"used_percentage":"1e999","resets_at":1800001800}}}"#),
+            ("array used percentage", #"{"rate_limits":{"five_hour":{"used_percentage":[12],"resets_at":1800001800}}}"#),
+            ("missing reset", #"{"rate_limits":{"five_hour":{"used_percentage":12.5}}}"#),
+            ("object reset", #"{"rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":{"bad":1}}}}"#),
+            ("malformed json", #"{"rate_limits":{"five_hour":"#)
+        ]
+
+        for testCase in cases {
+            let root = try makeTemporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+            let delegateInputURL = root.appendingPathComponent("delegate-input.json")
+            let delegateURL = try makeDelegateScript(
+                in: root,
+                delegateInputURL: delegateInputURL,
+                output: "custom statusline"
+            )
+
+            let result = try runClaudeStatuslineBridge(
+                input: testCase.input,
+                cacheURL: cacheURL,
+                delegateURL: delegateURL
+            )
+
+            XCTAssertEqual(result.status, 0, testCase.name)
+            XCTAssertEqual(result.output, "custom statusline", testCase.name)
+            XCTAssertEqual(try String(contentsOf: delegateInputURL, encoding: .utf8), testCase.input, testCase.name)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: cacheURL.path), testCase.name)
+        }
+    }
+
+    func testClaudeStatuslineBridgeSkipsCacheWhenRateLimitsAreMissing() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -477,8 +590,15 @@ final class ProviderClientTests: XCTestCase {
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
-            throw XCTSkip("jq is required for Claude statusline bridge smoke tests.")
+            throw XCTSkip("jq is required for the explicit Claude statusline bridge rollback test.")
         }
+    }
+
+    private func bridgeCacheFiveHour(_ cacheURL: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: cacheURL)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let rateLimits = try XCTUnwrap(root["rate_limits"] as? [String: Any])
+        return try XCTUnwrap(rateLimits["five_hour"] as? [String: Any])
     }
 
     private func makeDelegateScript(
@@ -503,7 +623,8 @@ final class ProviderClientTests: XCTestCase {
     private func runClaudeStatuslineBridge(
         input: String,
         cacheURL: URL,
-        delegateURL: URL
+        delegateURL: URL,
+        parser: String? = nil
     ) throws -> (status: Int32, output: String, error: String) {
         let bridgeURL = repositoryRoot
             .appendingPathComponent("scripts/claude-statusline-bridge.sh")
@@ -516,6 +637,11 @@ final class ProviderClientTests: XCTestCase {
         var environment = ProcessInfo.processInfo.environment
         environment["PROMPTJUICE_CLAUDE_STATUS_CACHE"] = cacheURL.path
         environment["PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND"] = "bash \(shellSingleQuoted(delegateURL.path))"
+        if let parser {
+            environment["PROMPTJUICE_CLAUDE_STATUSLINE_PARSER"] = parser
+        } else {
+            environment.removeValue(forKey: "PROMPTJUICE_CLAUDE_STATUSLINE_PARSER")
+        }
         process.environment = environment
 
         let inputPipe = Pipe()

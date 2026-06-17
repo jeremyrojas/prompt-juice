@@ -87,6 +87,8 @@ If the desktop app is your only Claude surface, PromptJuice stays on Estimate be
 
 To get Live readings for Claude: open **Settings -> Claude -> Set up live readings**, approve the status line bridge, then use Claude Code in the terminal.
 
+The Claude bridge uses macOS `/usr/bin/plutil` to read Claude Code's status line JSON. A `PROMPTJUICE_CLAUDE_STATUSLINE_PARSER=jq` rollback path remains available for compatibility testing.
+
 ## Provider Integrations
 
 PromptJuice treats every provider snapshot as local state with a source and confidence label. Think of confidence as freshness: exact is fresh-squeezed, estimated is from concentrate, and stale is past its date.

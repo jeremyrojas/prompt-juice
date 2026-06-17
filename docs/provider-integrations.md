@@ -113,7 +113,7 @@ Verify the bridge cache exists:
 
 ```bash
 stat "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"
-jq . "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"
+/usr/bin/plutil -p "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"
 ```
 
 Check the statusline bridge directly with sample input:
@@ -122,5 +122,7 @@ Check the statusline bridge directly with sample input:
 printf '%s\n' '{"rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":"1800001800","duration_minutes":300}}}' \
   | bash scripts/claude-statusline-bridge.sh
 ```
+
+To use the rollback parser temporarily, set `PROMPTJUICE_CLAUDE_STATUSLINE_PARSER=jq` for the bridge command on a Mac with `jq` installed.
 
 Then refresh PromptJuice from the menu-bar item.
