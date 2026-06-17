@@ -27,7 +27,6 @@ struct ClaudeBridgeInstaller {
         let previousCommand: String?
         let newCommand: String
         let newSettingsData: Data
-        let jqInstalled: Bool
 
         /// Plain-language summary for the consent dialog.
         var summary: String {
@@ -40,10 +39,6 @@ struct ClaudeBridgeInstaller {
             lines.append("")
             lines.append("This will set statusLine.command to:")
             lines.append(newCommand)
-            if !jqInstalled {
-                lines.append("")
-                lines.append("⚠︎ jq isn't installed — the bridge needs it. Install it first with:  brew install jq")
-            }
             return lines.joined(separator: "\n")
         }
     }
@@ -51,18 +46,15 @@ struct ClaudeBridgeInstaller {
     let homeDirectory: URL
     let bundledScriptURL: URL?
     let fileManager: FileManager
-    private let jqProbe: () -> Bool
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         bundledScriptURL: URL? = Bundle.main.url(forResource: "claude-statusline-bridge", withExtension: "sh"),
-        fileManager: FileManager = .default,
-        jqProbe: @escaping () -> Bool = { ClaudeBridgeInstaller.systemHasJQ() }
+        fileManager: FileManager = .default
     ) {
         self.homeDirectory = homeDirectory
         self.bundledScriptURL = bundledScriptURL
         self.fileManager = fileManager
-        self.jqProbe = jqProbe
     }
 
     var settingsURL: URL {
@@ -92,7 +84,7 @@ struct ClaudeBridgeInstaller {
             root = dict
         }
 
-        let bridgeInvocation = "bash '\(installedScriptURL.path)'"
+        let bridgeInvocation = "bash \(shellSingleQuoted(installedScriptURL.path))"
         var isWrap = false
         var previous: String?
         var newCommand = bridgeInvocation
@@ -100,19 +92,19 @@ struct ClaudeBridgeInstaller {
         if let statusLine = root["statusLine"] as? [String: Any],
            let existing = (statusLine["command"] as? String),
            !existing.isEmpty {
-            if existing.contains(installedScriptURL.path) {
+            if commandReferencesInstalledBridge(existing) {
                 // The installed Application Support bridge is current; keep the plan idempotent.
                 newCommand = existing
             } else if let wrapped = wrappedStatusLineCommand(from: existing) {
                 isWrap = true
                 previous = wrapped
-                newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(wrapped)' \(bridgeInvocation)"
+                newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND=\(shellSingleQuoted(wrapped)) \(bridgeInvocation)"
             } else if existing.contains("claude-statusline-bridge.sh") {
                 newCommand = bridgeInvocation
             } else {
                 isWrap = true
                 previous = existing
-                newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(existing)' \(bridgeInvocation)"
+                newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND=\(shellSingleQuoted(existing)) \(bridgeInvocation)"
             }
         }
 
@@ -129,8 +121,7 @@ struct ClaudeBridgeInstaller {
             isWrappingExisting: isWrap,
             previousCommand: previous,
             newCommand: newCommand,
-            newSettingsData: newData,
-            jqInstalled: jqProbe()
+            newSettingsData: newData
         )
     }
 
@@ -165,50 +156,67 @@ struct ClaudeBridgeInstaller {
             return false
         }
 
-        return command.contains(installedScriptURL.path)
-    }
-
-    /// Probe for `jq` without spawning a process while SwiftUI builds the setup sheet.
-    static func systemHasJQ(
-        environmentPath: String? = ProcessInfo.processInfo.environment["PATH"],
-        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
-    ) -> Bool {
-        let pathDirectories = environmentPath?
-            .split(separator: ":", omittingEmptySubsequences: true)
-            .map(String.init) ?? []
-        let fallbackDirectories = [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin"
-        ]
-        var visited = Set<String>()
-
-        for directory in pathDirectories + fallbackDirectories where visited.insert(directory).inserted {
-            let candidate = URL(fileURLWithPath: directory)
-                .appendingPathComponent("jq")
-                .path
-            if isExecutable(candidate) {
-                return true
-            }
-        }
-
-        return false
+        return commandReferencesInstalledBridge(command)
     }
 
     private func wrappedStatusLineCommand(from command: String) -> String? {
-        let prefix = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='"
+        let prefix = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND="
         guard command.hasPrefix(prefix),
-              let closingQuote = command.dropFirst(prefix.count).firstIndex(of: "'") else {
+              let parsed = parseShellSingleQuotedValue(
+                in: command,
+                from: command.index(command.startIndex, offsetBy: prefix.count)
+              ) else {
             return nil
         }
 
-        let remainder = command[closingQuote...]
+        let remainder = command[parsed.endIndex...]
         guard remainder.contains("claude-statusline-bridge.sh") else {
             return nil
         }
 
-        let valueStart = command.index(command.startIndex, offsetBy: prefix.count)
-        return String(command[valueStart..<closingQuote])
+        return parsed.value
+    }
+
+    private func commandReferencesInstalledBridge(_ command: String) -> Bool {
+        command.contains(installedScriptURL.path)
+            || command.contains(shellSingleQuoted(installedScriptURL.path))
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private func parseShellSingleQuotedValue(
+        in command: String,
+        from startIndex: String.Index
+    ) -> (value: String, endIndex: String.Index)? {
+        guard startIndex < command.endIndex,
+              command[startIndex] == "'" else {
+            return nil
+        }
+
+        var value = ""
+        var scanIndex = command.index(after: startIndex)
+        let escapedQuoteSequence = "\\''"
+
+        while scanIndex <= command.endIndex {
+            guard let closingQuote = command[scanIndex...].firstIndex(of: "'") else {
+                return nil
+            }
+
+            value.append(contentsOf: command[scanIndex..<closingQuote])
+            var cursor = command.index(after: closingQuote)
+
+            if command[cursor...].hasPrefix(escapedQuoteSequence) {
+                value.append("'")
+                cursor = command.index(cursor, offsetBy: escapedQuoteSequence.count)
+                scanIndex = cursor
+                continue
+            }
+
+            return (value, cursor)
+        }
+
+        return nil
     }
 }

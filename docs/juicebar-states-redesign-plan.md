@@ -14,8 +14,7 @@ and the use-soon/low clash).
 Known follow-ups: (1) source-on-hover uses `.help()`, but the panel's AppKit click-capture
 (`ClickReadyHostingView.hitTest` returns self) may suppress tooltips — needs a live check /
 a small hosting-view tweak. (2) The not-measured subtitle reads "Claude n/a"; could be
-"Claude not set up". (3) Setup approval is a native `NSAlert` (the exact change + jq status),
-not the richer SwiftUI sheet from the mock.
+"Claude not set up". (3) Setup approval is a native `NSAlert` with the exact change.
 
 ## Design in one paragraph
 
@@ -67,7 +66,7 @@ New setup UI + a settings.json writer.
   - No existing `statusLine` → additive (add the whole block).
   - Existing `statusLine` → **wrap** it (rewrite command so the bridge runs first, then delegates to theirs via `PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='<their cmd>'`); show a real before→after diff.
 - On approve: copy the bundled script to `~/Library/Application Support/PromptJuice/claude-statusline-bridge.sh`; write the **full absolute** path into `~/.claude/settings.json` (not `~`); merge, don't clobber.
-- Check for `jq`; if missing, say so (offer `brew install jq`) — the bridge silently no-ops without it.
+- Use macOS `/usr/bin/plutil` for statusline JSON parsing. Keep the `jq` parser available behind `PROMPTJUICE_CLAUDE_STATUSLINE_PARSER=jq` as a rollback path.
 - Low-emphasis "View the script" link (read-only) for the curious. Remove option in Settings.
 - Accept: a user with/without an existing status line gets a correct, approved write; existing status line still renders.
 

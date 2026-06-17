@@ -593,10 +593,6 @@ private struct ClaudeSetupPlanBody: View {
                 }
             }
 
-            if !plan.jqInstalled {
-                ClaudeSetupJQWarning()
-            }
-
             if let errorMessage {
                 ClaudeSetupErrorRow(text: errorMessage)
             }
@@ -760,38 +756,6 @@ private struct ClaudeSetupCommandDisclosureBody: View {
     }
 }
 
-private struct ClaudeSetupJQWarning: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-
-            warningText
-                .foregroundStyle(.secondary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .font(.callout)
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.orange.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.orange.opacity(0.30))
-        )
-    }
-
-    private var warningText: Text {
-        Text("PromptJuice needs ")
-        + Text("jq").font(.system(.callout, design: .monospaced))
-        + Text(" to read usage. Install it with ")
-        + Text("brew install jq").font(.system(.callout, design: .monospaced))
-        + Text(", then try again.")
-    }
-}
-
 private struct ClaudeSetupErrorRow: View {
     let text: String
 
@@ -906,7 +870,7 @@ private enum ClaudeSetupPreviewPlans {
             .appendingPathComponent("claude-statusline-bridge.sh")
     }
 
-    static func wrapping(jqInstalled: Bool) -> ClaudeBridgeInstaller.Plan {
+    static func wrapping() -> ClaudeBridgeInstaller.Plan {
         let previousCommand = "bash ~/.claude/statusline-command.sh"
         let newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(previousCommand)' bash '\(installedScriptPath.path)'"
 
@@ -916,52 +880,44 @@ private enum ClaudeSetupPreviewPlans {
             isWrappingExisting: true,
             previousCommand: previousCommand,
             newCommand: newCommand,
-            newSettingsData: Data(),
-            jqInstalled: jqInstalled
+            newSettingsData: Data()
         )
     }
 
-    static func additive(jqInstalled: Bool) -> ClaudeBridgeInstaller.Plan {
+    static func additive() -> ClaudeBridgeInstaller.Plan {
         ClaudeBridgeInstaller.Plan(
             settingsPath: settingsPath,
             installedScriptPath: installedScriptPath,
             isWrappingExisting: false,
             previousCommand: nil,
             newCommand: "bash '\(installedScriptPath.path)'",
-            newSettingsData: Data(),
-            jqInstalled: jqInstalled
+            newSettingsData: Data()
         )
     }
 }
 
 #Preview("Claude setup — wrapping") {
     ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.wrapping(jqInstalled: true)
-    )
-}
-
-#Preview("Claude setup — wrapping, jq missing") {
-    ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.wrapping(jqInstalled: false)
+        plan: ClaudeSetupPreviewPlans.wrapping()
     )
 }
 
 #Preview("Claude setup — no status line") {
     ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.additive(jqInstalled: true)
+        plan: ClaudeSetupPreviewPlans.additive()
     )
 }
 
 #Preview("Claude setup — wrapping expanded") {
     ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.wrapping(jqInstalled: true),
+        plan: ClaudeSetupPreviewPlans.wrapping(),
         showsCommand: true
     )
 }
 
 #Preview("Claude setup — no status line expanded") {
     ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.additive(jqInstalled: true),
+        plan: ClaudeSetupPreviewPlans.additive(),
         showsCommand: true
     )
 }
