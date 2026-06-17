@@ -170,6 +170,7 @@ private struct ProviderSettingsRow: View {
     let isEnabled: Binding<Bool>
     let isToggleDisabled: Bool
     let onSetUpClaude: () -> Void
+    var usesPreviewToggle = false
     @State private var isClaudeInfoPresented = false
     @State private var isClaudeInfoPinned = false
     @State private var closeClaudeInfoTask: Task<Void, Never>?
@@ -186,20 +187,26 @@ private struct ProviderSettingsRow: View {
     }
 
     var body: some View {
+        let isProviderEnabled = isEnabled.wrappedValue
+
         HStack(spacing: 10) {
             Circle()
                 .fill(provider == .claude ? Color.orange : Color.cyan)
                 .frame(width: 9, height: 9)
+                .opacity(isProviderEnabled ? 1 : 0.35)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.rawValue)
                     .font(.body)
+                    .foregroundStyle(isProviderEnabled ? .primary : .tertiary)
                 HStack(spacing: 4) {
-                    Text(viewModel.settingsStatusText(for: provider))
+                    Text(isProviderEnabled ? viewModel.settingsStatusText(for: provider) : "Off")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(isProviderEnabled ? .secondary : .tertiary)
 
-                    if provider == .claude, viewModel.shouldShowClaudeMeasurementInfo {
+                    if isProviderEnabled,
+                       provider == .claude,
+                       viewModel.shouldShowClaudeMeasurementInfo {
                         Button {
                             closeClaudeInfoTask?.cancel()
                             isClaudeInfoPinned.toggle()
@@ -227,22 +234,36 @@ private struct ProviderSettingsRow: View {
                     }
                 }
             }
+            .opacity(isProviderEnabled ? 1 : 0.55)
 
             Spacer(minLength: 12)
 
-            if provider == .claude, let title = viewModel.claudeSetupButtonTitle {
+            if isProviderEnabled,
+               provider == .claude,
+               let title = viewModel.claudeSetupButtonTitle {
                 Button(title, action: onSetUpClaude)
                     .controlSize(.small)
             }
 
-            Toggle("", isOn: isEnabled)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .disabled(isToggleDisabled)
+            if usesPreviewToggle {
+                PreviewSwitch(isOn: isProviderEnabled)
+            } else {
+                Toggle("", isOn: isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .disabled(isToggleDisabled)
+            }
         }
         .padding(.vertical, 2)
         .onDisappear {
             closeClaudeInfoTask?.cancel()
+        }
+        .onChange(of: isProviderEnabled) { _, isEnabled in
+            if !isEnabled {
+                closeClaudeInfoTask?.cancel()
+                isClaudeInfoPresented = false
+                isClaudeInfoPinned = false
+            }
         }
     }
 
@@ -264,6 +285,21 @@ private struct ProviderSettingsRow: View {
                 isClaudeInfoPresented = false
             }
         }
+    }
+}
+
+private struct PreviewSwitch: View {
+    let isOn: Bool
+
+    var body: some View {
+        ZStack(alignment: isOn ? .trailing : .leading) {
+            Capsule()
+                .fill(isOn ? Color.accentColor : Color.secondary.opacity(0.24))
+            Circle()
+                .fill(Color.white.opacity(0.92))
+                .padding(2)
+        }
+        .frame(width: 34, height: 20)
     }
 }
 
@@ -828,48 +864,22 @@ struct ClaudeMeasurementPopoverPreviewShell: View {
 
 struct SettingsProviderRowPreviewShell: View {
     @StateObject private var viewModel: PromptJuiceViewModel
-    @State private var isEnabled = true
+    @State private var isEnabled: Bool
 
-    init(viewModel: PromptJuiceViewModel) {
+    init(viewModel: PromptJuiceViewModel, isEnabled: Bool = true) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        _isEnabled = State(initialValue: isEnabled)
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(Color.orange)
-                .frame(width: 9, height: 9)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Claude")
-                    .font(.body)
-                HStack(spacing: 4) {
-                    Text(viewModel.settingsStatusText(for: .claude))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer(minLength: 12)
-
-            Button {
-                isEnabled.toggle()
-            } label: {
-                ZStack(alignment: isEnabled ? .trailing : .leading) {
-                    Capsule()
-                        .fill(isEnabled ? Color.accentColor : Color.secondary.opacity(0.24))
-                    Circle()
-                        .fill(Color.white.opacity(0.92))
-                        .padding(2)
-                }
-                .frame(width: 34, height: 20)
-            }
-            .buttonStyle(.plain)
-        }
+        ProviderSettingsRow(
+            provider: .claude,
+            viewModel: viewModel,
+            isEnabled: $isEnabled,
+            isToggleDisabled: false,
+            onSetUpClaude: {},
+            usesPreviewToggle: true
+        )
         .padding(12)
         .frame(width: 390)
         .background(

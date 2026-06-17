@@ -77,6 +77,15 @@ final class PanelSnapshotTests: XCTestCase {
                 .environment(\.colorScheme, .dark)
         )
         try renderAwaitingSessionPanel(viewModel: viewModel)
+
+        try renderView(
+            "settings-claude-disabled",
+            content: SettingsProviderRowPreviewShell(
+                viewModel: setupAvailableViewModel(),
+                isEnabled: false
+            )
+            .environment(\.colorScheme, .dark)
+        )
     }
 
     private func render(
@@ -221,6 +230,22 @@ final class PanelSnapshotTests: XCTestCase {
             providerClient: EstimateFixtureClient(),
             now: { self.now },
             isClaudeBridgeCurrent: { true }
+        )
+        viewModel.showManualCheck()
+        return viewModel
+    }
+
+    private func setupAvailableViewModel() -> PromptJuiceViewModel {
+        let suiteName = "PanelSnapshotTests.setup-available.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: NotMeasuredFixtureClient(),
+            now: { self.now },
+            isClaudeBridgeCurrent: { false }
         )
         viewModel.showManualCheck()
         return viewModel
