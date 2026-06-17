@@ -209,7 +209,9 @@ private struct ProviderUsageRow: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.4))
 
-            if snapshot.provider == .claude, !isRefreshing {
+            if snapshot.provider == .claude,
+               !isRefreshing,
+               viewModel.claudeLiveUpgrade == .setupAvailable {
                 setUpCue
             }
         }
@@ -220,7 +222,16 @@ private struct ProviderUsageRow: View {
     }
 
     private var unavailableLabel: String {
-        isRefreshing ? "Checking…" : "Not measured yet"
+        if isRefreshing {
+            return "Checking…"
+        }
+
+        if snapshot.provider == .claude,
+           viewModel.claudeLiveUpgrade == .awaitingSession {
+            return "Waiting for terminal"
+        }
+
+        return "Not measured yet"
     }
 
     private var setUpCue: some View {

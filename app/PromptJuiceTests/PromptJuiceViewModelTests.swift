@@ -168,12 +168,30 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
-            now: { Self.fixedNow }
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
         )
 
         viewModel.showManualCheck()
 
         XCTAssertTrue(viewModel.detail.contains("Claude not set up"))
+        XCTAssertFalse(viewModel.detail.contains("Claude n/a"))
+    }
+
+    func testManualSubtitleNamesAwaitingClaudeAsWaitingForTerminal() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertTrue(viewModel.detail.contains("Claude waiting for terminal"))
+        XCTAssertFalse(viewModel.detail.contains("Claude not set up"))
         XCTAssertFalse(viewModel.detail.contains("Claude n/a"))
     }
 
@@ -332,7 +350,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Estimate · waiting for terminal session")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Estimate · use Claude Code in the terminal")
         XCTAssertNil(viewModel.claudeSetupButtonTitle)
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
@@ -342,6 +360,35 @@ final class PromptJuiceViewModelTests: XCTestCase {
             viewModel.claudeMeasurementPopoverDetail,
             "The bridge is installed. You're seeing a local estimate until you next use Claude Code in the terminal, which captures the exact number."
         )
+    }
+
+    func testClaudeAwaitingSessionWithNoUsageShowsTerminalGuidance() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Use Claude Code in the terminal to go live")
+        XCTAssertNil(viewModel.claudeSetupButtonTitle)
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: claude),
+            "Bridge installed · open Claude Code in the terminal to go live"
+        )
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "The bridge is installed. Open Claude Code in your terminal to capture your usage."
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertTrue(viewModel.detail.contains("Claude waiting for terminal"))
     }
 
     func testClaudeStalePopoverNamesLastExactReading() {

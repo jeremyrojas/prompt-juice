@@ -223,9 +223,16 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
-        snapshot.provider == .claude
-            ? "\(snapshot.displayName) not set up"
-            : "\(snapshot.displayName) not detected"
+        guard snapshot.provider == .claude else {
+            return "\(snapshot.displayName) not detected"
+        }
+
+        return switch claudeLiveUpgrade {
+        case .awaitingSession:
+            "\(snapshot.displayName) waiting for terminal"
+        case .live, .setupAvailable:
+            "\(snapshot.displayName) not set up"
+        }
     }
 
     var headline: String {
@@ -511,6 +518,10 @@ final class PromptJuiceViewModel: ObservableObject {
             case .stale:
                 return "Read from Claude Code · \(clockTime(snapshot.updatedAt))"
             case .unavailable:
+                if claudeLiveUpgrade == .awaitingSession {
+                    return "Bridge installed · open Claude Code in the terminal to go live"
+                }
+
                 return snapshot.statusDetail ?? "Not measured yet"
             }
         }
@@ -567,6 +578,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
             return "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers."
         case .awaitingSession:
+            if isUnavailable(.claude) {
+                return "The bridge is installed. Open Claude Code in your terminal to capture your usage."
+            }
+
             return "The bridge is installed. You're seeing a local estimate until you next use Claude Code in the terminal, which captures the exact number."
         }
     }
@@ -581,6 +596,10 @@ final class PromptJuiceViewModel: ObservableObject {
                 return "Checking…"
             }
 
+            if provider == .claude, claudeLiveUpgrade == .awaitingSession {
+                return "Use Claude Code in the terminal to go live"
+            }
+
             return provider == .claude ? "Not set up yet" : "Not detected"
         }
 
@@ -592,7 +611,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Live"
         case .estimated:
             if provider == .claude, claudeLiveUpgrade == .awaitingSession {
-                return "Estimate · waiting for terminal session"
+                return "Estimate · use Claude Code in the terminal"
             }
             return "Estimate"
         case .stale:
