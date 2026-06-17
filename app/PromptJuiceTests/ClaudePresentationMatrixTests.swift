@@ -57,7 +57,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 ),
                 bridgeCurrent: true,
                 liveUpgrade: .awaitingSession,
-                settingsStatus: "Estimate · waiting for terminal session",
+                settingsStatus: "Estimate · use Claude Code in the terminal",
                 setupButtonTitle: nil,
                 tooltip: "Estimated from local Claude Code activity · use Claude Code in the terminal to go live",
                 popover: "The bridge is installed. You're seeing a local estimate until you next use Claude Code in the terminal, which captures the exact number.",
@@ -106,6 +106,23 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 aggregateSeverity: .healthy,
                 headerRemainingPercent: 80,
                 setupWouldOpen: true
+            ),
+            Case(
+                name: "unavailable with bridge current",
+                claudeSnapshot: unavailableClaudeSnapshot(),
+                bridgeCurrent: true,
+                liveUpgrade: .awaitingSession,
+                settingsStatus: "Use Claude Code in the terminal to go live",
+                setupButtonTitle: nil,
+                tooltip: "Bridge installed · open Claude Code in the terminal to go live",
+                popover: "The bridge is installed. Open Claude Code in your terminal to capture your usage.",
+                displayPercent: "n/a",
+                headerDetailIncludes: ["Claude waiting for terminal", "Codex 80%", "resets in 3h 0m"],
+                headerDetailExcludes: ["Claude not set up", "Claude ~", "Claude 0%"],
+                claudeSeverity: .unavailable,
+                aggregateSeverity: .healthy,
+                headerRemainingPercent: 80,
+                setupWouldOpen: false
             )
         ]
 
