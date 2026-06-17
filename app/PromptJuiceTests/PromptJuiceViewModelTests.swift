@@ -350,15 +350,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Estimate · use Claude Code in the terminal")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Goes live next time you use Claude Code in the terminal")
         XCTAssertNil(viewModel.claudeSetupButtonTitle)
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "Estimated from local Claude Code activity · use Claude Code in the terminal to go live"
+            "Estimated from local Claude Code activity · send a message in Claude Code to see exact usage"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
-            "The bridge is installed. You're seeing a local estimate until you next use Claude Code in the terminal, which captures the exact number."
+            "You're set up — showing a quick estimate for now. Send any message in Claude Code (terminal) and it switches to your exact usage."
         )
     }
 
@@ -375,15 +375,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Use Claude Code in the terminal to go live")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Goes live next time you use Claude Code in the terminal")
         XCTAssertNil(viewModel.claudeSetupButtonTitle)
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "Bridge installed · open Claude Code in the terminal to go live"
+            "You're set up · send a message in Claude Code to see exact usage"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
-            "The bridge is installed. Open Claude Code in your terminal to capture your usage."
+            "You're set up. Open Claude Code in your terminal and send any message — PromptJuice reads your exact usage from the response."
         )
 
         viewModel.showManualCheck()

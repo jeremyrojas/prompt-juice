@@ -60,6 +60,7 @@ final class PanelSnapshotTests: XCTestCase {
         )
 
         let viewModel = awaitingSessionViewModel()
+        let unavailableViewModel = awaitingSessionUnavailableViewModel()
 
         try renderView(
             "settings-awaiting",
@@ -70,6 +71,25 @@ final class PanelSnapshotTests: XCTestCase {
             "popover-awaiting",
             content: ClaudeMeasurementPopoverPreviewShell(viewModel: viewModel)
                 .environment(\.colorScheme, .dark)
+        )
+        try renderView(
+            "popover-awaiting-unavailable",
+            content: ClaudeMeasurementPopoverPreviewShell(viewModel: unavailableViewModel)
+                .environment(\.colorScheme, .dark)
+        )
+        try renderView(
+            "tooltip-awaiting",
+            content: AwaitingTooltipPreview(
+                text: tooltipText(from: viewModel)
+            )
+            .environment(\.colorScheme, .dark)
+        )
+        try renderView(
+            "tooltip-awaiting-unavailable",
+            content: AwaitingTooltipPreview(
+                text: tooltipText(from: unavailableViewModel)
+            )
+            .environment(\.colorScheme, .dark)
         )
         try renderView(
             "sheet-success",
@@ -235,6 +255,27 @@ final class PanelSnapshotTests: XCTestCase {
         return viewModel
     }
 
+    private func awaitingSessionUnavailableViewModel() -> PromptJuiceViewModel {
+        let suiteName = "PanelSnapshotTests.awaiting-session-unavailable.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: NotMeasuredFixtureClient(),
+            now: { self.now },
+            isClaudeBridgeCurrent: { true }
+        )
+        viewModel.showManualCheck()
+        return viewModel
+    }
+
+    private func tooltipText(from viewModel: PromptJuiceViewModel) -> String {
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+        return viewModel.sourceTooltip(for: claude)
+    }
+
     private func setupAvailableViewModel() -> PromptJuiceViewModel {
         let suiteName = "PanelSnapshotTests.setup-available.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -279,6 +320,26 @@ final class PanelSnapshotTests: XCTestCase {
             newSettingsData: Data(),
             jqInstalled: jqInstalled
         )
+    }
+}
+
+private struct AwaitingTooltipPreview: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.88))
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(width: 330, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(NSColor.controlBackgroundColor))
+            )
+            .padding(18)
+            .background(Color(NSColor.windowBackgroundColor))
     }
 }
 
