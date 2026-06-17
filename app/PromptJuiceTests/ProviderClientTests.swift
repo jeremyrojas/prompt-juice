@@ -131,6 +131,50 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_001_800))
     }
 
+    func testClaudeStatuslineReaderFallsBackForInvalidDurationValues() throws {
+        let fixture = """
+        {
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": "24.5",
+              "resets_at": 1800001800,
+              "duration_minutes": 0.5,
+              "window_minutes": "240"
+            }
+          }
+        }
+        """
+
+        let snapshot = try ClaudeStatuslineSnapshotReader.snapshot(
+            from: Data(fixture.utf8),
+            now: now
+        )
+
+        XCTAssertEqual(snapshot.rateWindow.durationMinutes, 240)
+    }
+
+    func testClaudeStatuslineReaderDefaultsWhenAllDurationValuesAreInvalid() throws {
+        let fixture = """
+        {
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": "24.5",
+              "resets_at": 1800001800,
+              "duration_minutes": -1,
+              "window_minutes": "0.5"
+            }
+          }
+        }
+        """
+
+        let snapshot = try ClaudeStatuslineSnapshotReader.snapshot(
+            from: Data(fixture.utf8),
+            now: now
+        )
+
+        XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+    }
+
     func testClaudeStatuslineReaderRejectsMissingFiveHourWindow() {
         XCTAssertThrowsError(
             try ClaudeStatuslineSnapshotReader.snapshot(
