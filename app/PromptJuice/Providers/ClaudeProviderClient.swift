@@ -567,18 +567,39 @@ private struct ClaudeStatuslineRateLimitWindow: Decodable {
         forKey key: CodingKeys
     ) -> Int? {
         if let value = try? container.decode(Int.self, forKey: key) {
-            return value
+            return positiveWholeMinutes(value)
         }
 
         if let doubleValue = try? container.decode(Double.self, forKey: key) {
-            return Int(doubleValue)
+            return positiveWholeMinutes(doubleValue)
         }
 
         if let text = try? container.decode(String.self, forKey: key) {
-            return Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let value = Int(trimmed) {
+                return positiveWholeMinutes(value)
+            }
+            if let doubleValue = Double(trimmed) {
+                return positiveWholeMinutes(doubleValue)
+            }
         }
 
         return nil
+    }
+
+    private static func positiveWholeMinutes(_ value: Int) -> Int? {
+        value > 0 ? value : nil
+    }
+
+    private static func positiveWholeMinutes(_ value: Double) -> Int? {
+        guard value.isFinite,
+              value > 0,
+              value.rounded(.towardZero) == value,
+              value <= Double(Int.max) else {
+            return nil
+        }
+
+        return Int(value)
     }
 
     private static func decodeResetText(
