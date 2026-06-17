@@ -274,39 +274,27 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     }
 }
 
-private final class PanelToolTipView: NSView {
-    private let label: NSTextField
+final class PanelToolTipView: NSView {
+    private let text: String
+    private let font = NSFont.systemFont(ofSize: 12)
     private let contentInsets = NSEdgeInsets(top: 5, left: 8, bottom: 6, right: 8)
+    private static let maxTextWidth: CGFloat = 280
+
+    override var isFlipped: Bool {
+        true
+    }
 
     override var fittingSize: NSSize {
         frame.size
     }
 
     init(text: String) {
-        let font = NSFont.systemFont(ofSize: 12)
-        let maxTextWidth: CGFloat = 280
-        let textRect = (text as NSString).boundingRect(
-            with: NSSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font]
-        )
-        let textSize = NSSize(
-            width: ceil(textRect.width),
-            height: ceil(textRect.height)
-        )
+        self.text = text
+        let textSize = Self.textSize(for: text, font: font)
         let size = NSSize(
             width: textSize.width + contentInsets.left + contentInsets.right,
             height: textSize.height + contentInsets.top + contentInsets.bottom
         )
-
-        label = NSTextField(wrappingLabelWithString: text)
-        label.font = font
-        label.textColor = .labelColor
-        label.maximumNumberOfLines = 2
-        label.drawsBackground = false
-        label.isBezeled = false
-        label.isEditable = false
-        label.isSelectable = false
 
         super.init(frame: NSRect(origin: .zero, size: size))
         wantsLayer = true
@@ -314,13 +302,50 @@ private final class PanelToolTipView: NSView {
         layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
         layer?.borderColor = NSColor.separatorColor.cgColor
         layer?.borderWidth = 0.5
-        addSubview(label)
-        label.frame = NSRect(
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            (text as NSString).draw(
+                with: textDrawingRect,
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: Self.textAttributes(font: font, color: .labelColor)
+            )
+        }
+    }
+
+    private var textDrawingRect: NSRect {
+        NSRect(
             x: contentInsets.left,
-            y: contentInsets.bottom,
-            width: textSize.width,
-            height: textSize.height
+            y: contentInsets.top,
+            width: bounds.width - contentInsets.left - contentInsets.right,
+            height: bounds.height - contentInsets.top - contentInsets.bottom
         )
+    }
+
+    private static func textSize(for text: String, font: NSFont) -> NSSize {
+        let textRect = (text as NSString).boundingRect(
+            with: NSSize(width: maxTextWidth, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: textAttributes(font: font, color: .labelColor)
+        )
+        return NSSize(
+            width: min(maxTextWidth, ceil(textRect.width) + 4),
+            height: ceil(textRect.height)
+        )
+    }
+
+    private static func textAttributes(font: NSFont, color: NSColor) -> [NSAttributedString.Key: Any] {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byWordWrapping
+
+        return [
+            .font: font,
+            .foregroundColor: color,
+            .paragraphStyle: paragraphStyle
+        ]
     }
 
     @available(*, unavailable)
