@@ -384,7 +384,6 @@ final class PromptJuiceViewModel: ObservableObject {
     func showManualCheck() {
         mode = .manual
         actionMessage = nil
-        clearSnoozeForCurrentWindow()
         refreshSnapshotsInBackground()
     }
 
@@ -630,7 +629,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var shouldShowClaudeMeasurementInfo: Bool {
-        !isRefreshing(.claude)
+        true
     }
 
     var claudeSetupButtonTitle: String? {

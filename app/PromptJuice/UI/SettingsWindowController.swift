@@ -87,6 +87,7 @@ final class SettingsWindowController: NSWindowController {
         )
         window.title = "PromptJuice Settings"
         window.isReleasedWhenClosed = false
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         window.contentMinSize = NSSize(width: 430, height: 400)
         window.contentMaxSize = NSSize(width: 430, height: 400)
         window.setAccessibilityElement(true)

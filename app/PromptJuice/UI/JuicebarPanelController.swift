@@ -22,7 +22,7 @@ private final class JuicebarPanel: NSPanel {
     }
 }
 
-private enum PanelClickTarget {
+enum PanelClickTarget: Equatable {
     case close
     case snooze
     case provider(UsageProvider)
@@ -31,7 +31,16 @@ private enum PanelClickTarget {
     case background
 }
 
-private enum PanelClickRouter {
+enum PanelClickRouter {
+    private static let horizontalInset: CGFloat = 12
+    private static let manualRowsBottomInset: CGFloat = 14
+    private static let alertRowsBottomInset: CGFloat = 47
+    private static let closeTopInset: CGFloat = 10
+    private static let closeTrailingInset: CGFloat = 10
+    private static let closeSize: CGFloat = 44
+    private static let snoozeBottomInset: CGFloat = 8
+    private static let snoozeHeight: CGFloat = 38
+
     static func rowRects(
         in bounds: NSRect,
         mode: PanelMode,
@@ -39,12 +48,19 @@ private enum PanelClickRouter {
     ) -> [(provider: UsageProvider, rect: NSRect)] {
         let rowHeight = PromptJuicePanelMetrics.rowHeight
         let rowSpacing = PromptJuicePanelMetrics.rowSpacing
-        let bottomY: CGFloat = mode == .alert ? 47 : 14
+        let rowsHeight = CGFloat(providers.count) * rowHeight
+            + CGFloat(max(providers.count - 1, 0)) * rowSpacing
+        let rowsBottomInset = mode == .alert ? alertRowsBottomInset : manualRowsBottomInset
+        let firstRowTopY = bounds.height - rowsBottomInset - rowsHeight
 
         return providers.indices.map { index in
-            let bottomUpIndex = providers.count - 1 - index
-            let rowY = bottomY + CGFloat(bottomUpIndex) * (rowHeight + rowSpacing)
-            let rowRect = NSRect(x: 12, y: rowY, width: bounds.width - 24, height: rowHeight)
+            let rowY = firstRowTopY + CGFloat(index) * (rowHeight + rowSpacing)
+            let rowRect = NSRect(
+                x: horizontalInset,
+                y: rowY,
+                width: bounds.width - horizontalInset * 2,
+                height: rowHeight
+            )
             return (provider: providers[index], rect: rowRect)
         }
     }
@@ -58,25 +74,42 @@ private enum PanelClickRouter {
         let width = bounds.width
         let height = bounds.height
 
-        let closeRect = NSRect(x: width - 54, y: height - 54, width: 44, height: 44)
-        if closeRect.contains(point) {
+        let closeRect = NSRect(
+            x: width - closeTrailingInset - closeSize,
+            y: closeTopInset,
+            width: closeSize,
+            height: closeSize
+        )
+        if contains(point, in: closeRect) {
             return .close
         }
 
         if mode == .alert {
-            let snoozeRect = NSRect(x: 12, y: 8, width: width - 24, height: 38)
-            if snoozeRect.contains(point) {
+            let snoozeRect = NSRect(
+                x: horizontalInset,
+                y: height - snoozeBottomInset - snoozeHeight,
+                width: width - horizontalInset * 2,
+                height: snoozeHeight
+            )
+            if contains(point, in: snoozeRect) {
                 return .snooze
             }
         }
 
         for (provider, rowRect) in rowRects(in: bounds, mode: mode, providers: providers) {
-            if rowRect.contains(point) {
+            if contains(point, in: rowRect) {
                 return .provider(provider)
             }
         }
 
         return nil
+    }
+
+    private static func contains(_ point: NSPoint, in rect: NSRect) -> Bool {
+        point.x >= rect.minX
+            && point.x <= rect.maxX
+            && point.y >= rect.minY
+            && point.y <= rect.maxY
     }
 }
 
@@ -104,6 +137,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         self.onPanelClick = { _ in }
         self.onCancel = {}
         super.init(rootView: rootView)
+        pinCoordinateSpace()
     }
 
     init(
@@ -120,6 +154,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         self.onPanelClick = onPanelClick
         self.onCancel = onCancel
         super.init(rootView: rootView)
+        pinCoordinateSpace()
     }
 
     @available(*, unavailable)
@@ -212,16 +247,24 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         )
     }
 
-    private func rowToolTipText(at point: NSPoint) -> String? {
-        for row in PanelClickRouter.rowRects(in: bounds, mode: modeProvider(), providers: providers()) {
-            guard row.rect.contains(point) else {
-                continue
-            }
+    private func pinCoordinateSpace() {
+        // NSHostingView exposes top-down hit-test coordinates. Make that
+        // contract explicit so mouseUp, mouseMoved, and PanelClickRouter share
+        // the visual layout coordinate space.
+        isFlipped = true
+    }
 
-            return toolTipProvider(row.provider)
+    private func rowToolTipText(at point: NSPoint) -> String? {
+        guard case .provider(let provider) = PanelClickRouter.target(
+            at: point,
+            in: bounds,
+            mode: modeProvider(),
+            providers: providers()
+        ) else {
+            return nil
         }
 
-        return nil
+        return toolTipProvider(provider)
     }
 
     private func schedulePanelToolTip(_ text: String) {

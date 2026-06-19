@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import PromptJuice
 
@@ -48,7 +49,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .alert)
     }
 
-    func testManualCheckClearsCurrentFixtureSnooze() {
+    func testManualCheckPreservesCurrentFixtureSnooze() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -61,8 +62,9 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.snooze()
         viewModel.showManualCheck()
 
-        XCTAssertTrue(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertEqual(viewModel.mode, .manual)
+        XCTAssertFalse(viewModel.checkUsageAlert())
+        XCTAssertEqual(viewModel.mode, .manual)
     }
 
     func testThresholdsAffectFixtureAlert() {
@@ -465,6 +467,31 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testRefreshUsageRunsBackgroundFetchAndShowsMessages() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsage()
+
+        XCTAssertEqual(viewModel.actionMessage, "Refreshing live usage.")
+        XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
+
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+
+        XCTAssertEqual(provider.callCount, 2)
+        XCTAssertEqual(viewModel.actionMessage, "Live Usage refreshed.")
+    }
+
     func testQuietRefreshRunsBackgroundFetchWithoutModeOrMessageSideEffects() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -508,6 +535,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let controller = SettingsWindowController(viewModel: viewModel)
 
         controller.show()
+        XCTAssertGreaterThan(
+            controller.window?.level.rawValue ?? 0,
+            NSWindow.Level.floating.rawValue
+        )
         provider.releaseRefresh()
         await waitForSnapshots(Self.alertSnapshots, in: viewModel)
         controller.close()
