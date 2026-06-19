@@ -189,8 +189,13 @@ private struct ProviderUsageRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .glassInset(cornerRadius: 14, accentColor: nil, isSelected: false)
+        .glassInset(
+            cornerRadius: 14,
+            accentColor: isSelected ? providerColor : nil,
+            isSelected: isSelected
+        )
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityLabel("\(snapshot.displayName) juice")
         .accessibilityValue(accessibilityValue)
     }
@@ -210,8 +215,7 @@ private struct ProviderUsageRow: View {
                 .foregroundStyle(.white.opacity(0.4))
 
             if snapshot.provider == .claude,
-               !isRefreshing,
-               viewModel.claudeLiveUpgrade == .setupAvailable {
+               viewModel.claudeRowOffersSetup {
                 setUpCue
             }
         }
@@ -265,6 +269,10 @@ private struct ProviderUsageRow: View {
 
     private var providerColor: Color {
         snapshot.provider == .claude ? .orange : .cyan
+    }
+
+    private var isSelected: Bool {
+        viewModel.selectedProvider == snapshot.provider
     }
 
     private var severity: UsageSeverity {

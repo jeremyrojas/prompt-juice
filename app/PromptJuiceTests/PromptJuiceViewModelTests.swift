@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import PromptJuice
 
@@ -48,7 +49,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .alert)
     }
 
-    func testManualCheckClearsCurrentFixtureSnooze() {
+    func testManualCheckPreservesCurrentFixtureSnooze() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -61,8 +62,9 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.snooze()
         viewModel.showManualCheck()
 
-        XCTAssertTrue(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertEqual(viewModel.mode, .manual)
+        XCTAssertFalse(viewModel.checkUsageAlert())
+        XCTAssertEqual(viewModel.mode, .manual)
     }
 
     func testThresholdsAffectFixtureAlert() {
@@ -465,6 +467,31 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testRefreshUsageRunsBackgroundFetchAndShowsMessages() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsage()
+
+        XCTAssertEqual(viewModel.actionMessage, "Refreshing live usage.")
+        XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
+
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+
+        XCTAssertEqual(provider.callCount, 2)
+        XCTAssertEqual(viewModel.actionMessage, "Live Usage refreshed.")
+    }
+
     func testQuietRefreshRunsBackgroundFetchWithoutModeOrMessageSideEffects() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -508,6 +535,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let controller = SettingsWindowController(viewModel: viewModel)
 
         controller.show()
+        XCTAssertGreaterThan(
+            controller.window?.level.rawValue ?? 0,
+            NSWindow.Level.floating.rawValue
+        )
         provider.releaseRefresh()
         await waitForSnapshots(Self.alertSnapshots, in: viewModel)
         controller.close()
@@ -587,6 +618,166 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertTrue(shouldShow)
         XCTAssertEqual(viewModel.mode, .alert)
         XCTAssertEqual(viewModel.snapshots, Self.alertSnapshots)
+    }
+
+    // MARK: - Row selection
+
+    func testSelectingProviderScopesHeaderToThatProvider() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertTrue(viewModel.detail.contains("Claude 90%"))
+        XCTAssertTrue(viewModel.detail.contains("Codex 88%"))
+
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+        XCTAssertEqual(viewModel.headline, "Claude has plenty of juice")
+        XCTAssertEqual(viewModel.detail, "90% · resets in 4h 0m")
+        XCTAssertFalse(viewModel.detail.contains("Codex"))
+        XCTAssertEqual(viewModel.headerRemainingPercent, 90)
+        XCTAssertEqual(viewModel.headerSeverity, .healthy)
+    }
+
+    func testSelectingCodexScopesHeaderToCodex() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.toggleSelection(.codex)
+
+        XCTAssertEqual(viewModel.selectedProvider, .codex)
+        XCTAssertEqual(viewModel.headline, "Codex has plenty of juice")
+        XCTAssertEqual(viewModel.detail, "88% · resets in 4h 10m")
+        XCTAssertEqual(viewModel.headerRemainingPercent, 88)
+    }
+
+    func testTogglingSelectedProviderReturnsToOverview() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.toggleSelection(.claude)
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertTrue(viewModel.detail.contains("Codex 88%"))
+    }
+
+    func testUnavailableProviderCannotBeSelected() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+
+        let headlineBefore = viewModel.headline
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.headline, headlineBefore)
+    }
+
+    func testDismissClearsSelection() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.toggleSelection(.codex)
+        XCTAssertEqual(viewModel.selectedProvider, .codex)
+
+        viewModel.dismissCurrentWindow()
+
+        XCTAssertNil(viewModel.selectedProvider)
+    }
+
+    func testClearSelectionReturnsToOverview() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.toggleSelection(.claude)
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+
+        viewModel.clearSelection()
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+    }
+
+    func testClaudeRowOffersSetupOnlyWhenSetupCueShows() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let setupState = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+        XCTAssertTrue(setupState.claudeRowOffersSetup)
+
+        let awaitingState = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUnavailableCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        XCTAssertFalse(awaitingState.claudeRowOffersSetup)
+
+        let estimatedState = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeEstimatedCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+        XCTAssertEqual(estimatedState.claudeLiveUpgrade, .setupAvailable)
+        XCTAssertFalse(estimatedState.claudeRowOffersSetup)
+    }
+
+    func testEstimatedClaudeRowSelectsInsteadOfOpeningSetup() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeEstimatedCodexHealthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+
+        XCTAssertFalse(viewModel.claudeRowOffersSetup)
+
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+        XCTAssertEqual(viewModel.detail, "~42% · resets in 2h 30m")
     }
 
     private func makeFixture() -> (

@@ -130,9 +130,6 @@ struct SettingsView: View {
             NudgeSettingsRow(viewModel: viewModel)
         } header: {
             Text("Nudge")
-        } footer: {
-            Text("The amber Use Soon nudge is the only alert. Everything else stays calm.")
-                .font(.footnote)
         }
     }
 
@@ -172,17 +169,25 @@ private struct ProviderSettingsRow: View {
     let onSetUpClaude: () -> Void
     var usesPreviewToggle = false
     @State private var isClaudeInfoPresented = false
-    @State private var isClaudeInfoPinned = false
+    @State private var isClaudeInfoHovering = false
     @State private var closeClaudeInfoTask: Task<Void, Never>?
 
     private var claudeInfoPresentation: Binding<Bool> {
         Binding {
             isClaudeInfoPresented
         } set: { isPresented in
-            isClaudeInfoPresented = isPresented
             if !isPresented {
-                isClaudeInfoPinned = false
+                closeClaudeInfoTask?.cancel()
+                closeClaudeInfoTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    if !isClaudeInfoHovering {
+                        isClaudeInfoPresented = false
+                    }
+                }
+                return
             }
+
+            isClaudeInfoPresented = isPresented
         }
     }
 
@@ -207,30 +212,30 @@ private struct ProviderSettingsRow: View {
                     if isProviderEnabled,
                        provider == .claude,
                        viewModel.shouldShowClaudeMeasurementInfo {
-                        Button {
-                            closeClaudeInfoTask?.cancel()
-                            isClaudeInfoPinned.toggle()
-                            isClaudeInfoPresented = isClaudeInfoPinned
-                        } label: {
+                        ZStack {
                             Image(systemName: "info.circle")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
+                            HoverTrackingView { isHovering in
+                                handleClaudeInfoHover(isHovering)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("How this number is measured")
-                        .onHover { isHovering in
-                            handleClaudeInfoHover(isHovering)
-                        }
-                        .popover(isPresented: claudeInfoPresentation, arrowEdge: .trailing) {
-                            ClaudeMeasurementPopover(
-                                viewModel: viewModel,
-                                onSetUpClaude: {
-                                    isClaudeInfoPresented = false
-                                    isClaudeInfoPinned = false
-                                    onSetUpClaude()
+                            .frame(width: 18, height: 18)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("How this number is measured")
+                            .popover(isPresented: claudeInfoPresentation, arrowEdge: .trailing) {
+                                ClaudeMeasurementPopover(
+                                    viewModel: viewModel,
+                                    onSetUpClaude: {
+                                        isClaudeInfoPresented = false
+                                        onSetUpClaude()
+                                    }
+                                )
+                                .onHover { isHovering in
+                                    handleClaudeInfoHover(isHovering)
                                 }
-                            )
-                        }
+                                .interactiveDismissDisabled(true)
+                            }
                     }
                 }
             }
@@ -262,12 +267,12 @@ private struct ProviderSettingsRow: View {
             if !isEnabled {
                 closeClaudeInfoTask?.cancel()
                 isClaudeInfoPresented = false
-                isClaudeInfoPinned = false
             }
         }
     }
 
     private func handleClaudeInfoHover(_ isHovering: Bool) {
+        isClaudeInfoHovering = isHovering
         closeClaudeInfoTask?.cancel()
 
         if isHovering {
@@ -275,16 +280,58 @@ private struct ProviderSettingsRow: View {
             return
         }
 
-        guard !isClaudeInfoPinned else {
-            return
-        }
-
         closeClaudeInfoTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 450_000_000)
-            if !isClaudeInfoPinned {
-                isClaudeInfoPresented = false
-            }
+            isClaudeInfoPresented = false
         }
+    }
+}
+
+private struct HoverTrackingView: NSViewRepresentable {
+    let onHoverChanged: (Bool) -> Void
+
+    func makeNSView(context: Context) -> TrackingView {
+        let view = TrackingView()
+        view.onHoverChanged = onHoverChanged
+        return view
+    }
+
+    func updateNSView(_ nsView: TrackingView, context: Context) {
+        nsView.onHoverChanged = onHoverChanged
+    }
+
+    final class TrackingView: NSView {
+        var onHoverChanged: ((Bool) -> Void)?
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(
+                NSTrackingArea(
+                    rect: bounds,
+                    options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                    owner: self,
+                    userInfo: nil
+                )
+            )
+        }
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+            true
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            onHoverChanged?(true)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            onHoverChanged?(false)
+        }
+
+        override func mouseDown(with event: NSEvent) {}
+
+        override func mouseUp(with event: NSEvent) {}
     }
 }
 
