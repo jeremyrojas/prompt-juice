@@ -11,6 +11,9 @@ enum ClaudeLiveUpgrade: Equatable {
 final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var snapshots: [UsageSnapshot]
     @Published private(set) var mode: PanelMode = .manual
+    /// Row the user tapped to scope the header summary to a single provider.
+    /// `nil` shows the combined overview. Cleared when the panel is dismissed.
+    @Published private(set) var selectedProvider: UsageProvider?
     @Published private(set) var actionMessage: String?
     @Published private(set) var thresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
@@ -119,14 +122,23 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
-    /// Header droplet tint — the aggregate judgment across providers.
+    /// Header droplet tint — the selected provider's judgment when a row is
+    /// picked, otherwise the aggregate across providers.
     var headerSeverity: UsageSeverity {
-        aggregateSeverity
+        if let snapshot = selectedSnapshot {
+            return severity(for: snapshot)
+        }
+
+        return aggregateSeverity
     }
 
     /// Fill level for the header droplet (0...100), matching `headerSeverity`.
     var headerRemainingPercent: Double {
-        menuBarRemainingPercent
+        if let snapshot = selectedSnapshot {
+            return snapshot.remainingPercent
+        }
+
+        return menuBarRemainingPercent
     }
 
     /// Tint for the menu-bar glyph — the worst judgment across providers.
@@ -236,6 +248,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var headline: String {
+        if mode != .snoozed, let snapshot = selectedSnapshot {
+            return scopedHeadline(for: snapshot)
+        }
+
         switch mode {
         case .manual:
             return manualVerdict
@@ -261,6 +277,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var detail: String {
+        if mode != .snoozed, let snapshot = selectedSnapshot {
+            return scopedDetail(for: snapshot)
+        }
+
         switch mode {
         case .manual:
             return manualSubtitle
@@ -285,6 +305,64 @@ final class PromptJuiceViewModel: ObservableObject {
         case .snoozed:
             return "PromptJuice will stay quiet."
         }
+    }
+
+    // MARK: - Selection
+
+    /// The tapped provider's snapshot, but only while it has a usable reading.
+    /// Scoping the header to a "not measured yet" provider says nothing, so it
+    /// falls back to the overview.
+    private var selectedSnapshot: UsageSnapshot? {
+        guard let selectedProvider,
+              let snapshot = visibleSnapshots.first(where: { $0.provider == selectedProvider }),
+              snapshot.isAvailable else {
+            return nil
+        }
+
+        return snapshot
+    }
+
+    /// True only when the Claude row is showing its "Set up" cue — the one state
+    /// where tapping the row opens Settings instead of selecting it. Keeps the
+    /// visible button and the click behavior in lockstep.
+    var claudeRowOffersSetup: Bool {
+        isUnavailable(.claude)
+            && !isRefreshing(.claude)
+            && claudeLiveUpgrade == .setupAvailable
+    }
+
+    /// Toggle the scoped summary for a provider. Only providers with a reading can
+    /// be selected; tapping the selected one again returns to the overview.
+    func toggleSelection(_ provider: UsageProvider) {
+        guard let snapshot = visibleSnapshots.first(where: { $0.provider == provider }),
+              snapshot.isAvailable else {
+            return
+        }
+
+        selectedProvider = (selectedProvider == provider) ? nil : provider
+    }
+
+    func clearSelection() {
+        selectedProvider = nil
+    }
+
+    private func scopedHeadline(for snapshot: UsageSnapshot) -> String {
+        switch severity(for: snapshot) {
+        case .healthy:
+            return "\(snapshot.displayName) has plenty of juice"
+        case .useSoon:
+            return "Use \(snapshot.displayName) before it resets"
+        case .low:
+            return "\(snapshot.displayName) is running low"
+        case .empty:
+            return "\(snapshot.displayName) is out"
+        case .unavailable:
+            return unavailableHeaderSubtitle(for: snapshot)
+        }
+    }
+
+    private func scopedDetail(for snapshot: UsageSnapshot) -> String {
+        "\(remainingPercentDisplayValueText(for: snapshot)) · \(fullResetText(for: snapshot))"
     }
 
     private var alertSnapshot: UsageSnapshot? {
@@ -340,6 +418,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func dismissCurrentWindow() {
         actionMessage = nil
+        selectedProvider = nil
     }
 
     func setRemainingMinutesThreshold(_ value: Int) {

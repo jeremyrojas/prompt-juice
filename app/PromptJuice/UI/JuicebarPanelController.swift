@@ -26,6 +26,9 @@ private enum PanelClickTarget {
     case close
     case snooze
     case provider(UsageProvider)
+    /// A click on empty panel chrome (header, gaps) — clears any selection
+    /// without dismissing the panel.
+    case background
 }
 
 private enum PanelClickRouter {
@@ -161,13 +164,9 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-
-        if let target = clickTarget(at: point) {
-            onPanelClick(target)
-            return
-        }
-
-        super.mouseUp(with: event)
+        // Single authority for in-panel clicks. A point that hits no element is
+        // the panel background, which clears the current selection.
+        onPanelClick(clickTarget(at: point) ?? .background)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -507,13 +506,18 @@ final class JuicebarPanelController {
             viewModel.snooze()
             scheduleSnoozeAutoHide()
         case .provider(let provider):
-            if provider == .claude,
-               !viewModel.isRefreshing(.claude),
-               viewModel.visibleSnapshots.contains(where: { $0.provider == .claude }) {
-                let shouldPresentSetup = viewModel.claudeLiveUpgrade == .setupAvailable
+            // Only Claude's "Set up" state jumps to Settings; every other tap
+            // scopes the header summary to that provider. (Settings stays
+            // reachable from the menu-bar menu.)
+            if provider == .claude, viewModel.claudeRowOffersSetup {
                 dismissSurface()
-                onClaudeSettingsRequested(shouldPresentSetup)
+                onClaudeSettingsRequested(true)
+                return
             }
+
+            viewModel.toggleSelection(provider)
+        case .background:
+            viewModel.clearSelection()
         }
     }
 
@@ -617,22 +621,10 @@ final class JuicebarPanelController {
             return false
         }
 
-        let localPoint = NSPoint(
-            x: screenPoint.x - panel.frame.minX,
-            y: screenPoint.y - panel.frame.minY
-        )
-
-        guard let target = PanelClickRouter.target(
-            at: localPoint,
-            in: NSRect(origin: .zero, size: panel.frame.size),
-            mode: viewModel.mode,
-            providers: viewModel.visibleSnapshots.map(\.provider)
-        ) else {
-            return false
-        }
-
-        handleClick(target)
-        return true
+        // Inside the panel: let the content view's mouseUp handle it, so a single
+        // press toggles selection exactly once instead of firing on both the
+        // mouseDown monitor and the mouseUp responder.
+        return false
     }
 
     private func position(_ panel: NSWindow) {
