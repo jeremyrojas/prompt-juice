@@ -105,6 +105,7 @@ struct ClaudeLiveUsageProviderClient: UsageProviderClient {
 
 struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
     private static let fiveHourWindowMinutes = 5 * 60
+    static let maximumCacheBytes = 64 * 1024
 
     let cacheURL: URL
 
@@ -116,12 +117,28 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
         let data: Data
 
         do {
+            try Self.validateCacheFile(at: cacheURL)
             data = try Data(contentsOf: cacheURL)
         } catch {
             throw ClaudeUsageError.statuslineCacheUnavailable
         }
 
         return try Self.snapshot(from: data, now: now)
+    }
+
+    static func validateCacheFile(at url: URL) throws {
+        let values = try url.resourceValues(forKeys: [
+            .isRegularFileKey,
+            .isSymbolicLinkKey,
+            .fileSizeKey
+        ])
+
+        guard values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let fileSize = values.fileSize,
+              fileSize <= maximumCacheBytes else {
+            throw ClaudeUsageError.statuslineCacheUnavailable
+        }
     }
 
     static func snapshot(from data: Data, now: Date) throws -> ProviderSnapshot {

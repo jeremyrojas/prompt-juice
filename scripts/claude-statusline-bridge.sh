@@ -172,6 +172,10 @@ write_promptjuice_cache() {
   esac
 }
 
+write_promptjuice_unavailable_cache() {
+  write_payload_atomic '{"rate_limits":{}}'
+}
+
 run_delegate() {
   if [ -n "$delegate_command" ]; then
     printf '%s' "$input" | /bin/bash -lc "$delegate_command"
@@ -186,5 +190,5 @@ run_delegate() {
   return 0
 }
 
-write_promptjuice_cache
+write_promptjuice_cache || write_promptjuice_unavailable_cache
 run_delegate

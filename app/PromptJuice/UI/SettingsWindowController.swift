@@ -35,6 +35,7 @@ final class SettingsWindowController: NSWindowController {
     }
 
     func show(presentingClaudeSetup: Bool = false) {
+        viewModel.refreshClaudeBridgeState()
         viewModel.refreshUsageQuietly()
 
         let window = ensureWindow()
@@ -58,6 +59,7 @@ final class SettingsWindowController: NSWindowController {
     }
 
     func showFirstRun() {
+        viewModel.refreshClaudeBridgeState()
         viewModel.refreshUsageQuietly()
 
         let window = ensureWindow()

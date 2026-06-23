@@ -24,12 +24,18 @@ final class PromptJuiceViewModel: ObservableObject {
     private let now: () -> Date
     private let isClaudeBridgeCurrent: () -> Bool
     private let injectedProviderClient: (any UsageProviderClient)?
+    private let claudeStatusCacheProviderClient: any UsageProviderClient
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
+    private var claudeStatusCacheRefreshTask: Task<Void, Never>?
+    private var isClaudeStatusCacheRefreshInFlight = false
+    private var hasPendingClaudeStatusCacheRefresh = false
+    private var isClaudeBridgeCurrentState: Bool
 
     init(
         settingsStore: PromptJuiceSettingsStore = .shared,
         providerClient: (any UsageProviderClient)? = nil,
+        claudeStatusCacheProviderClient: (any UsageProviderClient)? = nil,
         alertEngine: AlertEngine = AlertEngine(),
         now: @escaping () -> Date = Date.init,
         isClaudeBridgeCurrent: @escaping () -> Bool = {
@@ -41,6 +47,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         self.settingsStore = settingsStore
         self.injectedProviderClient = providerClient
+        self.claudeStatusCacheProviderClient = claudeStatusCacheProviderClient ?? ClaudeProviderClient()
         self.sourceMode = initialSourceMode
         self.enabledProviders = initialEnabledProviders
         self.providerClient = providerClient ?? Self.makeProviderClient(
@@ -49,6 +56,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.alertEngine = alertEngine
         self.now = now
         self.isClaudeBridgeCurrent = isClaudeBridgeCurrent
+        self.isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
         thresholds = settingsStore.thresholds
         snapshots = if let providerClient {
             providerClient.snapshots(now: now())
@@ -91,7 +99,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return .live
         }
 
-        return isClaudeBridgeCurrent() ? .awaitingSession : .setupAvailable
+        return isClaudeBridgeCurrentState ? .awaitingSession : .setupAvailable
     }
 
     /// True when a provider has no usable reading (the "Not measured yet" state).
@@ -448,6 +456,10 @@ final class PromptJuiceViewModel: ObservableObject {
         settingsStore.enabledProviders = next
         enabledProviders = settingsStore.enabledProviders
         refreshModeForThresholds()
+
+        if enabled {
+            refreshSnapshotsInBackground()
+        }
     }
 
     func completeFirstRun(enabledProviders: Set<UsageProvider>) {
@@ -461,6 +473,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func refreshUsage() {
+        refreshClaudeBridgeState()
         actionMessage = "Refreshing \(sourceMode.title.lowercased())."
         refreshSnapshotsInBackground(
             completionMessage: "\(sourceMode.title) refreshed."
@@ -476,12 +489,28 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func refreshUsageQuietly() {
+        refreshClaudeBridgeState()
         refreshSnapshotsInBackground()
+    }
+
+    func refreshClaudeAfterStatusCacheChange() {
+        guard sourceMode == .liveCodex,
+              enabledProviders.contains(.claude) else {
+            return
+        }
+
+        if isClaudeStatusCacheRefreshInFlight {
+            hasPendingClaudeStatusCacheRefresh = true
+            return
+        }
+
+        startClaudeStatusCacheRefresh()
     }
 
     func refreshUsageAlertInBackground(
         completion: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
+        refreshClaudeBridgeState()
         refreshSnapshotsInBackground { [weak self] in
             guard let self else {
                 completion(false)
@@ -498,6 +527,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func tick() {
         objectWillChange.send()
+    }
+
+    func refreshClaudeBridgeState() {
+        isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
     }
 
     func percentText(for snapshot: UsageSnapshot) -> String {
@@ -749,6 +782,7 @@ final class PromptJuiceViewModel: ObservableObject {
             settingsStore.usageSourceMode = mode
         }
 
+        refreshClaudeBridgeState()
         configureProviderClient()
         snapshots = Self.cachedOrUnavailableSnapshots(
             sourceMode: mode,
@@ -772,6 +806,64 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
+    private func startClaudeStatusCacheRefresh() {
+        isClaudeStatusCacheRefreshInFlight = true
+        hasPendingClaudeStatusCacheRefresh = false
+
+        let providerClient = claudeStatusCacheProviderClient
+        let refreshDate = now()
+
+        claudeStatusCacheRefreshTask = Task.detached(priority: .utility) { [weak self] in
+            let claudeSnapshot = providerClient.snapshots(now: refreshDate)
+                .first { $0.provider == .claude }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+
+                if self.sourceMode == .liveCodex,
+                   self.enabledProviders.contains(.claude),
+                   let claudeSnapshot {
+                    self.mergeSnapshotIfNewer(claudeSnapshot)
+                }
+
+                self.finishClaudeStatusCacheRefresh()
+            }
+        }
+    }
+
+    private func finishClaudeStatusCacheRefresh() {
+        isClaudeStatusCacheRefreshInFlight = false
+
+        if hasPendingClaudeStatusCacheRefresh {
+            hasPendingClaudeStatusCacheRefresh = false
+            refreshClaudeAfterStatusCacheChange()
+        }
+    }
+
+    private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) {
+        let existing = snapshots.first { $0.provider == snapshot.provider }
+
+        if let existing, existing.updatedAt > snapshot.updatedAt {
+            return
+        }
+
+        var mergedSnapshots = snapshots.filter { $0.provider != snapshot.provider }
+        mergedSnapshots.append(snapshot)
+        snapshots = Self.sortedSnapshots(mergedSnapshots)
+    }
+
+    private static func sortedSnapshots(_ snapshots: [ProviderSnapshot]) -> [ProviderSnapshot] {
+        snapshots.sorted { first, second in
+            first.provider.sortIndex < second.provider.sortIndex
+        }
+    }
+
     private func refreshSnapshotsInBackground(
         completionMessage: String? = nil,
         completion: (@MainActor @Sendable () -> Void)? = nil
@@ -793,7 +885,16 @@ final class PromptJuiceViewModel: ObservableObject {
                     return
                 }
 
-                self.snapshots = refreshedSnapshots
+                self.snapshots = Self.sortedSnapshots(
+                    refreshedSnapshots.map { refreshed in
+                        if let existing = self.snapshots.first(where: { $0.provider == refreshed.provider }),
+                           existing.updatedAt > refreshed.updatedAt {
+                            return existing
+                        }
+
+                        return refreshed
+                    }
+                )
 
                 if let completionMessage {
                     self.actionMessage = completionMessage

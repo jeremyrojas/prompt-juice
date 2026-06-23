@@ -542,6 +542,7 @@ private struct ClaudeSetupConsentView: View {
         isApplying = true
         do {
             try installer.apply(plan)
+            viewModel.refreshClaudeBridgeState()
             viewModel.refreshUsage()
             didInstall = true
         } catch {
