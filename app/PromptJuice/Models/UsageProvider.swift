@@ -5,5 +5,13 @@ enum UsageProvider: String, CaseIterable, Identifiable {
     var id: String {
         rawValue
     }
-}
 
+    var sortIndex: Int {
+        switch self {
+        case .claude:
+            0
+        case .codex:
+            1
+        }
+    }
+}

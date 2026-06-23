@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = PromptJuiceViewModel()
+    private let claudeStatusCachePoller = ClaudeStatusCachePoller()
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: viewModel,
         onFirstRunFinished: { [weak self] in
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         observeViewModel()
         startTicker()
+        startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
 
         if viewModel.isFirstRun {
@@ -42,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         ticker?.invalidate()
+        claudeStatusCachePoller.stop()
     }
 
     private func configureStatusItem() {
@@ -71,12 +74,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startClaudeStatusCacheMonitor() {
+        claudeStatusCachePoller.start { [weak self] in
+            self?.viewModel.refreshClaudeAfterStatusCacheChange()
+        }
+    }
+
     private func observeViewModel() {
         viewModel.$enabledProviders
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateStatusItemGlyph(force: true)
+            }
+            .store(in: &cancellables)
+
+        viewModel.$snapshots
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateStatusItemGlyph()
             }
             .store(in: &cancellables)
     }

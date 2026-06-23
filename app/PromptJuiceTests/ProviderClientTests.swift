@@ -186,6 +186,45 @@ final class ProviderClientTests: XCTestCase {
         }
     }
 
+    func testClaudeStatuslineReaderRejectsOversizedCacheFile() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(repeating: 0, count: ClaudeStatuslineSnapshotReader.maximumCacheBytes + 1)
+            .write(to: cacheURL)
+
+        XCTAssertThrowsError(
+            try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+        ) { error in
+            XCTAssertEqual(error as? ClaudeUsageError, .statuslineCacheUnavailable)
+        }
+    }
+
+    func testClaudeStatuslineReaderRejectsSymlinkCacheFile() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let targetURL = root.appendingPathComponent("target.json")
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try claudeStatuslineFixture.write(to: targetURL, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: cacheURL, withDestinationURL: targetURL)
+
+        XCTAssertThrowsError(
+            try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+        ) { error in
+            XCTAssertEqual(error as? ClaudeUsageError, .statuslineCacheUnavailable)
+        }
+    }
+
     func testClaudeProviderUsesStatuslineBeforeOtherSources() {
         let exact = ProviderSnapshot(
             identity: .claude,
@@ -474,7 +513,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(fiveHour["duration_minutes"] as? Int, 300)
     }
 
-    func testClaudeStatuslineBridgeSkipsCacheForInvalidRequiredFields() throws {
+    func testClaudeStatuslineBridgeWritesUnavailableMarkerForInvalidRequiredFields() throws {
         let cases: [(name: String, input: String)] = [
             ("missing rate limits", #"{"context_window":{"used_percentage":42}}"#),
             ("missing used percentage", #"{"rate_limits":{"five_hour":{"resets_at":1800001800}}}"#),
@@ -508,11 +547,16 @@ final class ProviderClientTests: XCTestCase {
             XCTAssertEqual(result.status, 0, testCase.name)
             XCTAssertEqual(result.output, "custom statusline", testCase.name)
             XCTAssertEqual(try String(contentsOf: delegateInputURL, encoding: .utf8), testCase.input, testCase.name)
-            XCTAssertFalse(FileManager.default.fileExists(atPath: cacheURL.path), testCase.name)
+            let marker = try JSONSerialization.jsonObject(with: Data(contentsOf: cacheURL)) as? [String: Any]
+            XCTAssertNotNil(marker?["rate_limits"], testCase.name)
+            XCTAssertThrowsError(
+                try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now),
+                testCase.name
+            )
         }
     }
 
-    func testClaudeStatuslineBridgeSkipsCacheWhenRateLimitsAreMissing() throws {
+    func testClaudeStatuslineBridgeWritesUnavailableMarkerWhenRateLimitsAreMissing() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -532,7 +576,11 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(result.status, 0)
         XCTAssertEqual(result.output, "custom statusline")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: cacheURL.path))
+        let marker = try JSONSerialization.jsonObject(with: Data(contentsOf: cacheURL)) as? [String: Any]
+        XCTAssertNotNil(marker?["rate_limits"])
+        XCTAssertThrowsError(
+            try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+        )
     }
 
     func testEstimatedClaudeSnapshotCanTriggerAlert() {
