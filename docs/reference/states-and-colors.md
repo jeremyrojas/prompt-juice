@@ -77,7 +77,7 @@ Source: [`SnapshotConfidence.swift`](../../app/PromptJuice/Models/SnapshotConfid
 Codex is normally exact/Live; it can be stale or unavailable, but never estimated.
 The matrix below is Claude-only.
 "Bridge current" means `statusLine.command` points at the installed Application Support
-script and that file exists.
+script, that file exists, and `statusLine.refreshInterval` is `10`.
 
 | # | Condition | Settings status | Settings affordance | Juicebar # | Juicebar tooltip | Row click |
 |---|---|---|---|---|---|---|

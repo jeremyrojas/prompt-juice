@@ -70,7 +70,7 @@ The exact path is:
 ~/Library/Application Support/PromptJuice/ClaudeStatus/latest.json
 ```
 
-The bridge script at `scripts/claude-statusline-bridge.sh` reads Claude Code statusline JSON from stdin, writes sanitized rate-limit fields to the PromptJuice cache, then delegates to the user's existing statusline command when configured.
+The bridge script at `scripts/claude-statusline-bridge.sh` reads Claude Code statusline JSON from stdin, writes sanitized rate-limit fields to the PromptJuice cache, then delegates to the user's existing statusline command when configured. PromptJuice sets Claude Code's `statusLine.refreshInterval` to `10`, which refreshes the bridge every 10 seconds while Claude Code is open.
 
 Expected cache shape:
 

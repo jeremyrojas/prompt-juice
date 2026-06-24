@@ -8,7 +8,7 @@ Default cache path:
 ~/Library/Application Support/PromptJuice/ClaudeStatus/latest.json
 ```
 
-Claude Code sends statusline JSON to a configured `statusLine.command`. The PromptJuice bridge script reads that JSON, writes a sanitized cache for PromptJuice, then runs the user's existing statusline command when one is configured.
+Claude Code sends statusline JSON to a configured `statusLine.command`. The PromptJuice bridge script reads that JSON, writes a sanitized cache for PromptJuice, then runs the user's existing statusline command when one is configured. PromptJuice sets `statusLine.refreshInterval` to `10` so Claude Code refreshes the bridge every 10 seconds while Claude Code is open.
 
 ## Setup
 
@@ -18,7 +18,8 @@ Configure Claude Code to run the bridge and delegate to your existing statusline
 {
   "statusLine": {
     "type": "command",
-    "command": "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/statusline-command.sh' bash /absolute/path/to/prompt-juice/scripts/claude-statusline-bridge.sh"
+    "command": "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/statusline-command.sh' bash /absolute/path/to/prompt-juice/scripts/claude-statusline-bridge.sh",
+    "refreshInterval": 10
   }
 }
 ```
@@ -29,14 +30,15 @@ Users without an existing statusline command can run only the bridge:
 {
   "statusLine": {
     "type": "command",
-    "command": "bash /absolute/path/to/prompt-juice/scripts/claude-statusline-bridge.sh"
+    "command": "bash /absolute/path/to/prompt-juice/scripts/claude-statusline-bridge.sh",
+    "refreshInterval": 10
   }
 }
 ```
 
 If you create `~/.claude/statusline-command.sh` after PromptJuice setup, the bridge will automatically delegate to it after writing PromptJuice's usage cache.
 
-Claude Code reloads statusline changes on the next interaction. After a Claude assistant response, verify the cache:
+Claude Code reloads statusline changes on the next interaction. After Claude Code refreshes the status line, verify the cache:
 
 ```bash
 stat "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/latest.json"

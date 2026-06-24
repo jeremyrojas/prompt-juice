@@ -184,6 +184,55 @@ for output in outputs {
     try writePNG(size: output.0, fileName: output.1)
 }
 
+func appendUInt32(_ value: UInt32, to data: inout Data) {
+    var bigEndianValue = value.bigEndian
+    data.append(Data(bytes: &bigEndianValue, count: MemoryLayout<UInt32>.size))
+}
+
+func appendICNSEntry(type: String, pngURL: URL, to data: inout Data) throws {
+    let pngData = try Data(contentsOf: pngURL)
+    guard let typeData = type.data(using: .ascii), typeData.count == 4 else {
+        throw NSError(
+            domain: "PromptJuiceIcon",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "Invalid ICNS type \(type)"]
+        )
+    }
+
+    data.append(typeData)
+    appendUInt32(UInt32(8 + pngData.count), to: &data)
+    data.append(pngData)
+}
+
+func writeICNSFallback(from iconsetURL: URL, to outputURL: URL) throws {
+    let entries: [(String, String)] = [
+        ("icp4", "icon_16x16.png"),
+        ("ic11", "icon_16x16@2x.png"),
+        ("icp5", "icon_32x32.png"),
+        ("ic12", "icon_32x32@2x.png"),
+        ("ic07", "icon_128x128.png"),
+        ("ic13", "icon_128x128@2x.png"),
+        ("ic08", "icon_256x256.png"),
+        ("ic14", "icon_256x256@2x.png"),
+        ("ic09", "icon_512x512.png"),
+        ("ic10", "icon_512x512@2x.png")
+    ]
+
+    var body = Data()
+    for entry in entries {
+        try appendICNSEntry(
+            type: entry.0,
+            pngURL: iconsetURL.appendingPathComponent(entry.1),
+            to: &body
+        )
+    }
+
+    var icns = Data("icns".utf8)
+    appendUInt32(UInt32(8 + body.count), to: &icns)
+    icns.append(body)
+    try icns.write(to: outputURL, options: .atomic)
+}
+
 try? fileManager.removeItem(at: outputURL)
 
 let process = Process()
@@ -200,7 +249,10 @@ try process.run()
 process.waitUntilExit()
 
 if process.terminationStatus != 0 {
-    exit(process.terminationStatus)
+    FileHandle.standardError.write(
+        Data("iconutil failed; writing PromptJuice.icns directly from generated PNGs.\n".utf8)
+    )
+    try writeICNSFallback(from: iconsetURL, to: outputURL)
 }
 
 try? fileManager.removeItem(at: iconsetURL)

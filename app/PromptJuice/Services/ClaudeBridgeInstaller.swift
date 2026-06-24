@@ -5,6 +5,8 @@ import Foundation
 /// status line, a non-destructive wrap when there is), then — only when applied —
 /// copies the bundled script to Application Support and writes the settings.
 struct ClaudeBridgeInstaller {
+    static let statusLineRefreshIntervalSeconds = 10
+
     enum InstallError: Error, LocalizedError, Equatable {
         case bundledScriptMissing
         case settingsNotAnObject
@@ -39,6 +41,8 @@ struct ClaudeBridgeInstaller {
             lines.append("")
             lines.append("This will set statusLine.command to:")
             lines.append(newCommand)
+            lines.append("")
+            lines.append("Claude Code will refresh PromptJuice usage every \(ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds) seconds while it is open.")
             return lines.joined(separator: "\n")
         }
     }
@@ -108,7 +112,11 @@ struct ClaudeBridgeInstaller {
             }
         }
 
-        root["statusLine"] = ["type": "command", "command": newCommand]
+        var newStatusLine = root["statusLine"] as? [String: Any] ?? [:]
+        newStatusLine["type"] = "command"
+        newStatusLine["command"] = newCommand
+        newStatusLine["refreshInterval"] = Self.statusLineRefreshIntervalSeconds
+        root["statusLine"] = newStatusLine
 
         let newData = try JSONSerialization.data(
             withJSONObject: root,
@@ -157,6 +165,19 @@ struct ClaudeBridgeInstaller {
         }
 
         return commandReferencesInstalledBridge(command)
+            && statusLineRefreshInterval(statusLine) == Self.statusLineRefreshIntervalSeconds
+    }
+
+    private func statusLineRefreshInterval(_ statusLine: [String: Any]) -> Int? {
+        if let value = statusLine["refreshInterval"] as? Int {
+            return value
+        }
+
+        if let value = statusLine["refreshInterval"] as? NSNumber {
+            return value.intValue
+        }
+
+        return nil
     }
 
     private func wrappedStatusLineCommand(from command: String) -> String? {
