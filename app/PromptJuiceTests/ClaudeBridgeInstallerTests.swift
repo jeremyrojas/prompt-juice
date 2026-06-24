@@ -24,11 +24,16 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         try json.write(to: dir.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
     }
 
-    private func writeSettings(statusLineCommand command: String) throws {
+    private func writeSettings(statusLineCommand command: String, refreshInterval: Int? = nil) throws {
         let dir = home.appendingPathComponent(".claude", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var statusLine: [String: Any] = ["type": "command", "command": command]
+        if let refreshInterval = refreshInterval {
+            statusLine["refreshInterval"] = refreshInterval
+        }
+
         let data = try JSONSerialization.data(
-            withJSONObject: ["statusLine": ["type": "command", "command": command]],
+            withJSONObject: ["statusLine": statusLine],
             options: [.prettyPrinted, .sortedKeys]
         )
         try data.write(to: dir.appendingPathComponent("settings.json"), options: .atomic)
@@ -44,6 +49,24 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
+    private func statusLine(from plan: ClaudeBridgeInstaller.Plan) throws -> [String: Any] {
+        let root = try parse(plan.newSettingsData)
+        return try XCTUnwrap(root["statusLine"] as? [String: Any])
+    }
+
+    private func assertRefreshInterval(
+        in statusLine: [String: Any],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            statusLine["refreshInterval"] as? Int,
+            ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds,
+            file: file,
+            line: line
+        )
+    }
+
     func testAdditiveWhenNoSettings() throws {
         let plan = try installer().makePlan()
 
@@ -56,6 +79,7 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         let statusLine = try XCTUnwrap(root["statusLine"] as? [String: Any])
         XCTAssertEqual(statusLine["type"] as? String, "command")
         XCTAssertEqual(statusLine["command"] as? String, plan.newCommand)
+        assertRefreshInterval(in: statusLine)
     }
 
     func testAdditiveShellQuotesInstalledPath() throws {
@@ -87,6 +111,7 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
 
         let root = try parse(plan.newSettingsData)
         XCTAssertEqual(root["model"] as? String, "opus", "unrelated keys must survive")
+        assertRefreshInterval(in: try statusLine(from: plan))
     }
 
     func testWrapsExistingStatusLineWithShellQuotedCommand() throws {
@@ -100,6 +125,7 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertTrue(plan.isWrappingExisting)
         XCTAssertEqual(plan.previousCommand, existing)
         XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND=\(shellSingleQuoted(existing))"))
+        assertRefreshInterval(in: try statusLine(from: plan))
     }
 
     func testGeneratedWrappedCommandRunsWithShellQuotedDelegate() throws {
@@ -133,6 +159,20 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
 
         XCTAssertFalse(plan.isWrappingExisting)
         XCTAssertEqual(plan.newCommand, installedCommand)
+        assertRefreshInterval(in: try statusLine(from: plan))
+    }
+
+    func testIdempotentWhenAlreadyInstalledPreservesRefreshInterval() throws {
+        let installedCommand = "bash '\(installer().installedScriptURL.path)'"
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)", "refreshInterval": 10 } }
+        """#)
+
+        let plan = try installer().makePlan()
+
+        XCTAssertFalse(plan.isWrappingExisting)
+        XCTAssertEqual(plan.newCommand, installedCommand)
+        assertRefreshInterval(in: try statusLine(from: plan))
     }
 
     func testBridgeCurrentFalseForStalePath() throws {
@@ -149,10 +189,32 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         let installedCommand = "bash '\(installer.installedScriptURL.path)'"
         try writeInstalledScript()
         try writeSettings(#"""
-        { "statusLine": { "type": "command", "command": "\#(installedCommand)" } }
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)", "refreshInterval": 10 } }
         """#)
 
         XCTAssertTrue(installer.isBridgeCurrent())
+    }
+
+    func testBridgeCurrentFalseWhenRefreshIntervalIsMissing() throws {
+        let installer = installer()
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try writeInstalledScript()
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)" } }
+        """#)
+
+        XCTAssertFalse(installer.isBridgeCurrent())
+    }
+
+    func testBridgeCurrentFalseWhenRefreshIntervalDiffers() throws {
+        let installer = installer()
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try writeInstalledScript()
+        try writeSettings(#"""
+        { "statusLine": { "type": "command", "command": "\#(installedCommand)", "refreshInterval": 5 } }
+        """#)
+
+        XCTAssertFalse(installer.isBridgeCurrent())
     }
 
     func testBridgeCurrentFalseWhenInstalledScriptIsMissing() throws {
@@ -175,10 +237,14 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         let installer = installer()
         let installedCommand = "bash \(shellSingleQuoted(installer.installedScriptURL.path))"
         try writeInstalledScript()
-        try writeSettings(statusLineCommand: installedCommand)
+        try writeSettings(
+            statusLineCommand: installedCommand,
+            refreshInterval: ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds
+        )
 
         XCTAssertTrue(installer.isBridgeCurrent())
         XCTAssertEqual(try installer.makePlan().newCommand, installedCommand)
+        assertRefreshInterval(in: try statusLine(from: installer.makePlan()))
     }
 
     func testRewritesStalePromptJuiceBridgeAndPreservesDelegate() throws {
@@ -198,6 +264,7 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='bash ~/.claude/statusline-command.sh'"))
         XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
         XCTAssertFalse(plan.newCommand.contains("/tmp/old-worktree"))
+        assertRefreshInterval(in: try statusLine(from: plan))
     }
 
     func testRewritesStalePromptJuiceBridgeWithoutDelegate() throws {
@@ -211,6 +278,7 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertNil(plan.previousCommand)
         XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
         XCTAssertFalse(plan.newCommand.contains("/tmp/old-worktree"))
+        assertRefreshInterval(in: try statusLine(from: plan))
     }
 
     func testWrapsForeignCommandThatSetsPromptJuiceDelegateEnv() throws {
@@ -225,6 +293,7 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         XCTAssertEqual(plan.previousCommand, original)
         XCTAssertTrue(plan.newCommand.contains("PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND=\(shellSingleQuoted(original))"))
         XCTAssertTrue(plan.newCommand.contains(installer().installedScriptURL.path))
+        assertRefreshInterval(in: try statusLine(from: plan))
     }
 
     func testSummaryDoesNotRequireJQ() throws {
@@ -232,6 +301,12 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
 
         XCTAssertFalse(plan.summary.contains("jq"))
         XCTAssertFalse(plan.summary.contains("brew install"))
+    }
+
+    func testSummaryMentionsTenSecondRefresh() throws {
+        let plan = try installer().makePlan()
+
+        XCTAssertTrue(plan.summary.contains("every 10 seconds"))
     }
 
     func testThrowsWhenSettingsIsNotAnObject() throws {

@@ -81,7 +81,7 @@ PromptJuice shows each provider reading with a confidence label:
 
 **Live -> Earlier -> Estimate -> Not set up**
 
-For Claude, Live readings are exact usage numbers from Claude Code's status line. That status line runs only in the Claude Code terminal CLI, and PromptJuice receives the latest exact number after Claude Code finishes an assistant message. It is current as of your last terminal assistant message, not real-time.
+For Claude, Live readings are exact usage numbers from Claude Code's status line. That status line runs only in the Claude Code terminal CLI. PromptJuice configures Claude Code to refresh the bridge every 10 seconds while Claude Code is open, so long-running terminal workflows can update without another typed message.
 
 If the desktop app is your only Claude surface, PromptJuice stays on Estimate because the desktop app does not support status lines yet. The upstream Claude Code issue is [anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456).
 
