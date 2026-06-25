@@ -520,6 +520,61 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.actionMessage)
     }
 
+    func testTickExpiresVisibleWindowsAndRefreshesUsage() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.expiredSnapshots,
+            refreshedSnapshots: Self.healthySnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.tick()
+
+        XCTAssertTrue(viewModel.isCheckingUsage)
+        XCTAssertTrue(viewModel.snapshots.allSatisfy { !$0.isAvailable })
+        XCTAssertTrue(viewModel.snapshots.allSatisfy { $0.statusDetail == "Refreshing usage" })
+
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.healthySnapshots, in: viewModel)
+
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testRefreshReplacesExpiredSnapshotWithOlderSourceTimestamp() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let refreshedSnapshots = Self.healthySnapshots.map { snapshot in
+            ProviderSnapshot(
+                identity: snapshot.identity,
+                rateWindow: snapshot.rateWindow,
+                source: snapshot.source,
+                confidence: snapshot.confidence,
+                updatedAt: Self.fixedNow.addingTimeInterval(-60),
+                statusDetail: snapshot.statusDetail
+            )
+        }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.expiredSnapshots,
+            refreshedSnapshots: refreshedSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsageQuietly()
+        provider.releaseRefresh()
+
+        await waitForSnapshots(refreshedSnapshots, in: viewModel)
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
     func testClaudeStatusCacheRefreshMergesOnlyClaudeSnapshot() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -912,6 +967,31 @@ final class PromptJuiceViewModelTests: XCTestCase {
             source: .fixture,
             confidence: .exact,
             updatedAt: fixedNow
+        )
+    ]
+
+    private static let expiredSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 0,
+                resetAt: fixedNow.addingTimeInterval(-60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow.addingTimeInterval(-3600)
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 9,
+                resetAt: fixedNow.addingTimeInterval(-30),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow.addingTimeInterval(-3600)
         )
     ]
 

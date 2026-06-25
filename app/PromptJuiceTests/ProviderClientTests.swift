@@ -40,7 +40,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.confidence, .exact)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 6)
         XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
-        XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_781_195_173))
+        XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_005_173))
     }
 
     func testCodexProviderReturnsUnavailableWhenAppServerFails() {
@@ -104,6 +104,47 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
         XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_001_800))
         XCTAssertEqual(snapshot.remainingPercent, 75.5)
+    }
+
+    func testClaudeStatuslineFileReaderUsesCacheModificationDate() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let cacheUpdatedAt = now.addingTimeInterval(-30)
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try claudeStatuslineFixture.write(to: cacheURL, atomically: true, encoding: .utf8)
+        try setModificationDate(cacheUpdatedAt, for: cacheURL)
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.updatedAt, cacheUpdatedAt)
+    }
+
+    func testClaudeStatuslineFileReaderRejectsStaleCache() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try claudeStatuslineFixture.write(to: cacheURL, atomically: true, encoding: .utf8)
+        try setModificationDate(
+            now.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 1),
+            for: cacheURL
+        )
+
+        XCTAssertThrowsError(
+            try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+        ) { error in
+            XCTAssertEqual(error as? ClaudeUsageError, .statuslineCacheStale)
+        }
     }
 
     func testClaudeStatuslineReaderAcceptsNumericResetTimestamp() throws {
@@ -327,6 +368,60 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.source, .claudeLocalLogs)
         XCTAssertEqual(snapshot.confidence, .estimated)
+    }
+
+    func testClaudeProviderUsesLocalEstimateWhenStatuslineCacheIsStale() {
+        let estimate = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 60,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: now
+        )
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheStale)),
+            localUsageReader: StubClaudeLocalUsageReader(result: .success(estimate)),
+            cache: nil
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeLocalLogs)
+        XCTAssertEqual(snapshot.confidence, .estimated)
+    }
+
+    func testClaudeProviderSkipsCachedExactWhenStatuslineCacheIsStale() {
+        let suiteName = "PromptJuiceClaudeStaleCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now
+        ))
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheStale)),
+            localUsageReader: StubClaudeLocalUsageReader(result: .failure(ClaudeUsageError.localLogActiveBlockUnavailable)),
+            cache: cache
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.confidence, .unavailable)
+        XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache stale")
     }
 
     func testClaudeProviderReturnsUnavailableWhenAllSourcesFail() {
@@ -619,6 +714,32 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
     }
 
+    func testRateLimitParserRejectsExpiredCodexBucket() throws {
+        let expiredFixture = """
+        {
+          "rateLimits": {
+            "limitId": "codex",
+            "limitName": null,
+            "primary": {
+              "usedPercent": 17,
+              "windowDurationMins": 300,
+              "resetsAt": \(Int(now.addingTimeInterval(-60).timeIntervalSince1970))
+            },
+            "secondary": null,
+            "planType": "pro",
+            "rateLimitReachedType": null
+          }
+        }
+        """
+
+        XCTAssertThrowsError(
+            try decodeRateLimits(expiredFixture)
+                .providerSnapshot(now: now)
+        ) { error in
+            XCTAssertEqual(error as? CodexRateLimitMappingError, .expiredPrimaryWindow)
+        }
+    }
+
     func testLiveCodexAppServerReadsCurrentRateLimitWhenEnabled() throws {
         guard ProcessInfo.processInfo.environment["PROMPTJUICE_LIVE_CODEX_TEST"] == "1" else {
             throw XCTSkip("Set PROMPTJUICE_LIVE_CODEX_TEST=1 to read live Codex app-server usage.")
@@ -671,6 +792,13 @@ final class ProviderClientTests: XCTestCase {
             .appendingPathComponent("PromptJuiceTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+
+    private func setModificationDate(_ date: Date, for url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.modificationDate: date],
+            ofItemAtPath: url.path
+        )
     }
 
     private func requireJQ() throws {
@@ -751,6 +879,10 @@ final class ProviderClientTests: XCTestCase {
         let error = errorPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
+        if FileManager.default.fileExists(atPath: cacheURL.path) {
+            try setModificationDate(now, for: cacheURL)
+        }
+
         return (
             process.terminationStatus,
             String(data: output, encoding: .utf8) ?? "",
@@ -781,7 +913,7 @@ final class ProviderClientTests: XCTestCase {
         "primary": {
           "usedPercent": 6,
           "windowDurationMins": 300,
-          "resetsAt": 1781195173
+          "resetsAt": 1800005173
         },
         "secondary": null,
         "planType": "pro",
@@ -794,7 +926,7 @@ final class ProviderClientTests: XCTestCase {
           "primary": {
             "usedPercent": 6,
             "windowDurationMins": 300,
-            "resetsAt": 1781195173
+            "resetsAt": 1800005173
           },
           "secondary": null,
           "planType": "pro",
@@ -806,7 +938,7 @@ final class ProviderClientTests: XCTestCase {
           "primary": {
             "usedPercent": 0,
             "windowDurationMins": 300,
-            "resetsAt": 1781208210
+            "resetsAt": 1800008210
           },
           "secondary": null,
           "planType": "pro",
@@ -824,7 +956,7 @@ final class ProviderClientTests: XCTestCase {
         "primary": {
           "usedPercent": 17,
           "windowDurationMins": 300,
-          "resetsAt": 1781195173
+          "resetsAt": 1800005173
         },
         "secondary": null,
         "planType": "pro",

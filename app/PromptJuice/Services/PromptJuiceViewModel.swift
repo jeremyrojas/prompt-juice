@@ -27,6 +27,8 @@ final class PromptJuiceViewModel: ObservableObject {
     private let claudeStatusCacheProviderClient: any UsageProviderClient
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
+    private var activeRefreshID: UUID?
+    private var expiredWindowRefreshKeys = Set<String>()
     private var claudeStatusCacheRefreshTask: Task<Void, Never>?
     private var isClaudeStatusCacheRefreshInFlight = false
     private var hasPendingClaudeStatusCacheRefresh = false
@@ -526,11 +528,35 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func tick() {
+        refreshExpiredSnapshotsIfNeeded()
         objectWillChange.send()
     }
 
     func refreshClaudeBridgeState() {
         isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
+    }
+
+    private func refreshExpiredSnapshotsIfNeeded() {
+        let refreshDate = now()
+        let expiredSnapshots = visibleSnapshots.filter { $0.isExpired(at: refreshDate) }
+
+        guard !expiredSnapshots.isEmpty else {
+            return
+        }
+
+        let refreshKey = expiredSnapshots
+            .map(\.resetWindowID)
+            .sorted()
+            .joined(separator: "|")
+
+        replaceExpiredSnapshots(expiredSnapshots, at: refreshDate)
+
+        guard activeRefreshID == nil,
+              expiredWindowRefreshKeys.insert(refreshKey).inserted else {
+            return
+        }
+
+        refreshUsageQuietly()
     }
 
     func percentText(for snapshot: UsageSnapshot) -> String {
@@ -847,14 +873,21 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) {
-        let existing = snapshots.first { $0.provider == snapshot.provider }
+        let refreshDate = now()
+        let refreshedSnapshot = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
+        let existing = snapshots.first { $0.provider == refreshedSnapshot.provider }
 
-        if let existing, existing.updatedAt > snapshot.updatedAt {
+        if let existing,
+           shouldKeepExistingSnapshot(
+            existing,
+            over: refreshedSnapshot,
+            refreshDate: refreshDate
+           ) {
             return
         }
 
-        var mergedSnapshots = snapshots.filter { $0.provider != snapshot.provider }
-        mergedSnapshots.append(snapshot)
+        var mergedSnapshots = snapshots.filter { $0.provider != refreshedSnapshot.provider }
+        mergedSnapshots.append(refreshedSnapshot)
         snapshots = Self.sortedSnapshots(mergedSnapshots)
     }
 
@@ -872,6 +905,8 @@ final class PromptJuiceViewModel: ObservableObject {
 
         let providerClient = providerClient
         let refreshDate = now()
+        let refreshID = UUID()
+        activeRefreshID = refreshID
 
         refreshTask = Task.detached(priority: .userInitiated) { [weak self] in
             let refreshedSnapshots = providerClient.snapshots(now: refreshDate)
@@ -881,20 +916,17 @@ final class PromptJuiceViewModel: ObservableObject {
             }
 
             await MainActor.run { [weak self] in
-                guard let self, !Task.isCancelled else {
+                guard let self,
+                      !Task.isCancelled,
+                      self.activeRefreshID == refreshID else {
                     return
                 }
 
-                self.snapshots = Self.sortedSnapshots(
-                    refreshedSnapshots.map { refreshed in
-                        if let existing = self.snapshots.first(where: { $0.provider == refreshed.provider }),
-                           existing.updatedAt > refreshed.updatedAt {
-                            return existing
-                        }
-
-                        return refreshed
-                    }
+                self.snapshots = self.mergedSnapshots(
+                    with: refreshedSnapshots,
+                    refreshDate: refreshDate
                 )
+                self.activeRefreshID = nil
 
                 if let completionMessage {
                     self.actionMessage = completionMessage
@@ -902,6 +934,76 @@ final class PromptJuiceViewModel: ObservableObject {
 
                 completion?()
             }
+        }
+    }
+
+    private func mergedSnapshots(
+        with refreshedSnapshots: [ProviderSnapshot],
+        refreshDate: Date
+    ) -> [ProviderSnapshot] {
+        Self.sortedSnapshots(
+            refreshedSnapshots.map { refreshed in
+                let currentSnapshot = Self.currentOrUnavailableSnapshot(
+                    refreshed,
+                    now: refreshDate
+                )
+
+                if let existing = snapshots.first(where: { $0.provider == currentSnapshot.provider }),
+                   shouldKeepExistingSnapshot(
+                    existing,
+                    over: currentSnapshot,
+                    refreshDate: refreshDate
+                   ) {
+                    return existing
+                }
+
+                return currentSnapshot
+            }
+        )
+    }
+
+    private func shouldKeepExistingSnapshot(
+        _ existing: ProviderSnapshot,
+        over refreshed: ProviderSnapshot,
+        refreshDate: Date
+    ) -> Bool {
+        if existing.isExpired(at: refreshDate) || !existing.isAvailable {
+            return false
+        }
+
+        if let existingResetAt = existing.rateWindow.resetAt,
+           let refreshedResetAt = refreshed.rateWindow.resetAt,
+           refreshedResetAt > existingResetAt {
+            return false
+        }
+
+        return existing.updatedAt > refreshed.updatedAt
+    }
+
+    private func replaceExpiredSnapshots(
+        _ expiredSnapshots: [ProviderSnapshot],
+        at refreshDate: Date
+    ) {
+        let expiredProviders = Set(expiredSnapshots.map(\.provider))
+
+        snapshots = Self.sortedSnapshots(
+            snapshots.map { snapshot in
+                guard expiredProviders.contains(snapshot.provider),
+                      snapshot.isExpired(at: refreshDate) else {
+                    return snapshot
+                }
+
+                return Self.unavailableSnapshot(
+                    identity: snapshot.identity,
+                    source: snapshot.source,
+                    now: refreshDate
+                )
+            }
+        )
+
+        if let selectedProvider,
+           expiredProviders.contains(selectedProvider) {
+            clearSelection()
         }
     }
 
@@ -956,6 +1058,24 @@ final class PromptJuiceViewModel: ObservableObject {
             confidence: .unavailable,
             updatedAt: now,
             statusDetail: "Refreshing usage"
+        )
+    }
+
+    private static func currentOrUnavailableSnapshot(
+        _ snapshot: ProviderSnapshot,
+        now: Date
+    ) -> ProviderSnapshot {
+        guard snapshot.isExpired(at: now) else {
+            return snapshot
+        }
+
+        return ProviderSnapshot(
+            identity: snapshot.identity,
+            rateWindow: .unavailable,
+            source: snapshot.source,
+            confidence: .unavailable,
+            updatedAt: now,
+            statusDetail: "Usage window expired"
         )
     }
 }

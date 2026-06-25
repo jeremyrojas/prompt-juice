@@ -37,6 +37,14 @@ struct ClaudeProviderClient: UsageProviderClient {
         } catch {
             let statuslineDetail = error.localizedDescription
 
+            if error as? ClaudeUsageError == .statuslineCacheStale {
+                do {
+                    return try localUsageReader.snapshot(now: now)
+                } catch {
+                    return unavailableSnapshot(now: now, detail: statuslineDetail)
+                }
+            }
+
             if let cachedSnapshot = cache?.snapshot(now: now, failureDetail: statuslineDetail) {
                 return cachedSnapshot
             }
@@ -105,6 +113,7 @@ struct ClaudeLiveUsageProviderClient: UsageProviderClient {
 
 struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
     private static let fiveHourWindowMinutes = 5 * 60
+    static let maximumCacheAge: TimeInterval = 2 * 60
     static let maximumCacheBytes = 64 * 1024
 
     let cacheURL: URL
@@ -118,12 +127,16 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
 
         do {
             try Self.validateCacheFile(at: cacheURL)
+            let updatedAt = try Self.cacheModificationDate(at: cacheURL, now: now)
             data = try Data(contentsOf: cacheURL)
+            return try Self.snapshot(from: data, now: now, updatedAt: updatedAt)
         } catch {
+            if let usageError = error as? ClaudeUsageError {
+                throw usageError
+            }
+
             throw ClaudeUsageError.statuslineCacheUnavailable
         }
-
-        return try Self.snapshot(from: data, now: now)
     }
 
     static func validateCacheFile(at url: URL) throws {
@@ -142,6 +155,14 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
     }
 
     static func snapshot(from data: Data, now: Date) throws -> ProviderSnapshot {
+        try snapshot(from: data, now: now, updatedAt: now)
+    }
+
+    private static func snapshot(
+        from data: Data,
+        now: Date,
+        updatedAt: Date
+    ) throws -> ProviderSnapshot {
         let payload = try JSONDecoder().decode(ClaudeStatuslinePayload.self, from: data)
 
         guard let fiveHour = payload.rateLimits?.fiveHour else {
@@ -165,8 +186,21 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
             ),
             source: .claudeStatusline,
             confidence: .exact,
-            updatedAt: now
+            updatedAt: updatedAt
         )
+    }
+
+    private static func cacheModificationDate(at url: URL, now: Date) throws -> Date {
+        let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
+        guard let modificationDate = values.contentModificationDate else {
+            throw ClaudeUsageError.statuslineCacheUnavailable
+        }
+
+        guard now.timeIntervalSince(modificationDate) <= maximumCacheAge else {
+            throw ClaudeUsageError.statuslineCacheStale
+        }
+
+        return modificationDate
     }
 
     static func defaultCacheURL(
@@ -652,6 +686,7 @@ private struct CachedClaudeSnapshot: Codable {
 
 enum ClaudeUsageError: Error, LocalizedError, Equatable {
     case statuslineCacheUnavailable
+    case statuslineCacheStale
     case missingFiveHourRateLimit
     case invalidFiveHourRateLimit
     case localLogActiveBlockUnavailable
@@ -660,6 +695,8 @@ enum ClaudeUsageError: Error, LocalizedError, Equatable {
         switch self {
         case .statuslineCacheUnavailable:
             return "Claude statusline cache unavailable"
+        case .statuslineCacheStale:
+            return "Claude statusline cache stale"
         case .missingFiveHourRateLimit:
             return "Claude five-hour rate limit unavailable"
         case .invalidFiveHourRateLimit:
