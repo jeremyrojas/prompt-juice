@@ -8,21 +8,29 @@ protocol ClaudeLocalUsageReading: Sendable {
     func snapshot(now: Date) throws -> ProviderSnapshot
 }
 
+enum ClaudeLocalEstimatePolicy: Sendable, Equatable {
+    case disabled
+    case enabled
+}
+
 struct ClaudeProviderClient: UsageProviderClient {
     let source: SnapshotSource = .claudeStatusline
 
     private let statuslineReader: any ClaudeStatuslineSnapshotReading
     private let localUsageReader: any ClaudeLocalUsageReading
     private let cache: ClaudeSnapshotCache?
+    private let localEstimatePolicy: ClaudeLocalEstimatePolicy
 
     init(
         statuslineReader: any ClaudeStatuslineSnapshotReading = ClaudeStatuslineSnapshotReader(),
         localUsageReader: any ClaudeLocalUsageReading = ClaudeLocalLogUsageReader(),
-        cache: ClaudeSnapshotCache? = .shared
+        cache: ClaudeSnapshotCache? = .shared,
+        localEstimatePolicy: ClaudeLocalEstimatePolicy = .disabled
     ) {
         self.statuslineReader = statuslineReader
         self.localUsageReader = localUsageReader
         self.cache = cache
+        self.localEstimatePolicy = localEstimatePolicy
     }
 
     func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
@@ -30,33 +38,58 @@ struct ClaudeProviderClient: UsageProviderClient {
     }
 
     private func snapshot(now: Date) -> ProviderSnapshot {
+        PromptJuiceLog.usage.debug("Claude provider read started")
+
         do {
             let snapshot = try statuslineReader.snapshot(now: now)
             cache?.save(snapshot)
+            PromptJuiceLog.usage.debug("Claude provider read finished with exact statusline")
             return snapshot
         } catch {
             let statuslineDetail = error.localizedDescription
 
             if error as? ClaudeUsageError == .statuslineCacheStale {
-                do {
-                    return try localUsageReader.snapshot(now: now)
-                } catch {
-                    return unavailableSnapshot(now: now, detail: statuslineDetail)
-                }
+                return localEstimateOrUnavailable(
+                    now: now,
+                    fallbackDetail: statuslineDetail,
+                    logMessage: "Claude statusline cache stale"
+                )
             }
 
             if let cachedSnapshot = cache?.snapshot(now: now, failureDetail: statuslineDetail) {
+                PromptJuiceLog.usage.debug("Claude provider read finished with cached statusline")
                 return cachedSnapshot
             }
 
-            do {
-                return try localUsageReader.snapshot(now: now)
-            } catch {
-                return unavailableSnapshot(
-                    now: now,
-                    detail: "Claude statusline and local usage unavailable"
-                )
-            }
+            return localEstimateOrUnavailable(
+                now: now,
+                fallbackDetail: statuslineDetail,
+                logMessage: "Claude statusline cache unavailable"
+            )
+        }
+    }
+
+    private func localEstimateOrUnavailable(
+        now: Date,
+        fallbackDetail: String,
+        logMessage: String
+    ) -> ProviderSnapshot {
+        guard localEstimatePolicy == .enabled else {
+            PromptJuiceLog.usage.debug("\(logMessage, privacy: .public); local estimate skipped")
+            return unavailableSnapshot(now: now, detail: fallbackDetail)
+        }
+
+        do {
+            PromptJuiceLog.usage.debug("\(logMessage, privacy: .public); local estimate started")
+            let snapshot = try localUsageReader.snapshot(now: now)
+            PromptJuiceLog.usage.debug("Claude provider read finished with local estimate")
+            return snapshot
+        } catch {
+            PromptJuiceLog.usage.debug("Claude local estimate failed: \(error.localizedDescription, privacy: .public)")
+            return unavailableSnapshot(
+                now: now,
+                detail: "Claude statusline and local usage unavailable"
+            )
         }
     }
 
@@ -298,25 +331,49 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
     static let sessionDuration: TimeInterval = 5 * 60 * 60
     private static let sessionDurationMinutes = 5 * 60
 
+    struct Limits: Sendable, Equatable {
+        var maximumFiles: Int
+        var maximumTotalBytes: Int
+        var maximumBytesPerFile: Int
+        var recentFileAge: TimeInterval
+
+        static let production = Limits(
+            maximumFiles: 64,
+            maximumTotalBytes: 8 * 1024 * 1024,
+            maximumBytesPerFile: 512 * 1024,
+            recentFileAge: 7 * 24 * 60 * 60
+        )
+
+        static let unboundedForTests = Limits(
+            maximumFiles: .max,
+            maximumTotalBytes: .max,
+            maximumBytesPerFile: .max,
+            recentFileAge: .infinity
+        )
+    }
+
     let projectRoots: [URL]?
     let environment: [String: String]
     let homeDirectory: URL
     let fileManager: FileManager
+    let limits: Limits
 
     init(
         projectRoots: [URL]? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        limits: Limits = .production
     ) {
         self.projectRoots = projectRoots
         self.environment = environment
         self.homeDirectory = homeDirectory
         self.fileManager = fileManager
+        self.limits = limits
     }
 
     func snapshot(now: Date = Date()) throws -> ProviderSnapshot {
-        let entries = loadEntries()
+        let entries = loadEntries(now: now)
         let blocks = Self.sessionBlocks(from: entries)
 
         guard let activeBlock = blocks.last(where: { $0.isActive(at: now) }) else {
@@ -340,16 +397,27 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
         )
     }
 
-    func loadEntries() -> [ClaudeUsageLogEntry] {
+    func loadEntries(now: Date = Date()) -> [ClaudeUsageLogEntry] {
         var keyedEntries: [String: ClaudeUsageLogEntry] = [:]
         var unkeyedEntries: [ClaudeUsageLogEntry] = []
+        var scannedBytes = 0
 
-        for fileURL in usageFileURLs() {
-            guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
-                continue
+        for fileURL in usageFileURLs(now: now) {
+            guard !Task.isCancelled else {
+                return []
             }
 
+            guard scannedBytes < limits.maximumTotalBytes,
+                  let content = readBoundedLogContent(from: fileURL) else {
+                continue
+            }
+            scannedBytes += min(content.utf8.count, limits.maximumBytesPerFile)
+
             for line in content.split(whereSeparator: \.isNewline) {
+                guard !Task.isCancelled else {
+                    return []
+                }
+
                 guard let entry = Self.parseLine(String(line)) else {
                     continue
                 }
@@ -394,28 +462,99 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
         ]
     }
 
-    func usageFileURLs() -> [URL] {
-        projectRootURLs()
-            .flatMap { root -> [URL] in
+    func usageFileURLs(now: Date = Date()) -> [URL] {
+        let files: [ClaudeUsageLogFile] = projectRootURLs()
+            .flatMap { root -> [ClaudeUsageLogFile] in
                 guard let enumerator = fileManager.enumerator(
                     at: root,
-                    includingPropertiesForKeys: [.isRegularFileKey],
+                    includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
                     options: [.skipsHiddenFiles, .skipsPackageDescendants]
                 ) else {
                     return []
                 }
 
                 return enumerator.compactMap { item in
-                    guard let url = item as? URL,
-                          url.pathExtension.lowercased() == "jsonl",
-                          (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
+                    guard !Task.isCancelled else {
                         return nil
                     }
 
-                    return url
+                    guard let url = item as? URL,
+                          url.pathExtension.lowercased() == "jsonl",
+                          let values = try? url.resourceValues(forKeys: [
+                            .isRegularFileKey,
+                            .fileSizeKey,
+                            .contentModificationDateKey
+                          ]),
+                          values.isRegularFile == true,
+                          Self.isRecentEnough(values.contentModificationDate, now: now, limits: limits) else {
+                        return nil
+                    }
+
+                    return ClaudeUsageLogFile(
+                        url: url,
+                        modificationDate: values.contentModificationDate ?? .distantPast
+                    )
                 }
             }
-            .sorted { $0.path < $1.path }
+
+        return files
+            .sorted(by: Self.sortLogFiles)
+            .prefix(limits.maximumFiles)
+            .map { $0.url }
+    }
+
+    private static func sortLogFiles(_ first: ClaudeUsageLogFile, _ second: ClaudeUsageLogFile) -> Bool {
+        if first.modificationDate != second.modificationDate {
+            return first.modificationDate > second.modificationDate
+        }
+
+        return first.url.path < second.url.path
+    }
+
+    private func readBoundedLogContent(from fileURL: URL) -> String? {
+        guard let fileHandle = try? FileHandle(forReadingFrom: fileURL) else {
+            return nil
+        }
+
+        defer {
+            try? fileHandle.close()
+        }
+
+        let fileSize = (try? fileHandle.seekToEnd()) ?? 0
+        let maxBytes = UInt64(max(0, limits.maximumBytesPerFile))
+        let startOffset = fileSize > maxBytes ? fileSize - maxBytes : 0
+
+        do {
+            try fileHandle.seek(toOffset: startOffset)
+            let data = try fileHandle.readToEnd() ?? Data()
+            guard var text = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+
+            if startOffset > 0, let firstNewline = text.firstIndex(where: \.isNewline) {
+                text.removeSubrange(...firstNewline)
+            }
+
+            return text
+        } catch {
+            return nil
+        }
+    }
+
+    private static func isRecentEnough(
+        _ modificationDate: Date?,
+        now: Date,
+        limits: Limits
+    ) -> Bool {
+        guard limits.recentFileAge.isFinite else {
+            return true
+        }
+
+        guard let modificationDate else {
+            return false
+        }
+
+        return now.timeIntervalSince(modificationDate) <= limits.recentFileAge
     }
 
     static func parseLine(_ line: String) -> ClaudeUsageLogEntry? {
@@ -526,6 +665,11 @@ struct ClaudeUsageLogEntry: Equatable {
 
         return "\(messageID):\(requestID)"
     }
+}
+
+private struct ClaudeUsageLogFile {
+    let url: URL
+    let modificationDate: Date
 }
 
 struct ClaudeTokenUsage: Equatable {

@@ -545,6 +545,63 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testRefreshStormCoalescesIntoOneActiveAndOnePendingFetch() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.alertSnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        for _ in 0..<20 {
+            viewModel.refreshUsageQuietly()
+        }
+
+        await waitUntil { provider.callCount == 2 }
+        provider.releaseRefresh()
+        await waitUntil { provider.callCount == 3 }
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
+
+        XCTAssertEqual(provider.callCount, 3)
+    }
+
+    func testLiveCodexRefreshMergesWhileClaudeIsStillReading() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let claudeUnavailable = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: Self.fixedNow,
+            statusDetail: "Claude statusline cache unavailable"
+        )
+        let slowClaudeProvider = BlockingSingleProviderClient(snapshots: [claudeUnavailable])
+        let codexSnapshot = Self.healthySnapshots[1]
+        let codexProvider = CountingUsageProviderClient(snapshots: [codexSnapshot])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveClaudeProviderClient: slowClaudeProvider,
+            liveCodexProviderClient: codexProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsageQuietly()
+
+        await waitUntil { viewModel.snapshots.contains(codexSnapshot) }
+        XCTAssertEqual(codexProvider.callCount, 1)
+        XCTAssertEqual(slowClaudeProvider.callCount, 1)
+
+        slowClaudeProvider.releaseRefresh()
+        await waitUntil { viewModel.snapshots.contains(claudeUnavailable) }
+    }
+
     func testRefreshReplacesExpiredSnapshotWithOlderSourceTimestamp() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -910,6 +967,21 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, expected)
     }
 
+    private func waitUntil(
+        _ condition: @MainActor @escaping () -> Bool,
+        timeout: TimeInterval = 1,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while !condition() && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertTrue(condition(), file: file, line: line)
+    }
+
     private func clockTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -1188,6 +1260,41 @@ final class PromptJuiceViewModelTests: XCTestCase {
             }
 
             return storedSnapshots
+        }
+    }
+
+    private final class BlockingSingleProviderClient: UsageProviderClient, @unchecked Sendable {
+        let source: SnapshotSource = .fixture
+
+        private let storedSnapshots: [ProviderSnapshot]
+        private let refreshStarted = DispatchSemaphore(value: 0)
+        private let refreshCanFinish = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var calls = 0
+
+        init(snapshots: [ProviderSnapshot]) {
+            self.storedSnapshots = snapshots
+        }
+
+        var callCount: Int {
+            lock.withLock {
+                calls
+            }
+        }
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            lock.withLock {
+                calls += 1
+            }
+
+            refreshStarted.signal()
+            _ = refreshCanFinish.wait(timeout: .now() + 1)
+            return storedSnapshots
+        }
+
+        func releaseRefresh() {
+            _ = refreshStarted.wait(timeout: .now() + 1)
+            refreshCanFinish.signal()
         }
     }
 
