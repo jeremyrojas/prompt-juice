@@ -7,6 +7,8 @@ enum ClaudeLiveUpgrade: Equatable {
     case awaitingSession
 }
 
+private typealias RefreshCompletion = @MainActor @Sendable () -> Void
+
 @MainActor
 final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var snapshots: [UsageSnapshot]
@@ -25,9 +27,14 @@ final class PromptJuiceViewModel: ObservableObject {
     private let isClaudeBridgeCurrent: () -> Bool
     private let injectedProviderClient: (any UsageProviderClient)?
     private let claudeStatusCacheProviderClient: any UsageProviderClient
+    private let liveClaudeProviderClient: any UsageProviderClient
+    private let liveCodexProviderClient: any UsageProviderClient
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
+    private var hasPendingRefresh = false
+    private var pendingRefreshCompletionMessage: String?
+    private var pendingRefreshCompletions: [RefreshCompletion] = []
     private var expiredWindowRefreshKeys = Set<String>()
     private var claudeStatusCacheRefreshTask: Task<Void, Never>?
     private var isClaudeStatusCacheRefreshInFlight = false
@@ -38,6 +45,8 @@ final class PromptJuiceViewModel: ObservableObject {
         settingsStore: PromptJuiceSettingsStore = .shared,
         providerClient: (any UsageProviderClient)? = nil,
         claudeStatusCacheProviderClient: (any UsageProviderClient)? = nil,
+        liveClaudeProviderClient: (any UsageProviderClient)? = nil,
+        liveCodexProviderClient: (any UsageProviderClient)? = nil,
         alertEngine: AlertEngine = AlertEngine(),
         now: @escaping () -> Date = Date.init,
         isClaudeBridgeCurrent: @escaping () -> Bool = {
@@ -46,10 +55,14 @@ final class PromptJuiceViewModel: ObservableObject {
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
         let initialEnabledProviders = settingsStore.enabledProviders
+        let liveClaudeClient = liveClaudeProviderClient ?? ClaudeProviderClient()
+        let liveCodexClient = liveCodexProviderClient ?? CodexProviderClient()
 
         self.settingsStore = settingsStore
         self.injectedProviderClient = providerClient
-        self.claudeStatusCacheProviderClient = claudeStatusCacheProviderClient ?? ClaudeProviderClient()
+        self.liveClaudeProviderClient = liveClaudeClient
+        self.liveCodexProviderClient = liveCodexClient
+        self.claudeStatusCacheProviderClient = claudeStatusCacheProviderClient ?? liveClaudeClient
         self.sourceMode = initialSourceMode
         self.enabledProviders = initialEnabledProviders
         self.providerClient = providerClient ?? Self.makeProviderClient(
@@ -534,6 +547,11 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func refreshClaudeBridgeState() {
         isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
+        if isClaudeBridgeCurrentState {
+            PromptJuiceLog.usage.debug("Claude bridge check passed")
+        } else {
+            PromptJuiceLog.usage.debug("Claude bridge check missing")
+        }
     }
 
     private func refreshExpiredSnapshotsIfNeeded() {
@@ -551,8 +569,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         replaceExpiredSnapshots(expiredSnapshots, at: refreshDate)
 
-        guard activeRefreshID == nil,
-              expiredWindowRefreshKeys.insert(refreshKey).inserted else {
+        guard expiredWindowRefreshKeys.insert(refreshKey).inserted else {
             return
         }
 
@@ -899,40 +916,209 @@ final class PromptJuiceViewModel: ObservableObject {
 
     private func refreshSnapshotsInBackground(
         completionMessage: String? = nil,
-        completion: (@MainActor @Sendable () -> Void)? = nil
+        completion: RefreshCompletion? = nil
     ) {
-        refreshTask?.cancel()
+        guard let refreshRequest = beginRefresh(
+            completionMessage: completionMessage,
+            completion: completion
+        ) else {
+            return
+        }
 
-        let providerClient = providerClient
-        let refreshDate = now()
+        if shouldRefreshLiveProvidersIndependently {
+            startLiveProviderRefresh(
+                refreshID: refreshRequest.id,
+                refreshDate: refreshRequest.date,
+                completionMessage: completionMessage,
+                completion: completion
+            )
+            return
+        }
+
+        startAggregateRefresh(
+            refreshID: refreshRequest.id,
+            refreshDate: refreshRequest.date,
+            completionMessage: completionMessage,
+            completion: completion
+        )
+    }
+
+    private var shouldRefreshLiveProvidersIndependently: Bool {
+        sourceMode == .liveCodex && injectedProviderClient == nil
+    }
+
+    private func beginRefresh(
+        completionMessage: String?,
+        completion: RefreshCompletion?
+    ) -> (id: UUID, date: Date)? {
+        if activeRefreshID != nil {
+            hasPendingRefresh = true
+            if let completionMessage {
+                pendingRefreshCompletionMessage = completionMessage
+            }
+            if let completion {
+                pendingRefreshCompletions.append(completion)
+            }
+            PromptJuiceLog.usage.debug("Usage refresh coalesced while provider read is active")
+            return nil
+        }
+
         let refreshID = UUID()
         activeRefreshID = refreshID
+        PromptJuiceLog.usage.debug("Usage refresh started")
+        return (refreshID, now())
+    }
+
+    private func startAggregateRefresh(
+        refreshID: UUID,
+        refreshDate: Date,
+        completionMessage: String?,
+        completion: RefreshCompletion?
+    ) {
+        let providerClient = providerClient
 
         refreshTask = Task.detached(priority: .userInitiated) { [weak self] in
             let refreshedSnapshots = providerClient.snapshots(now: refreshDate)
 
-            guard !Task.isCancelled else {
-                return
+            await MainActor.run { [weak self] in
+                self?.finishAggregateRefresh(
+                    refreshID: refreshID,
+                    refreshedSnapshots: refreshedSnapshots,
+                    refreshDate: refreshDate,
+                    completionMessage: completionMessage,
+                    completion: completion
+                )
+            }
+        }
+    }
+
+    private func startLiveProviderRefresh(
+        refreshID: UUID,
+        refreshDate: Date,
+        completionMessage: String?,
+        completion: RefreshCompletion?
+    ) {
+        let claudeProviderClient = liveClaudeProviderClient
+        let codexProviderClient = liveCodexProviderClient
+
+        refreshTask = Task.detached(priority: .userInitiated) { [weak self] in
+            await withTaskGroup(of: ProviderSnapshot?.self) { group in
+                group.addTask {
+                    PromptJuiceLog.usage.debug("Live Claude refresh task started")
+                    return claudeProviderClient.snapshots(now: refreshDate)
+                        .first { $0.provider == .claude }
+                }
+                group.addTask {
+                    PromptJuiceLog.usage.debug("Live Codex refresh task started")
+                    return codexProviderClient.snapshots(now: refreshDate)
+                        .first { $0.provider == .codex }
+                }
+
+                for await snapshot in group {
+                    guard let snapshot else {
+                        continue
+                    }
+
+                    await MainActor.run { [weak self] in
+                        self?.mergeLiveRefreshSnapshot(snapshot, refreshID: refreshID)
+                    }
+                }
             }
 
             await MainActor.run { [weak self] in
-                guard let self,
-                      !Task.isCancelled,
-                      self.activeRefreshID == refreshID else {
-                    return
-                }
-
-                self.snapshots = self.mergedSnapshots(
-                    with: refreshedSnapshots,
-                    refreshDate: refreshDate
+                self?.finishLiveProviderRefresh(
+                    refreshID: refreshID,
+                    completionMessage: completionMessage,
+                    completion: completion
                 )
-                self.activeRefreshID = nil
+            }
+        }
+    }
 
-                if let completionMessage {
-                    self.actionMessage = completionMessage
-                }
+    private func finishAggregateRefresh(
+        refreshID: UUID,
+        refreshedSnapshots: [ProviderSnapshot],
+        refreshDate: Date,
+        completionMessage: String?,
+        completion: RefreshCompletion?
+    ) {
+        guard activeRefreshID == refreshID else {
+            return
+        }
 
-                completion?()
+        snapshots = mergedSnapshots(
+            with: refreshedSnapshots,
+            refreshDate: refreshDate
+        )
+        finishRefresh(
+            refreshID: refreshID,
+            completionMessage: completionMessage,
+            completion: completion
+        )
+    }
+
+    private func mergeLiveRefreshSnapshot(
+        _ snapshot: ProviderSnapshot,
+        refreshID: UUID
+    ) {
+        guard activeRefreshID == refreshID else {
+            return
+        }
+
+        PromptJuiceLog.usage.debug("Live provider snapshot merged: \(snapshot.provider.rawValue, privacy: .public)")
+        mergeSnapshotIfNewer(snapshot)
+    }
+
+    private func finishLiveProviderRefresh(
+        refreshID: UUID,
+        completionMessage: String?,
+        completion: RefreshCompletion?
+    ) {
+        guard activeRefreshID == refreshID else {
+            return
+        }
+
+        finishRefresh(
+            refreshID: refreshID,
+            completionMessage: completionMessage,
+            completion: completion
+        )
+    }
+
+    private func finishRefresh(
+        refreshID: UUID,
+        completionMessage: String?,
+        completion: RefreshCompletion?
+    ) {
+        guard activeRefreshID == refreshID else {
+            return
+        }
+
+        activeRefreshID = nil
+        PromptJuiceLog.usage.debug("Usage refresh finished")
+
+        if let completionMessage {
+            actionMessage = completionMessage
+        }
+
+        completion?()
+        runPendingRefreshIfNeeded()
+    }
+
+    private func runPendingRefreshIfNeeded() {
+        guard hasPendingRefresh else {
+            return
+        }
+
+        let completionMessage = pendingRefreshCompletionMessage
+        let completions = pendingRefreshCompletions
+        hasPendingRefresh = false
+        pendingRefreshCompletionMessage = nil
+        pendingRefreshCompletions = []
+
+        refreshSnapshotsInBackground(completionMessage: completionMessage) {
+            for completion in completions {
+                completion()
             }
         }
     }

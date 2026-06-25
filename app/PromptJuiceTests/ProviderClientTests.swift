@@ -278,7 +278,7 @@ final class ProviderClientTests: XCTestCase {
             confidence: .exact,
             updatedAt: now
         )
-        let estimate = ProviderSnapshot(
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(ProviderSnapshot(
             identity: .claude,
             rateWindow: .available(
                 usedPercent: 60,
@@ -288,10 +288,10 @@ final class ProviderClientTests: XCTestCase {
             source: .claudeLocalLogs,
             confidence: .estimated,
             updatedAt: now
-        )
+        )))
         let provider = ClaudeProviderClient(
             statuslineReader: StubClaudeStatuslineReader(result: .success(exact)),
-            localUsageReader: StubClaudeLocalUsageReader(result: .success(estimate)),
+            localUsageReader: localUsageReader,
             cache: nil
         )
 
@@ -300,6 +300,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.source, .claudeStatusline)
         XCTAssertEqual(snapshot.confidence, .exact)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 11)
+        XCTAssertEqual(localUsageReader.callCount, 0)
     }
 
     func testClaudeProviderUsesCachedExactSnapshotBeforeLocalEstimate() {
@@ -346,7 +347,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
     }
 
-    func testClaudeProviderUsesLocalEstimateWhenExactSourcesAreUnavailable() {
+    func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsUnavailableByDefault() {
         let estimate = ProviderSnapshot(
             identity: .claude,
             rateWindow: .available(
@@ -358,19 +359,22 @@ final class ProviderClientTests: XCTestCase {
             confidence: .estimated,
             updatedAt: now
         )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
         let provider = ClaudeProviderClient(
             statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheUnavailable)),
-            localUsageReader: StubClaudeLocalUsageReader(result: .success(estimate)),
+            localUsageReader: localUsageReader,
             cache: nil
         )
 
         let snapshot = provider.snapshots(now: now)[0]
 
-        XCTAssertEqual(snapshot.source, .claudeLocalLogs)
-        XCTAssertEqual(snapshot.confidence, .estimated)
+        XCTAssertEqual(snapshot.source, .claudeStatusline)
+        XCTAssertEqual(snapshot.confidence, .unavailable)
+        XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
+        XCTAssertEqual(localUsageReader.callCount, 0)
     }
 
-    func testClaudeProviderUsesLocalEstimateWhenStatuslineCacheIsStale() {
+    func testClaudeProviderUsesLocalEstimateWhenExplicitlyEnabled() {
         let estimate = ProviderSnapshot(
             identity: .claude,
             rateWindow: .available(
@@ -382,16 +386,46 @@ final class ProviderClientTests: XCTestCase {
             confidence: .estimated,
             updatedAt: now
         )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
         let provider = ClaudeProviderClient(
-            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheStale)),
-            localUsageReader: StubClaudeLocalUsageReader(result: .success(estimate)),
-            cache: nil
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheUnavailable)),
+            localUsageReader: localUsageReader,
+            cache: nil,
+            localEstimatePolicy: .enabled
         )
 
         let snapshot = provider.snapshots(now: now)[0]
 
         XCTAssertEqual(snapshot.source, .claudeLocalLogs)
         XCTAssertEqual(snapshot.confidence, .estimated)
+        XCTAssertEqual(localUsageReader.callCount, 1)
+    }
+
+    func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsStaleByDefault() {
+        let estimate = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 60,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: now
+        )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheStale)),
+            localUsageReader: localUsageReader,
+            cache: nil
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeStatusline)
+        XCTAssertEqual(snapshot.confidence, .unavailable)
+        XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache stale")
+        XCTAssertEqual(localUsageReader.callCount, 0)
     }
 
     func testClaudeProviderSkipsCachedExactWhenStatuslineCacheIsStale() {
@@ -450,7 +484,7 @@ final class ProviderClientTests: XCTestCase {
 
         let reader = ClaudeLocalLogUsageReader(projectRoots: [
             root.appendingPathComponent("projects", isDirectory: true)
-        ])
+        ], limits: .unboundedForTests)
 
         let entries = reader.loadEntries()
         let snapshot = try reader.snapshot(now: now)
@@ -462,6 +496,77 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 90)
         XCTAssertEqual(snapshot.rateWindow.resetAt, expectedActiveClaudeBlockReset)
         XCTAssertEqual(snapshot.statusDetail, "Estimated from local Claude logs")
+    }
+
+    func testClaudeLocalLogReaderBoundsRecentFileScanAndReadsTails() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let project = root.appendingPathComponent("projects/demo", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let limits = ClaudeLocalLogUsageReader.Limits(
+            maximumFiles: 2,
+            maximumTotalBytes: 2 * 1024,
+            maximumBytesPerFile: 768,
+            recentFileAge: 60 * 60
+        )
+        let reader = ClaudeLocalLogUsageReader(
+            projectRoots: [root.appendingPathComponent("projects", isDirectory: true)],
+            limits: limits
+        )
+
+        for index in 0..<4 {
+            let file = project.appendingPathComponent("recent-\(index).jsonl")
+            try (String(repeating: "x", count: 2_000) + "\n" + localClaudeLogLine(
+                timestamp: now.addingTimeInterval(-Double(index + 1) * 60),
+                inputTokens: 100 + index,
+                requestID: "recent-\(index)"
+            )).write(to: file, atomically: true, encoding: .utf8)
+            try setModificationDate(now.addingTimeInterval(-Double(index) * 60), for: file)
+        }
+
+        let oldFile = project.appendingPathComponent("old.jsonl")
+        try localClaudeLogLine(
+            timestamp: now.addingTimeInterval(-30 * 60),
+            inputTokens: 999,
+            requestID: "old"
+        ).write(to: oldFile, atomically: true, encoding: .utf8)
+        try setModificationDate(now.addingTimeInterval(-2 * 60 * 60), for: oldFile)
+
+        let urls = reader.usageFileURLs(now: now)
+        let entries = reader.loadEntries(now: now)
+
+        XCTAssertEqual(urls.map(\.lastPathComponent), ["recent-0.jsonl", "recent-1.jsonl"])
+        XCTAssertEqual(entries.compactMap(\.requestID).sorted(), ["recent-0", "recent-1"])
+        XCTAssertFalse(entries.contains { $0.requestID == "old" })
+    }
+
+    func testClaudeLocalLogReaderReturnsNoEntriesWhenTaskIsCancelled() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let project = root.appendingPathComponent("projects/demo", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        for index in 0..<10 {
+            let file = project.appendingPathComponent("session-\(index).jsonl")
+            try localClaudeLogFixture.write(to: file, atomically: true, encoding: .utf8)
+            try setModificationDate(now, for: file)
+        }
+
+        let reader = ClaudeLocalLogUsageReader(projectRoots: [
+            root.appendingPathComponent("projects", isDirectory: true)
+        ], limits: .unboundedForTests)
+        let fixedNow = now
+        let task = Task {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            return reader.loadEntries(now: fixedNow)
+        }
+
+        try? await Task.sleep(nanoseconds: 5_000_000)
+        task.cancel()
+        let entries = await task.value
+
+        XCTAssertEqual(entries, [])
     }
 
     func testClaudeLocalLogReaderUsesClaudeConfigDirRoots() throws {
@@ -787,6 +892,30 @@ final class ProviderClientTests: XCTestCase {
         }
     }
 
+    private final class CountingClaudeLocalUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
+        private let result: Result<ProviderSnapshot, Error>
+        private let lock = NSLock()
+        private var calls = 0
+
+        init(result: Result<ProviderSnapshot, Error>) {
+            self.result = result
+        }
+
+        var callCount: Int {
+            lock.withLock {
+                calls
+            }
+        }
+
+        func snapshot(now _: Date) throws -> ProviderSnapshot {
+            lock.withLock {
+                calls += 1
+            }
+
+            return try result.get()
+        }
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("PromptJuiceTests-\(UUID().uuidString)", isDirectory: true)
@@ -981,6 +1110,17 @@ final class ProviderClientTests: XCTestCase {
         let activeTimestamp = now.addingTimeInterval(-30 * 60)
         let blockStart = floor(activeTimestamp.timeIntervalSince1970 / 3600) * 3600
         return Date(timeIntervalSince1970: blockStart + 5 * 60 * 60)
+    }
+
+    private func localClaudeLogLine(
+        timestamp: Date,
+        inputTokens: Int,
+        requestID: String
+    ) -> String {
+        let timestamp = Int(timestamp.timeIntervalSince1970)
+        return """
+        {"type":"assistant","timestamp":"\(timestamp)","message":{"id":"msg_\(requestID)","usage":{"input_tokens":\(inputTokens),"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"requestId":"\(requestID)"}
+        """
     }
 
     private var localClaudeLogFixture: String {
