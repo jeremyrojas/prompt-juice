@@ -20,11 +20,17 @@ struct CodexRateLimitReadResult: Decodable, Equatable {
             throw CodexRateLimitMappingError.missingPrimaryWindow
         }
 
+        let resetAt = Date(timeIntervalSince1970: primary.resetsAt)
+
+        guard resetAt > now else {
+            throw CodexRateLimitMappingError.expiredPrimaryWindow
+        }
+
         return ProviderSnapshot(
             identity: .codex,
             rateWindow: .available(
                 usedPercent: primary.usedPercent,
-                resetAt: Date(timeIntervalSince1970: primary.resetsAt),
+                resetAt: resetAt,
                 durationMinutes: primary.windowDurationMins
             ),
             source: .codexAppServer,
@@ -53,6 +59,7 @@ struct CodexRateLimitWindow: Decodable, Equatable {
 enum CodexRateLimitMappingError: Error, LocalizedError, Equatable {
     case missingCodexBucket
     case missingPrimaryWindow
+    case expiredPrimaryWindow
 
     var errorDescription: String? {
         switch self {
@@ -60,6 +67,8 @@ enum CodexRateLimitMappingError: Error, LocalizedError, Equatable {
             return "Codex rate-limit bucket unavailable"
         case .missingPrimaryWindow:
             return "Codex primary rate-limit window unavailable"
+        case .expiredPrimaryWindow:
+            return "Codex primary rate-limit window expired"
         }
     }
 }

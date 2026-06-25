@@ -7,6 +7,7 @@ struct AlertEngine {
         now: Date = Date()
     ) -> Bool {
         guard snapshot.confidence.canTriggerAlert,
+              !snapshot.isExpired(at: now),
               let minutesUntilReset = snapshot.rateWindow.minutesUntilReset(now: now),
               let remainingPercent = snapshot.rateWindow.remainingPercent else {
             return false
@@ -40,7 +41,7 @@ struct AlertEngine {
         }
 
         return snapshots
-            .filter(\.isAvailable)
+            .filter { $0.isAvailable && !$0.isExpired(at: now) }
             .max { $0.remainingPercent < $1.remainingPercent }
     }
 
@@ -52,7 +53,8 @@ struct AlertEngine {
         thresholds: AlertThresholds,
         now: Date = Date()
     ) -> UsageSeverity {
-        guard snapshot.isAvailable else {
+        guard snapshot.isAvailable,
+              !snapshot.isExpired(at: now) else {
             return .unavailable
         }
 
@@ -98,7 +100,8 @@ struct AlertEngine {
             return "Use soon"
         }
 
-        guard snapshot.isAvailable else {
+        guard snapshot.isAvailable,
+              !snapshot.isExpired(at: now) else {
             return "Unavailable"
         }
 

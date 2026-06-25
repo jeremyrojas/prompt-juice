@@ -52,6 +52,14 @@ struct ProviderSnapshot: Identifiable, Equatable {
         rateWindow.isAvailable && confidence != .unavailable
     }
 
+    func isExpired(at now: Date) -> Bool {
+        guard isAvailable, let resetAt = rateWindow.resetAt else {
+            return false
+        }
+
+        return resetAt <= now
+    }
+
     var clampedUsedPercent: Double {
         rateWindow.clampedUsedPercent ?? 0
     }

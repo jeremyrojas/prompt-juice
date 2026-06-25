@@ -21,12 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var ticker: Timer?
     private var lastGlyphKey: String?
+    private var lastLifecycleRefreshAt: Date?
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.applicationIconImage = PromptJuiceIcon.appIconImage()
         configureStatusItem()
         observeViewModel()
+        observeHostLifecycle()
         startTicker()
         startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
@@ -45,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         ticker?.invalidate()
         claudeStatusCachePoller.stop()
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
     private func configureStatusItem() {
@@ -96,6 +100,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.updateStatusItemGlyph()
             }
             .store(in: &cancellables)
+    }
+
+    private func observeHostLifecycle() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshAfterHostLifecycleChange),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(refreshAfterHostLifecycleChange),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func refreshAfterHostLifecycleChange() {
+        let refreshDate = Date()
+
+        if let lastLifecycleRefreshAt,
+           refreshDate.timeIntervalSince(lastLifecycleRefreshAt) < 2 {
+            return
+        }
+
+        lastLifecycleRefreshAt = refreshDate
+        viewModel.refreshUsageQuietly()
+        updateStatusItemGlyph(force: true)
     }
 
     /// Redraws the menu-bar droplet from the current aggregate. The fill is the
