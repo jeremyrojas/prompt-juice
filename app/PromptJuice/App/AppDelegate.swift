@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startClaudeStatusCacheMonitor() {
         claudeStatusCachePoller.start { [weak self] in
-            self?.viewModel.refreshClaudeAfterStatusCacheChange()
+            self?.viewModel.refreshClaudeAfterStatusCacheChange(reason: "cache watcher")
         }
     }
 
@@ -126,6 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastLifecycleRefreshAt = refreshDate
+        startClaudeStatusCacheMonitor()
+        viewModel.refreshClaudeStatusCacheNow(reason: "host lifecycle")
         viewModel.refreshUsageQuietly()
         updateStatusItemGlyph(force: true)
     }

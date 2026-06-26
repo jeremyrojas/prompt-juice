@@ -460,6 +460,7 @@ final class JuicebarPanelController {
     }
 
     func show() {
+        viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
         position(panel)

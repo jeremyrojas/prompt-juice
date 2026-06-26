@@ -37,9 +37,13 @@ final class PromptJuiceViewModel: ObservableObject {
     private var pendingRefreshCompletions: [RefreshCompletion] = []
     private var expiredWindowRefreshKeys = Set<String>()
     private var claudeStatusCacheRefreshTask: Task<Void, Never>?
+    private var claudeStatusCacheRefreshTimeoutTask: Task<Void, Never>?
+    private var activeClaudeStatusCacheRefreshID: UUID?
+    private var claudeStatusCacheRefreshStartedAt: Date?
     private var isClaudeStatusCacheRefreshInFlight = false
     private var hasPendingClaudeStatusCacheRefresh = false
     private var isClaudeBridgeCurrentState: Bool
+    private let claudeStatusCacheRefreshTimeoutNanoseconds: UInt64
 
     init(
         settingsStore: PromptJuiceSettingsStore = .shared,
@@ -49,6 +53,7 @@ final class PromptJuiceViewModel: ObservableObject {
         liveCodexProviderClient: (any UsageProviderClient)? = nil,
         alertEngine: AlertEngine = AlertEngine(),
         now: @escaping () -> Date = Date.init,
+        claudeStatusCacheRefreshTimeoutNanoseconds: UInt64 = 5_000_000_000,
         isClaudeBridgeCurrent: @escaping () -> Bool = {
             ClaudeBridgeInstaller().isBridgeCurrent()
         }
@@ -70,6 +75,7 @@ final class PromptJuiceViewModel: ObservableObject {
         )
         self.alertEngine = alertEngine
         self.now = now
+        self.claudeStatusCacheRefreshTimeoutNanoseconds = claudeStatusCacheRefreshTimeoutNanoseconds
         self.isClaudeBridgeCurrent = isClaudeBridgeCurrent
         self.isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
         thresholds = settingsStore.thresholds
@@ -508,18 +514,28 @@ final class PromptJuiceViewModel: ObservableObject {
         refreshSnapshotsInBackground()
     }
 
-    func refreshClaudeAfterStatusCacheChange() {
+    func refreshClaudeAfterStatusCacheChange(reason: String = "cache change") {
         guard sourceMode == .liveCodex,
               enabledProviders.contains(.claude) else {
+            PromptJuiceLog.usage.notice("Claude status cache refresh skipped: \(reason, privacy: .public)")
             return
         }
+
+        recoverStaleClaudeStatusCacheRefreshIfNeeded(reason: reason)
 
         if isClaudeStatusCacheRefreshInFlight {
             hasPendingClaudeStatusCacheRefresh = true
+            PromptJuiceLog.usage.notice("Claude status cache refresh coalesced: \(reason, privacy: .public)")
             return
         }
 
-        startClaudeStatusCacheRefresh()
+        startClaudeStatusCacheRefresh(reason: reason)
+    }
+
+    func refreshClaudeStatusCacheNow(reason: String) {
+        refreshClaudeBridgeState()
+        PromptJuiceLog.usage.notice("Claude status cache catch-up requested: \(reason, privacy: .public)")
+        refreshClaudeAfterStatusCacheChange(reason: reason)
     }
 
     func refreshUsageAlertInBackground(
@@ -849,43 +865,120 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
-    private func startClaudeStatusCacheRefresh() {
+    private func startClaudeStatusCacheRefresh(reason: String) {
+        let refreshID = UUID()
         isClaudeStatusCacheRefreshInFlight = true
         hasPendingClaudeStatusCacheRefresh = false
+        activeClaudeStatusCacheRefreshID = refreshID
+        claudeStatusCacheRefreshStartedAt = now()
 
         let providerClient = claudeStatusCacheProviderClient
         let refreshDate = now()
 
+        PromptJuiceLog.usage.notice("Claude status cache refresh started: \(reason, privacy: .public)")
+
+        claudeStatusCacheRefreshTask?.cancel()
         claudeStatusCacheRefreshTask = Task.detached(priority: .utility) { [weak self] in
             let claudeSnapshot = providerClient.snapshots(now: refreshDate)
                 .first { $0.provider == .claude }
 
-            guard !Task.isCancelled else {
-                return
-            }
-
             await MainActor.run { [weak self] in
-                guard let self, !Task.isCancelled else {
+                guard let self else {
                     return
                 }
 
-                if self.sourceMode == .liveCodex,
-                   self.enabledProviders.contains(.claude),
-                   let claudeSnapshot {
-                    self.mergeSnapshotIfNewer(claudeSnapshot)
-                }
-
-                self.finishClaudeStatusCacheRefresh()
+                self.completeClaudeStatusCacheRefresh(
+                    refreshID: refreshID,
+                    claudeSnapshot: Task.isCancelled ? nil : claudeSnapshot,
+                    outcome: Task.isCancelled ? "cancelled" : "finished"
+                )
             }
+        }
+
+        scheduleClaudeStatusCacheRefreshTimeout(refreshID: refreshID)
+    }
+
+    private func scheduleClaudeStatusCacheRefreshTimeout(refreshID: UUID) {
+        claudeStatusCacheRefreshTimeoutTask?.cancel()
+        claudeStatusCacheRefreshTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: self?.claudeStatusCacheRefreshTimeoutNanoseconds ?? 0)
+            guard let self, !Task.isCancelled else {
+                return
+            }
+
+            self.timeoutClaudeStatusCacheRefresh(refreshID: refreshID)
         }
     }
 
-    private func finishClaudeStatusCacheRefresh() {
+    private func completeClaudeStatusCacheRefresh(
+        refreshID: UUID,
+        claudeSnapshot: ProviderSnapshot?,
+        outcome: String
+    ) {
+        guard activeClaudeStatusCacheRefreshID == refreshID else {
+            PromptJuiceLog.usage.notice("Claude status cache refresh result ignored: \(outcome, privacy: .public)")
+            return
+        }
+
+        if sourceMode == .liveCodex,
+           enabledProviders.contains(.claude),
+           let claudeSnapshot {
+            mergeSnapshotIfNewer(claudeSnapshot)
+            PromptJuiceLog.usage.notice("Claude status cache refresh merged exact snapshot")
+        } else {
+            PromptJuiceLog.usage.notice("Claude status cache refresh completed without merge: \(outcome, privacy: .public)")
+        }
+
+        finishClaudeStatusCacheRefresh(refreshID: refreshID, outcome: outcome)
+    }
+
+    private func timeoutClaudeStatusCacheRefresh(refreshID: UUID) {
+        guard activeClaudeStatusCacheRefreshID == refreshID else {
+            return
+        }
+
+        PromptJuiceLog.usage.notice("Claude status cache refresh timeout recovered")
+        claudeStatusCacheRefreshTask?.cancel()
+        finishClaudeStatusCacheRefresh(refreshID: refreshID, outcome: "timeout")
+    }
+
+    private func recoverStaleClaudeStatusCacheRefreshIfNeeded(reason: String) {
+        guard isClaudeStatusCacheRefreshInFlight,
+              let activeClaudeStatusCacheRefreshID,
+              let claudeStatusCacheRefreshStartedAt,
+              now().timeIntervalSince(claudeStatusCacheRefreshStartedAt) > claudeStatusCacheRefreshTimeoutInterval else {
+            return
+        }
+
+        PromptJuiceLog.usage.notice("Claude status cache stale in-flight recovered: \(reason, privacy: .public)")
+        claudeStatusCacheRefreshTask?.cancel()
+        finishClaudeStatusCacheRefresh(
+            refreshID: activeClaudeStatusCacheRefreshID,
+            outcome: "stale in-flight"
+        )
+    }
+
+    private var claudeStatusCacheRefreshTimeoutInterval: TimeInterval {
+        Double(claudeStatusCacheRefreshTimeoutNanoseconds) / 1_000_000_000
+    }
+
+    private func finishClaudeStatusCacheRefresh(refreshID: UUID, outcome: String) {
+        guard activeClaudeStatusCacheRefreshID == refreshID else {
+            return
+        }
+
         isClaudeStatusCacheRefreshInFlight = false
+        activeClaudeStatusCacheRefreshID = nil
+        claudeStatusCacheRefreshStartedAt = nil
+        claudeStatusCacheRefreshTask = nil
+        claudeStatusCacheRefreshTimeoutTask?.cancel()
+        claudeStatusCacheRefreshTimeoutTask = nil
+
+        PromptJuiceLog.usage.notice("Claude status cache refresh \(outcome, privacy: .public)")
 
         if hasPendingClaudeStatusCacheRefresh {
             hasPendingClaudeStatusCacheRefresh = false
-            refreshClaudeAfterStatusCacheChange()
+            refreshClaudeAfterStatusCacheChange(reason: "pending cache change")
         }
     }
 
