@@ -681,6 +681,99 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
     }
 
+    func testClaudeStatusCacheRefreshTimeoutAllowsLaterRefresh() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let refreshedClaude = Self.claudeSnapshot(
+            usedPercent: 24,
+            resetMinutes: 220,
+            updatedAt: Self.fixedNow.addingTimeInterval(5)
+        )
+        let claudeProvider = TimeoutThenFreshClaudeProvider(freshSnapshot: refreshedClaude)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow },
+            claudeStatusCacheRefreshTimeoutNanoseconds: 30_000_000
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+        await waitUntil { claudeProvider.callCount == 1 }
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+
+        await waitForSnapshots([refreshedClaude, Self.healthySnapshots[1]], in: viewModel)
+        XCTAssertGreaterThanOrEqual(claudeProvider.callCount, 2)
+        claudeProvider.releaseFirstRefresh()
+    }
+
+    func testPendingClaudeStatusCacheRefreshRunsAfterSlowRefreshFinishes() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let firstClaude = Self.claudeSnapshot(
+            usedPercent: 18,
+            resetMinutes: 210,
+            updatedAt: Self.fixedNow.addingTimeInterval(1)
+        )
+        let secondClaude = Self.claudeSnapshot(
+            usedPercent: 12,
+            resetMinutes: 230,
+            updatedAt: Self.fixedNow.addingTimeInterval(2)
+        )
+        let claudeProvider = SlowFirstThenFreshClaudeProvider(
+            firstSnapshot: firstClaude,
+            freshSnapshot: secondClaude
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+        await waitUntil { claudeProvider.callCount == 1 }
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+        XCTAssertEqual(claudeProvider.callCount, 1)
+
+        claudeProvider.releaseFirstRefresh()
+
+        await waitUntil { claudeProvider.callCount == 2 }
+        await waitForSnapshots([secondClaude, Self.healthySnapshots[1]], in: viewModel)
+    }
+
+    func testClaudeStatusCacheCatchUpMergesWhileLiveRefreshIsBlocked() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let liveClaude = CountingUsageProviderClient(snapshots: [Self.claudeUnavailableCodexHealthySnapshots[0]])
+        let slowCodex = BlockingSingleProviderClient(snapshots: [Self.healthySnapshots[1]])
+        let refreshedClaude = Self.claudeSnapshot(
+            usedPercent: 8,
+            resetMinutes: 245,
+            updatedAt: Self.fixedNow.addingTimeInterval(5)
+        )
+        let cacheProvider = CountingUsageProviderClient(snapshots: [refreshedClaude])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            claudeStatusCacheProviderClient: cacheProvider,
+            liveClaudeProviderClient: liveClaude,
+            liveCodexProviderClient: slowCodex,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsageQuietly()
+        await waitUntil { slowCodex.callCount == 1 }
+
+        viewModel.refreshClaudeStatusCacheNow(reason: "test catch-up")
+
+        await waitUntil { viewModel.snapshots.contains(refreshedClaude) }
+        XCTAssertEqual(cacheProvider.callCount, 1)
+        slowCodex.releaseRefresh()
+    }
+
     func testSettingsWindowShowStartsExactlyOneQuietRefresh() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -992,6 +1085,24 @@ final class PromptJuiceViewModelTests: XCTestCase {
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
     private static let staleClaudeUpdatedAt = fixedNow.addingTimeInterval(-10 * 60)
 
+    private static func claudeSnapshot(
+        usedPercent: Double,
+        resetMinutes: Int,
+        updatedAt: Date
+    ) -> ProviderSnapshot {
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: usedPercent,
+                resetAt: fixedNow.addingTimeInterval(TimeInterval(resetMinutes * 60)),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: updatedAt
+        )
+    }
+
     private static let healthySnapshots = [
         ProviderSnapshot(
             identity: .claude,
@@ -1295,6 +1406,88 @@ final class PromptJuiceViewModelTests: XCTestCase {
         func releaseRefresh() {
             _ = refreshStarted.wait(timeout: .now() + 1)
             refreshCanFinish.signal()
+        }
+    }
+
+    private final class SlowFirstThenFreshClaudeProvider: UsageProviderClient, @unchecked Sendable {
+        let source: SnapshotSource = .claudeStatusline
+
+        private let firstSnapshot: ProviderSnapshot
+        private let freshSnapshot: ProviderSnapshot
+        private let firstRefreshStarted = DispatchSemaphore(value: 0)
+        private let firstRefreshCanFinish = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var calls = 0
+
+        init(firstSnapshot: ProviderSnapshot, freshSnapshot: ProviderSnapshot) {
+            self.firstSnapshot = firstSnapshot
+            self.freshSnapshot = freshSnapshot
+        }
+
+        var callCount: Int {
+            lock.withLock {
+                calls
+            }
+        }
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            let currentCall = lock.withLock {
+                calls += 1
+                return calls
+            }
+
+            if currentCall == 1 {
+                firstRefreshStarted.signal()
+                _ = firstRefreshCanFinish.wait(timeout: .now() + 1)
+                return [firstSnapshot]
+            }
+
+            return [freshSnapshot]
+        }
+
+        func releaseFirstRefresh() {
+            _ = firstRefreshStarted.wait(timeout: .now() + 1)
+            firstRefreshCanFinish.signal()
+        }
+    }
+
+    private final class TimeoutThenFreshClaudeProvider: UsageProviderClient, @unchecked Sendable {
+        let source: SnapshotSource = .claudeStatusline
+
+        private let freshSnapshot: ProviderSnapshot
+        private let firstRefreshStarted = DispatchSemaphore(value: 0)
+        private let firstRefreshCanFinish = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var calls = 0
+
+        init(freshSnapshot: ProviderSnapshot) {
+            self.freshSnapshot = freshSnapshot
+        }
+
+        var callCount: Int {
+            lock.withLock {
+                calls
+            }
+        }
+
+        func snapshots(now _: Date) -> [ProviderSnapshot] {
+            let currentCall = lock.withLock {
+                calls += 1
+                return calls
+            }
+
+            if currentCall == 1 {
+                firstRefreshStarted.signal()
+                _ = firstRefreshCanFinish.wait(timeout: .now() + 1)
+                return []
+            }
+
+            return [freshSnapshot]
+        }
+
+        func releaseFirstRefresh() {
+            _ = firstRefreshStarted.wait(timeout: .now() + 1)
+            firstRefreshCanFinish.signal()
         }
     }
 

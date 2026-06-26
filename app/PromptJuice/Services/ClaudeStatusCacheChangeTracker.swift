@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 final class ClaudeStatusCacheChangeTracker {
@@ -7,7 +8,7 @@ final class ClaudeStatusCacheChangeTracker {
         let modificationDate: Date?
     }
 
-    private let cacheURL: URL
+    let cacheURL: URL
     private let fileManager: FileManager
     private var lastSignature: CacheSignature?
 
@@ -69,41 +70,101 @@ final class ClaudeStatusCacheChangeTracker {
 }
 
 final class ClaudeStatusCachePoller {
+    private static let queueKey = DispatchSpecificKey<Bool>()
+
     private let tracker: ClaudeStatusCacheChangeTracker
     private let queue: DispatchQueue
+    private let usesDirectoryWatcher: Bool
     private var timer: DispatchSourceTimer?
+    private var directorySource: DispatchSourceFileSystemObject?
 
     init(
-        tracker: ClaudeStatusCacheChangeTracker = ClaudeStatusCacheChangeTracker(),
+        cacheURL: URL = ClaudeStatuslineSnapshotReader.defaultCacheURL(),
+        tracker: ClaudeStatusCacheChangeTracker? = nil,
+        usesDirectoryWatcher: Bool = true,
         queue: DispatchQueue = DispatchQueue(
             label: "com.promptjuice.claude-status-cache-poller",
             qos: .utility
         )
     ) {
-        self.tracker = tracker
+        self.tracker = tracker ?? ClaudeStatusCacheChangeTracker(cacheURL: cacheURL)
         self.queue = queue
+        self.usesDirectoryWatcher = usesDirectoryWatcher
+        self.queue.setSpecific(key: Self.queueKey, value: true)
     }
 
     func start(onChange: @escaping @MainActor () -> Void) {
         stop()
-
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 1, repeating: 1)
-        timer.setEventHandler { [tracker] in
-            guard tracker.consumeChange() else {
-                return
-            }
-
-            Task { @MainActor in
-                onChange()
-            }
+        tracker.reset()
+        if usesDirectoryWatcher {
+            startDirectoryWatcher(onChange: onChange)
         }
-        self.timer = timer
-        timer.resume()
+        startTimer(onChange: onChange)
+    }
+
+    func reset() {
+        tracker.reset()
     }
 
     func stop() {
         timer?.cancel()
         timer = nil
+        directorySource?.cancel()
+        directorySource = nil
+        drainQueue()
+    }
+
+    private func startTimer(onChange: @escaping @MainActor () -> Void) {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in
+            self?.consumeChange(source: "poller", onChange: onChange)
+        }
+        self.timer = timer
+        timer.resume()
+    }
+
+    private func startDirectoryWatcher(onChange: @escaping @MainActor () -> Void) {
+        let directoryURL = tracker.cacheURL.deletingLastPathComponent()
+        let fileDescriptor = open(directoryURL.path, O_EVTONLY)
+        guard fileDescriptor >= 0 else {
+            PromptJuiceLog.usage.notice("Claude status cache directory watcher unavailable")
+            return
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fileDescriptor,
+            eventMask: [.write, .delete, .rename, .attrib, .extend],
+            queue: queue
+        )
+        source.setEventHandler { [weak self] in
+            self?.consumeChange(source: "directory watcher", onChange: onChange)
+        }
+        source.setCancelHandler {
+            close(fileDescriptor)
+        }
+        directorySource = source
+        source.resume()
+        PromptJuiceLog.usage.notice("Claude status cache directory watcher started")
+    }
+
+    private func consumeChange(
+        source: String,
+        onChange: @escaping @MainActor () -> Void
+    ) {
+        guard tracker.consumeChange() else {
+            return
+        }
+
+        PromptJuiceLog.usage.notice("Claude status cache change detected via \(source, privacy: .public)")
+        Task { @MainActor in
+            onChange()
+        }
+    }
+
+    private func drainQueue() {
+        if DispatchQueue.getSpecific(key: Self.queueKey) == nil {
+            queue.sync {}
+        }
     }
 }

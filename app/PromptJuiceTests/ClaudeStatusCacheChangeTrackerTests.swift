@@ -33,6 +33,79 @@ final class ClaudeStatusCacheChangeTrackerTests: XCTestCase {
         XCTAssertFalse(tracker.consumeChange())
     }
 
+    func testPollerDetectsAtomicCacheReplacement() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PromptJuiceCachePollerTests-\(UUID().uuidString)", isDirectory: true)
+        let cacheURL = root
+            .appendingPathComponent("ClaudeStatus", isDirectory: true)
+            .appendingPathComponent("latest.json")
+
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try writeCache(usedPercent: 10, to: cacheURL)
+
+        let poller = ClaudeStatusCachePoller(
+            cacheURL: cacheURL,
+            usesDirectoryWatcher: false,
+            queue: DispatchQueue(label: "com.promptjuice.tests.cache-poller")
+        )
+        let changeDetected = expectation(description: "cache change detected")
+        poller.start {
+            changeDetected.fulfill()
+        }
+        defer {
+            poller.stop()
+        }
+
+        try writeCache(usedPercent: 12, to: cacheURL)
+
+        wait(for: [changeDetected], timeout: 2)
+    }
+
+    func testPollerRestartDetectsLaterAtomicCacheReplacement() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PromptJuiceCachePollerRestartTests-\(UUID().uuidString)", isDirectory: true)
+        let cacheURL = root
+            .appendingPathComponent("ClaudeStatus", isDirectory: true)
+            .appendingPathComponent("latest.json")
+
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try writeCache(usedPercent: 20, to: cacheURL)
+
+        let poller = ClaudeStatusCachePoller(
+            cacheURL: cacheURL,
+            usesDirectoryWatcher: false,
+            queue: DispatchQueue(label: "com.promptjuice.tests.cache-poller-restart")
+        )
+        poller.start {}
+        poller.stop()
+
+        let changeDetected = expectation(description: "cache change detected after restart")
+        poller.start {
+            changeDetected.fulfill()
+        }
+        defer {
+            poller.stop()
+        }
+
+        try writeCache(usedPercent: 22, to: cacheURL)
+
+        wait(for: [changeDetected], timeout: 2)
+    }
+
     private func writeCache(usedPercent: Double, to cacheURL: URL) throws {
         let temporaryURL = cacheURL
             .deletingLastPathComponent()
