@@ -748,6 +748,47 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(claudeProvider.callCount, 1)
     }
 
+    func testClaudeStatusCacheRefreshKeepsEstimateOverUnavailableStatusline() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let estimatedClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 58,
+                resetAt: Self.fixedNow.addingTimeInterval(150 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: Self.fixedNow
+        )
+        let unavailableClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: Self.fixedNow.addingTimeInterval(60),
+            statusDetail: "Claude five-hour rate limit unreadable"
+        )
+        let aggregateProvider = CountingUsageProviderClient(snapshots: [
+            estimatedClaude,
+            Self.healthySnapshots[1]
+        ])
+        let claudeProvider = CountingUsageProviderClient(snapshots: [unavailableClaude])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: aggregateProvider,
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(viewModel.snapshots, [estimatedClaude, Self.healthySnapshots[1]])
+        XCTAssertEqual(claudeProvider.callCount, 1)
+    }
+
     func testClaudeStatusCacheRefreshSkipsWhenClaudeIsDisabled() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

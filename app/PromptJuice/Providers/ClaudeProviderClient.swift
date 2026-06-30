@@ -79,7 +79,9 @@ struct ClaudeProviderClient: UsageProviderClient {
         logMessage: String
     ) -> ProviderSnapshot {
         guard shouldUseLocalEstimate(for: error) else {
-            PromptJuiceLog.usage.debug("\(logMessage, privacy: .public); local estimate skipped")
+            PromptJuiceLog.usage.notice(
+                "\(logMessage, privacy: .public); local estimate skipped: \(fallbackDetail, privacy: .public)"
+            )
             return unavailableSnapshot(now: now, detail: fallbackDetail)
         }
 
@@ -89,7 +91,9 @@ struct ClaudeProviderClient: UsageProviderClient {
             PromptJuiceLog.usage.debug("Claude provider read finished with local estimate")
             return snapshot
         } catch {
-            PromptJuiceLog.usage.debug("Claude local estimate failed: \(error.localizedDescription, privacy: .public)")
+            PromptJuiceLog.usage.notice(
+                "Claude local estimate failed: \(error.localizedDescription, privacy: .public); statusline: \(fallbackDetail, privacy: .public)"
+            )
             return unavailableSnapshot(
                 now: now,
                 detail: "Claude statusline and local usage unavailable"
@@ -104,7 +108,20 @@ struct ClaudeProviderClient: UsageProviderClient {
         case .enabled:
             return true
         case .invalidStatuslineOnly:
-            return error as? ClaudeUsageError == .invalidFiveHourRateLimit
+            return isFreshUnusableStatuslineError(error)
+        }
+    }
+
+    private func isFreshUnusableStatuslineError(_ error: Error) -> Bool {
+        guard let usageError = error as? ClaudeUsageError else {
+            return false
+        }
+
+        switch usageError {
+        case .missingFiveHourRateLimit, .invalidFiveHourRateLimit:
+            return true
+        case .statuslineCacheUnavailable, .statuslineCacheStale, .localLogActiveBlockUnavailable:
+            return false
         }
     }
 

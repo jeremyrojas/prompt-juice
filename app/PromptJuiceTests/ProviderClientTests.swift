@@ -561,6 +561,41 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.resetAt, expectedActiveClaudeBlockReset)
     }
 
+    func testClaudeProviderUsesLocalEstimateForFreshCacheMissingFiveHourWhenInvalidOnlyPolicyIsEnabled() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let project = root.appendingPathComponent("projects/demo", isDirectory: true)
+        let log = project.appendingPathComponent("session.jsonl")
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try #"{"rate_limits":{}}"#.write(to: cacheURL, atomically: true, encoding: .utf8)
+        try localClaudeLogFixture.write(to: log, atomically: true, encoding: .utf8)
+        try setModificationDate(now, for: cacheURL)
+        try setModificationDate(now, for: log)
+
+        let provider = ClaudeProviderClient(
+            statuslineReader: ClaudeStatuslineSnapshotReader(cacheURL: cacheURL),
+            localUsageReader: ClaudeLocalLogUsageReader(
+                projectRoots: [root.appendingPathComponent("projects", isDirectory: true)],
+                limits: .unboundedForTests
+            ),
+            cache: nil,
+            localEstimatePolicy: .invalidStatuslineOnly
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeLocalLogs)
+        XCTAssertEqual(snapshot.confidence, .estimated)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, expectedActiveClaudeBlockReset)
+    }
+
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsStaleByDefault() {
         let estimate = ProviderSnapshot(
             identity: .claude,
@@ -578,6 +613,34 @@ final class ProviderClientTests: XCTestCase {
             statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheStale)),
             localUsageReader: localUsageReader,
             cache: nil
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeStatusline)
+        XCTAssertEqual(snapshot.confidence, .unavailable)
+        XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache stale")
+        XCTAssertEqual(localUsageReader.callCount, 0)
+    }
+
+    func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsStaleAndInvalidOnlyPolicyIsEnabled() {
+        let estimate = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 60,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: now
+        )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheStale)),
+            localUsageReader: localUsageReader,
+            cache: nil,
+            localEstimatePolicy: .invalidStatuslineOnly
         )
 
         let snapshot = provider.snapshots(now: now)[0]
