@@ -920,15 +920,10 @@ final class PromptJuiceViewModel: ObservableObject {
         if sourceMode == .liveCodex,
            enabledProviders.contains(.claude),
            let claudeSnapshot {
-            if mergeSnapshotIfNewer(claudeSnapshot) {
-                PromptJuiceLog.usage.notice(
-                    "Claude status cache refresh merged snapshot: \(claudeSnapshot.source.rawValue, privacy: .public)/\(claudeSnapshot.confidence.rawValue, privacy: .public)"
-                )
-            } else {
-                PromptJuiceLog.usage.notice(
-                    "Claude status cache refresh kept existing snapshot over: \(claudeSnapshot.source.rawValue, privacy: .public)/\(claudeSnapshot.confidence.rawValue, privacy: .public)"
-                )
-            }
+            mergeSnapshotIfNewer(claudeSnapshot)
+            PromptJuiceLog.usage.notice(
+                "Claude status cache refresh merged snapshot: \(claudeSnapshot.source.rawValue, privacy: .public)/\(claudeSnapshot.confidence.rawValue, privacy: .public)"
+            )
         } else {
             PromptJuiceLog.usage.notice("Claude status cache refresh completed without merge: \(outcome, privacy: .public)")
         }
@@ -986,7 +981,7 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
-    private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) -> Bool {
+    private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) {
         let refreshDate = now()
         let refreshedSnapshot = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
         let existing = snapshots.first { $0.provider == refreshedSnapshot.provider }
@@ -997,14 +992,13 @@ final class PromptJuiceViewModel: ObservableObject {
             over: refreshedSnapshot,
             refreshDate: refreshDate
            ) {
-            return false
+            return
         }
 
         var mergedSnapshots = snapshots.filter { $0.provider != refreshedSnapshot.provider }
         mergedSnapshots.append(refreshedSnapshot)
         snapshots = Self.sortedSnapshots(mergedSnapshots)
         logSnapshotState(reason: "single snapshot merge")
-        return true
     }
 
     private static func sortedSnapshots(_ snapshots: [ProviderSnapshot]) -> [ProviderSnapshot] {
@@ -1165,11 +1159,8 @@ final class PromptJuiceViewModel: ObservableObject {
             return
         }
 
-        if mergeSnapshotIfNewer(snapshot) {
-            PromptJuiceLog.usage.debug("Live provider snapshot merged: \(snapshot.provider.rawValue, privacy: .public)")
-        } else {
-            PromptJuiceLog.usage.debug("Live provider snapshot kept existing: \(snapshot.provider.rawValue, privacy: .public)")
-        }
+        PromptJuiceLog.usage.debug("Live provider snapshot merged: \(snapshot.provider.rawValue, privacy: .public)")
+        mergeSnapshotIfNewer(snapshot)
     }
 
     private func finishLiveProviderRefresh(
