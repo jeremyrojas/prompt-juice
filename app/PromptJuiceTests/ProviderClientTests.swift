@@ -147,6 +147,36 @@ final class ProviderClientTests: XCTestCase {
         }
     }
 
+    func testClaudeStatuslineFileReaderRejectsFreshCacheWithExpiredReset() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let expiredFixture = """
+        {
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": 0,
+              "resets_at": "\(Int(now.addingTimeInterval(-60).timeIntervalSince1970))",
+              "duration_minutes": 300
+            }
+          }
+        }
+        """
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try expiredFixture.write(to: cacheURL, atomically: true, encoding: .utf8)
+        try setModificationDate(now, for: cacheURL)
+
+        XCTAssertThrowsError(
+            try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+        ) { error in
+            XCTAssertEqual(error as? ClaudeUsageError, .invalidFiveHourRateLimit)
+        }
+    }
+
     func testClaudeStatuslineReaderAcceptsNumericResetTimestamp() throws {
         let fixture = """
         {
@@ -401,6 +431,136 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(localUsageReader.callCount, 1)
     }
 
+    func testClaudeProviderUsesLocalEstimateWhenStatuslineResetIsInvalidAndPolicyIsEnabled() {
+        let estimate = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 3,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: now
+        )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.invalidFiveHourRateLimit)),
+            localUsageReader: localUsageReader,
+            cache: nil,
+            localEstimatePolicy: .enabled
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeLocalLogs)
+        XCTAssertEqual(snapshot.confidence, .estimated)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 3)
+        XCTAssertEqual(localUsageReader.callCount, 1)
+    }
+
+    func testClaudeProviderUsesLocalEstimateWhenStatuslineResetIsInvalidAndInvalidOnlyPolicyIsEnabled() {
+        let estimate = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 3,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: now
+        )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.invalidFiveHourRateLimit)),
+            localUsageReader: localUsageReader,
+            cache: nil,
+            localEstimatePolicy: .invalidStatuslineOnly
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeLocalLogs)
+        XCTAssertEqual(snapshot.confidence, .estimated)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 3)
+        XCTAssertEqual(localUsageReader.callCount, 1)
+    }
+
+    func testClaudeProviderSkipsLocalEstimateForMissingCacheWhenInvalidOnlyPolicyIsEnabled() {
+        let estimate = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 3,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: now
+        )
+        let localUsageReader = CountingClaudeLocalUsageReader(result: .success(estimate))
+        let provider = ClaudeProviderClient(
+            statuslineReader: StubClaudeStatuslineReader(result: .failure(ClaudeUsageError.statuslineCacheUnavailable)),
+            localUsageReader: localUsageReader,
+            cache: nil,
+            localEstimatePolicy: .invalidStatuslineOnly
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeStatusline)
+        XCTAssertEqual(snapshot.confidence, .unavailable)
+        XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
+        XCTAssertEqual(localUsageReader.callCount, 0)
+    }
+
+    func testClaudeProviderUsesLocalEstimateForFreshCacheWithExpiredResetWhenInvalidOnlyPolicyIsEnabled() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let project = root.appendingPathComponent("projects/demo", isDirectory: true)
+        let log = project.appendingPathComponent("session.jsonl")
+        let expiredFixture = """
+        {
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": 0,
+              "resets_at": "\(Int(now.addingTimeInterval(-60).timeIntervalSince1970))",
+              "duration_minutes": 300
+            }
+          }
+        }
+        """
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try expiredFixture.write(to: cacheURL, atomically: true, encoding: .utf8)
+        try localClaudeLogFixture.write(to: log, atomically: true, encoding: .utf8)
+        try setModificationDate(now, for: cacheURL)
+        try setModificationDate(now, for: log)
+
+        let provider = ClaudeProviderClient(
+            statuslineReader: ClaudeStatuslineSnapshotReader(cacheURL: cacheURL),
+            localUsageReader: ClaudeLocalLogUsageReader(
+                projectRoots: [root.appendingPathComponent("projects", isDirectory: true)],
+                limits: .unboundedForTests
+            ),
+            cache: nil,
+            localEstimatePolicy: .invalidStatuslineOnly
+        )
+
+        let snapshot = provider.snapshots(now: now)[0]
+
+        XCTAssertEqual(snapshot.source, .claudeLocalLogs)
+        XCTAssertEqual(snapshot.confidence, .estimated)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, expectedActiveClaudeBlockReset)
+    }
+
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsStaleByDefault() {
         let estimate = ProviderSnapshot(
             identity: .claude,
@@ -631,6 +791,18 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertFalse(cacheText.contains("current_dir"))
         XCTAssertFalse(cacheText.contains("model"))
 
+        let debugURL = cacheURL.deletingLastPathComponent().appendingPathComponent("debug-latest.json")
+        let debugText = try String(contentsOf: debugURL, encoding: .utf8)
+        XCTAssertFalse(debugText.contains("workspace"))
+        XCTAssertFalse(debugText.contains("current_dir"))
+        XCTAssertFalse(debugText.contains("model"))
+
+        let debugRoot = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(debugText.utf8)) as? [String: Any])
+        let debugFiveHour = try XCTUnwrap(debugRoot["five_hour"] as? [String: Any])
+        XCTAssertEqual(debugFiveHour["used_percentage"] as? String, "12.5")
+        XCTAssertEqual(debugFiveHour["resets_at"] as? String, "1800001800")
+        XCTAssertEqual(debugFiveHour["duration_minutes"] as? String, "300")
+
         let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
         XCTAssertEqual(snapshot.source, .claudeStatusline)
         XCTAssertEqual(snapshot.confidence, .exact)
@@ -661,6 +833,62 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(fiveHour["used_percentage"] as? Double, 12.5)
         XCTAssertEqual(fiveHour["resets_at"] as? String, "2030-01-01T00:00:00Z")
         XCTAssertEqual(fiveHour["duration_minutes"] as? Int, 240)
+    }
+
+    func testClaudeStatuslineBridgeCanDisableDebugOutput() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+
+        let result = try runClaudeStatuslineBridge(
+            input: claudeStatuslineFixture,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL,
+            extraEnvironment: ["PROMPTJUICE_CLAUDE_STATUS_DEBUG": "0"]
+        )
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: cacheURL.deletingLastPathComponent()
+                    .appendingPathComponent("debug-latest.json")
+                    .path
+            )
+        )
+    }
+
+    func testClaudeStatuslineBridgeWritesCustomDebugPathWithNullMissingFields() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let debugURL = root.appendingPathComponent("Debug/custom-debug.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+
+        let result = try runClaudeStatuslineBridge(
+            input: #"{"context_window":{"used_percentage":42}}"#,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL,
+            extraEnvironment: ["PROMPTJUICE_CLAUDE_STATUS_DEBUG_PATH": debugURL.path]
+        )
+
+        XCTAssertEqual(result.status, 0)
+
+        let debugRoot = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: debugURL)) as? [String: Any])
+        let debugFiveHour = try XCTUnwrap(debugRoot["five_hour"] as? [String: Any])
+        XCTAssert(debugFiveHour["used_percentage"] is NSNull)
+        XCTAssert(debugFiveHour["resets_at"] is NSNull)
+        XCTAssert(debugFiveHour["duration_minutes"] is NSNull)
     }
 
     func testClaudeStatuslineBridgeDefaultsInvalidOptionalDurationToFiveHours() throws {
@@ -973,7 +1201,8 @@ final class ProviderClientTests: XCTestCase {
         input: String,
         cacheURL: URL,
         delegateURL: URL,
-        parser: String? = nil
+        parser: String? = nil,
+        extraEnvironment: [String: String?] = [:]
     ) throws -> (status: Int32, output: String, error: String) {
         let bridgeURL = repositoryRoot
             .appendingPathComponent("scripts/claude-statusline-bridge.sh")
@@ -990,6 +1219,13 @@ final class ProviderClientTests: XCTestCase {
             environment["PROMPTJUICE_CLAUDE_STATUSLINE_PARSER"] = parser
         } else {
             environment.removeValue(forKey: "PROMPTJUICE_CLAUDE_STATUSLINE_PARSER")
+        }
+        for (key, value) in extraEnvironment {
+            if let value {
+                environment[key] = value
+            } else {
+                environment.removeValue(forKey: key)
+            }
         }
         process.environment = environment
 

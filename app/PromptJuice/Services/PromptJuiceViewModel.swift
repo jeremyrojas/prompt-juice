@@ -60,7 +60,7 @@ final class PromptJuiceViewModel: ObservableObject {
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
         let initialEnabledProviders = settingsStore.enabledProviders
-        let liveClaudeClient = liveClaudeProviderClient ?? ClaudeProviderClient()
+        let liveClaudeClient = liveClaudeProviderClient ?? ClaudeProviderClient(localEstimatePolicy: .invalidStatuslineOnly)
         let liveCodexClient = liveCodexProviderClient ?? CodexProviderClient()
 
         self.settingsStore = settingsStore
@@ -683,13 +683,13 @@ final class PromptJuiceViewModel: ObservableObject {
                 case .setupAvailable:
                     return "Estimated from local Claude Code activity · open Settings to set up live"
                 case .awaitingSession:
-                    return "Estimated from local Claude Code activity · send a message in Claude Code to see exact usage"
+                    return "Estimated from local Claude Code activity"
                 }
             case .stale:
                 return "Read from Claude Code · \(clockTime(snapshot.updatedAt))"
             case .unavailable:
                 if claudeLiveUpgrade == .awaitingSession {
-                    return "You're set up · send a message in Claude Code to see exact usage"
+                    return "You're set up · waiting for Claude Code usage"
                 }
 
                 return snapshot.statusDetail ?? "Not measured yet"
@@ -735,7 +735,7 @@ final class PromptJuiceViewModel: ObservableObject {
     var claudeMeasurementPopoverDetail: String {
         if let snapshot = snapshots.first(where: { $0.provider == .claude }),
            snapshot.confidence == .stale {
-            return "Right now it's showing your last exact reading from \(clockTime(snapshot.updatedAt)). It'll refresh when you next use Claude Code in the terminal."
+            return "Right now it's showing your last exact reading from \(clockTime(snapshot.updatedAt)). Claude Code will replace it when the statusline sends a current window."
         }
 
         switch claudeLiveUpgrade {
@@ -749,10 +749,10 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers."
         case .awaitingSession:
             if isUnavailable(.claude) {
-                return "You're set up. Open Claude Code in your terminal and send any message — PromptJuice reads your exact usage from the response."
+                return "You're set up. PromptJuice is waiting for Claude Code's next statusline window."
             }
 
-            return "You're set up — showing a quick estimate for now. Send any message in Claude Code (terminal) and it switches to your exact usage."
+            return "Showing a local Claude Code estimate. Exact usage replaces it when Claude Code sends a current rate-limit window."
         }
     }
 
@@ -767,7 +767,7 @@ final class PromptJuiceViewModel: ObservableObject {
             }
 
             if provider == .claude, claudeLiveUpgrade == .awaitingSession {
-                return "Goes live next time you use Claude Code in the terminal"
+                return "Waiting for Claude statusline"
             }
 
             return provider == .claude ? "Not set up yet" : "Not detected"
@@ -780,9 +780,6 @@ final class PromptJuiceViewModel: ObservableObject {
             }
             return "Live"
         case .estimated:
-            if provider == .claude, claudeLiveUpgrade == .awaitingSession {
-                return "Goes live next time you use Claude Code in the terminal"
-            }
             return "Estimate"
         case .stale:
             return "Read earlier · \(clockTime(snapshot.updatedAt))"
@@ -923,8 +920,15 @@ final class PromptJuiceViewModel: ObservableObject {
         if sourceMode == .liveCodex,
            enabledProviders.contains(.claude),
            let claudeSnapshot {
-            mergeSnapshotIfNewer(claudeSnapshot)
-            PromptJuiceLog.usage.notice("Claude status cache refresh merged exact snapshot")
+            if mergeSnapshotIfNewer(claudeSnapshot) {
+                PromptJuiceLog.usage.notice(
+                    "Claude status cache refresh merged snapshot: \(claudeSnapshot.source.rawValue, privacy: .public)/\(claudeSnapshot.confidence.rawValue, privacy: .public)"
+                )
+            } else {
+                PromptJuiceLog.usage.notice(
+                    "Claude status cache refresh kept existing snapshot over: \(claudeSnapshot.source.rawValue, privacy: .public)/\(claudeSnapshot.confidence.rawValue, privacy: .public)"
+                )
+            }
         } else {
             PromptJuiceLog.usage.notice("Claude status cache refresh completed without merge: \(outcome, privacy: .public)")
         }
@@ -982,7 +986,7 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
-    private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) {
+    private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) -> Bool {
         let refreshDate = now()
         let refreshedSnapshot = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
         let existing = snapshots.first { $0.provider == refreshedSnapshot.provider }
@@ -993,12 +997,14 @@ final class PromptJuiceViewModel: ObservableObject {
             over: refreshedSnapshot,
             refreshDate: refreshDate
            ) {
-            return
+            return false
         }
 
         var mergedSnapshots = snapshots.filter { $0.provider != refreshedSnapshot.provider }
         mergedSnapshots.append(refreshedSnapshot)
         snapshots = Self.sortedSnapshots(mergedSnapshots)
+        logSnapshotState(reason: "single snapshot merge")
+        return true
     }
 
     private static func sortedSnapshots(_ snapshots: [ProviderSnapshot]) -> [ProviderSnapshot] {
@@ -1143,6 +1149,7 @@ final class PromptJuiceViewModel: ObservableObject {
             with: refreshedSnapshots,
             refreshDate: refreshDate
         )
+        logSnapshotState(reason: "aggregate refresh")
         finishRefresh(
             refreshID: refreshID,
             completionMessage: completionMessage,
@@ -1158,8 +1165,11 @@ final class PromptJuiceViewModel: ObservableObject {
             return
         }
 
-        PromptJuiceLog.usage.debug("Live provider snapshot merged: \(snapshot.provider.rawValue, privacy: .public)")
-        mergeSnapshotIfNewer(snapshot)
+        if mergeSnapshotIfNewer(snapshot) {
+            PromptJuiceLog.usage.debug("Live provider snapshot merged: \(snapshot.provider.rawValue, privacy: .public)")
+        } else {
+            PromptJuiceLog.usage.debug("Live provider snapshot kept existing: \(snapshot.provider.rawValue, privacy: .public)")
+        }
     }
 
     private func finishLiveProviderRefresh(
@@ -1250,6 +1260,12 @@ final class PromptJuiceViewModel: ObservableObject {
             return false
         }
 
+        let existingPriority = snapshotPriority(existing)
+        let refreshedPriority = snapshotPriority(refreshed)
+        if existingPriority != refreshedPriority {
+            return existingPriority > refreshedPriority
+        }
+
         if let existingResetAt = existing.rateWindow.resetAt,
            let refreshedResetAt = refreshed.rateWindow.resetAt,
            refreshedResetAt > existingResetAt {
@@ -1257,6 +1273,23 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return existing.updatedAt > refreshed.updatedAt
+    }
+
+    private func snapshotPriority(_ snapshot: ProviderSnapshot) -> Int {
+        guard snapshot.isAvailable else {
+            return 0
+        }
+
+        switch snapshot.confidence {
+        case .exact:
+            return 3
+        case .estimated:
+            return 2
+        case .stale:
+            return 1
+        case .unavailable:
+            return 0
+        }
     }
 
     private func replaceExpiredSnapshots(
@@ -1279,6 +1312,7 @@ final class PromptJuiceViewModel: ObservableObject {
                 )
             }
         )
+        logSnapshotState(reason: "expired snapshot replacement")
 
         if let selectedProvider,
            expiredProviders.contains(selectedProvider) {
@@ -1286,12 +1320,28 @@ final class PromptJuiceViewModel: ObservableObject {
         }
     }
 
+    private func logSnapshotState(reason: String) {
+        let states = snapshots
+            .map { snapshot in
+                let availability = snapshot.isAvailable ? "available" : "unavailable"
+                return "\(snapshot.provider.rawValue):\(snapshot.source.rawValue):\(snapshot.confidence.rawValue):\(availability)"
+            }
+            .joined(separator: ",")
+        let claudeState = claudeLiveUpgrade
+
+        PromptJuiceLog.usage.notice(
+            "Snapshot state updated (\(reason, privacy: .public)): \(states, privacy: .public); claudeLiveUpgrade=\(String(describing: claudeState), privacy: .public)"
+        )
+    }
+
     private static func makeProviderClient(sourceMode: UsageSourceMode) -> any UsageProviderClient {
         switch sourceMode {
         case .fixture:
             return FixtureUsageProviderClient(scenario: .underusedCodex)
         case .liveCodex:
-            return ClaudeLiveUsageProviderClient()
+            return ClaudeLiveUsageProviderClient(
+                claudeProviderClient: ClaudeProviderClient(localEstimatePolicy: .invalidStatuslineOnly)
+            )
         }
     }
 

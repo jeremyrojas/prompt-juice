@@ -83,10 +83,10 @@ script, that file exists, and `statusLine.refreshInterval` is `10`.
 |---|---|---|---|---|---|---|
 | 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | open Settings |
 | 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
-| 3 | estimated, bridge current | Goes live next time you use Claude Code in the terminal + ⓘ | — | ~41% | Estimated from local Claude Code activity · send a message in Claude Code to see exact usage | open Settings |
+| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | open Settings |
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
 | 5 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
-| 6 | unavailable, bridge current | Goes live next time you use Claude Code in the terminal + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · send a message in Claude Code to see exact usage | open Settings |
+| 6 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | open Settings |
 | 7 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |
 
 On apply, the setup sheet shows a success + next-step confirmation ("You're almost set") before the user returns to Settings.

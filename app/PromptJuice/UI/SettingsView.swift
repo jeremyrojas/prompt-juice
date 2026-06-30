@@ -566,7 +566,7 @@ private struct ClaudeSetupSuccessView: View {
                     .font(.title3.weight(.semibold))
             }
 
-            Text("Open Claude Code in your terminal and send any message — PromptJuice reads your exact usage from the response.")
+            Text("PromptJuice is ready to read exact usage from Claude Code statusline updates.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

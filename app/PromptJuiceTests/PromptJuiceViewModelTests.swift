@@ -352,15 +352,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Goes live next time you use Claude Code in the terminal")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Estimate")
         XCTAssertNil(viewModel.claudeSetupButtonTitle)
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "Estimated from local Claude Code activity · send a message in Claude Code to see exact usage"
+            "Estimated from local Claude Code activity"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
-            "You're set up — showing a quick estimate for now. Send any message in Claude Code (terminal) and it switches to your exact usage."
+            "Showing a local Claude Code estimate. Exact usage replaces it when Claude Code sends a current rate-limit window."
         )
     }
 
@@ -377,15 +377,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
         XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Goes live next time you use Claude Code in the terminal")
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Waiting for Claude statusline")
         XCTAssertNil(viewModel.claudeSetupButtonTitle)
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "You're set up · send a message in Claude Code to see exact usage"
+            "You're set up · waiting for Claude Code usage"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
-            "You're set up. Open Claude Code in your terminal and send any message — PromptJuice reads your exact usage from the response."
+            "You're set up. PromptJuice is waiting for Claude Code's next statusline window."
         )
 
         viewModel.showManualCheck()
@@ -412,7 +412,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
-            "Right now it's showing your last exact reading from \(time). It'll refresh when you next use Claude Code in the terminal."
+            "Right now it's showing your last exact reading from \(time). Claude Code will replace it when the statusline sends a current window."
         )
     }
 
@@ -545,6 +545,48 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testTickReplacesExpiredClaudeWindowWithLocalEstimate() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let expiredClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 0,
+                resetAt: Self.fixedNow.addingTimeInterval(-60),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: Self.fixedNow.addingTimeInterval(-3600)
+        )
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: [
+                expiredClaude,
+                Self.healthySnapshots[1]
+            ],
+            refreshedSnapshots: Self.claudeEstimatedCodexHealthySnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.tick()
+
+        let claudeWhileRefreshing = viewModel.snapshots.first { $0.provider == .claude }
+        XCTAssertEqual(claudeWhileRefreshing?.confidence, .unavailable)
+        XCTAssertEqual(claudeWhileRefreshing?.statusDetail, "Refreshing usage")
+
+        provider.releaseRefresh()
+        await waitForSnapshots(Self.claudeEstimatedCodexHealthySnapshots, in: viewModel)
+
+        let refreshedClaude = viewModel.snapshots.first { $0.provider == .claude }
+        XCTAssertEqual(refreshedClaude?.source, .claudeLocalLogs)
+        XCTAssertEqual(refreshedClaude?.confidence, .estimated)
+        XCTAssertEqual(provider.callCount, 2)
+    }
+
     func testRefreshStormCoalescesIntoOneActiveAndOnePendingFetch() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -660,6 +702,49 @@ final class PromptJuiceViewModelTests: XCTestCase {
         await waitForSnapshots([refreshedClaude, Self.healthySnapshots[1]], in: viewModel)
 
         XCTAssertEqual(aggregateProvider.callCount, 1)
+        XCTAssertEqual(claudeProvider.callCount, 1)
+    }
+
+    func testClaudeStatusCacheRefreshLetsExactSnapshotReplaceNewerEstimate() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let estimatedClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 58,
+                resetAt: Self.fixedNow.addingTimeInterval(150 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeLocalLogs,
+            confidence: .estimated,
+            updatedAt: Self.fixedNow.addingTimeInterval(60)
+        )
+        let exactClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 12,
+                resetAt: Self.fixedNow.addingTimeInterval(150 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: Self.fixedNow
+        )
+        let aggregateProvider = CountingUsageProviderClient(snapshots: [
+            estimatedClaude,
+            Self.healthySnapshots[1]
+        ])
+        let claudeProvider = CountingUsageProviderClient(snapshots: [exactClaude])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: aggregateProvider,
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+
+        await waitForSnapshots([exactClaude, Self.healthySnapshots[1]], in: viewModel)
         XCTAssertEqual(claudeProvider.callCount, 1)
     }
 
