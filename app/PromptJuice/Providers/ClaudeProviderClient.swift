@@ -11,6 +11,7 @@ protocol ClaudeLocalUsageReading: Sendable {
 enum ClaudeLocalEstimatePolicy: Sendable, Equatable {
     case disabled
     case enabled
+    case invalidStatuslineOnly
 }
 
 struct ClaudeProviderClient: UsageProviderClient {
@@ -51,6 +52,7 @@ struct ClaudeProviderClient: UsageProviderClient {
             if error as? ClaudeUsageError == .statuslineCacheStale {
                 return localEstimateOrUnavailable(
                     now: now,
+                    error: error,
                     fallbackDetail: statuslineDetail,
                     logMessage: "Claude statusline cache stale"
                 )
@@ -63,6 +65,7 @@ struct ClaudeProviderClient: UsageProviderClient {
 
             return localEstimateOrUnavailable(
                 now: now,
+                error: error,
                 fallbackDetail: statuslineDetail,
                 logMessage: "Claude statusline cache unavailable"
             )
@@ -71,10 +74,11 @@ struct ClaudeProviderClient: UsageProviderClient {
 
     private func localEstimateOrUnavailable(
         now: Date,
+        error: Error,
         fallbackDetail: String,
         logMessage: String
     ) -> ProviderSnapshot {
-        guard localEstimatePolicy == .enabled else {
+        guard shouldUseLocalEstimate(for: error) else {
             PromptJuiceLog.usage.debug("\(logMessage, privacy: .public); local estimate skipped")
             return unavailableSnapshot(now: now, detail: fallbackDetail)
         }
@@ -90,6 +94,17 @@ struct ClaudeProviderClient: UsageProviderClient {
                 now: now,
                 detail: "Claude statusline and local usage unavailable"
             )
+        }
+    }
+
+    private func shouldUseLocalEstimate(for error: Error) -> Bool {
+        switch localEstimatePolicy {
+        case .disabled:
+            return false
+        case .enabled:
+            return true
+        case .invalidStatuslineOnly:
+            return error as? ClaudeUsageError == .invalidFiveHourRateLimit
         }
     }
 
@@ -112,7 +127,7 @@ struct ClaudeLiveUsageProviderClient: UsageProviderClient {
     private let codexProviderClient: CodexProviderClient
 
     init(
-        claudeProviderClient: ClaudeProviderClient = ClaudeProviderClient(),
+        claudeProviderClient: ClaudeProviderClient = ClaudeProviderClient(localEstimatePolicy: .invalidStatuslineOnly),
         codexProviderClient: CodexProviderClient = CodexProviderClient()
     ) {
         self.claudeProviderClient = claudeProviderClient

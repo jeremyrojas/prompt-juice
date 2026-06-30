@@ -34,7 +34,7 @@ final class PanelToolTipViewTests: XCTestCase {
     }
 
     func testWrapsLongTooltipWithinPanelWidth() {
-        let text = "Estimated from local Claude Code activity · send a message in Claude Code to see exact usage"
+        let text = "Estimated from local Claude Code activity · waiting for Claude Code usage"
         let view = PanelToolTipView(text: text)
 
         XCTAssertLessThanOrEqual(view.fittingSize.width, 296)

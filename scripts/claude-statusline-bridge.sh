@@ -84,15 +84,22 @@ normalize_duration() {
 
 write_payload_atomic() {
   local payload="$1"
+  write_file_atomic "$cache_path" "$payload"
+}
+
+write_file_atomic() {
+  local path="$1"
+  local payload="$2"
   [ -n "$payload" ] || return 1
+  [ -n "$path" ] || return 1
 
   local cache_dir temp_file
-  cache_dir=$(dirname "$cache_path")
+  cache_dir=$(dirname "$path")
   mkdir -p "$cache_dir" || return 1
   temp_file=$(mktemp "$cache_dir/.latest.json.XXXXXX") || return 1
 
   if printf '%s\n' "$payload" > "$temp_file"; then
-    if ! mv "$temp_file" "$cache_path"; then
+    if ! mv "$temp_file" "$path"; then
       rm -f "$temp_file"
       return 1
     fi
@@ -100,6 +107,33 @@ write_payload_atomic() {
     rm -f "$temp_file"
     return 1
   fi
+}
+
+json_string_or_null() {
+  local value="${1:-}"
+
+  if [ -n "$value" ]; then
+    printf '"%s"' "$(printf '%s' "$value" | json_escape)"
+  else
+    printf 'null'
+  fi
+}
+
+write_promptjuice_debug_info() {
+  [ "${PROMPTJUICE_CLAUDE_STATUS_DEBUG:-1}" = "0" ] && return 0
+
+  local cache_dir debug_path observed raw_used raw_resets raw_duration raw_window payload
+  cache_dir=$(dirname "$cache_path")
+  debug_path="${PROMPTJUICE_CLAUDE_STATUS_DEBUG_PATH:-$cache_dir/debug-latest.json}"
+  observed=$(/bin/date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || /bin/date 2>/dev/null || printf '')
+
+  raw_used=$(extract_raw_plutil_scalar "rate_limits.five_hour.used_percentage" string integer float 2>/dev/null | trim_value) || raw_used=""
+  raw_resets=$(extract_raw_plutil_scalar "rate_limits.five_hour.resets_at" string integer float date 2>/dev/null | trim_value) || raw_resets=""
+  raw_duration=$(extract_raw_plutil_scalar "rate_limits.five_hour.duration_minutes" string integer float 2>/dev/null | trim_value) || raw_duration=""
+  raw_window=$(extract_raw_plutil_scalar "rate_limits.five_hour.window_minutes" string integer float 2>/dev/null | trim_value) || raw_window=""
+
+  payload='{"observed_at":'"$(json_string_or_null "$observed")"',"parser":'"$(json_string_or_null "$parser")"',"five_hour":{"used_percentage":'"$(json_string_or_null "$raw_used")"',"resets_at":'"$(json_string_or_null "$raw_resets")"',"duration_minutes":'"$(json_string_or_null "$raw_duration")"',"window_minutes":'"$(json_string_or_null "$raw_window")"'}}'
+  write_file_atomic "$debug_path" "$payload"
 }
 
 write_promptjuice_cache_plutil() {
@@ -190,5 +224,6 @@ run_delegate() {
   return 0
 }
 
+write_promptjuice_debug_info || true
 write_promptjuice_cache || write_promptjuice_unavailable_cache
 run_delegate
