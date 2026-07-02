@@ -52,10 +52,6 @@ struct ProviderSnapshot: Identifiable, Equatable {
         rateWindow.usedPercent ?? 0
     }
 
-    var resetAt: Date {
-        rateWindow.resetAt ?? updatedAt
-    }
-
     var windowDurationMinutes: Int {
         rateWindow.durationMinutes ?? 0
     }
