@@ -105,7 +105,7 @@ The bridge also writes legacy `latest.json` with the five-hour window only so ol
 
 PromptJuice merges session files by dropping expired windows, choosing the greatest surviving `resets_at`, grouping reset times within 90 seconds, then picking the highest `used_percentage` in that group. This makes old idle Claude Code sessions harmless even when they keep rewriting expired windows.
 
-When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining. When the weekly window is still valid, the Claude row also shows `Week: N% left` and can constrain the row/header/menu-bar fill. Weekly readings older than 30 minutes include an `as of` time.
+When every known five-hour window has expired while rate-limit history remains, Claude shows **Fresh window** at 100% session remaining with no reset countdown. When the weekly window is still valid, the Claude row also shows `Week: N% left` and can constrain the row/header/menu-bar fill. Weekly readings older than 30 minutes include an `as of` time. After all cached Claude windows pass reset, PromptJuice returns to the waiting/setup path so a broken bridge is visible.
 
 Setup details live in [claude-statusline-bridge.md](claude-statusline-bridge.md).
 
@@ -123,7 +123,7 @@ The reader groups assistant messages into five-hour blocks, deduplicates repeate
 
 - `claudeStatusline` + `exact`: statusline cache contains a complete active five-hour window.
 - `claudeStatusline` + `stale`: statusline cache contains a valid carry-forward window from an earlier file mtime.
-- `claudeCache` + `stale`: statusline read failed and a last-good session or weekly window is still usable.
+- `claudeCache` + `stale`: statusline read failed and a last-good session or weekly window is still before reset.
 - `claudeLocalLogs` + `estimated`: local logs produced an active five-hour block estimate.
 - `claudeStatusline` + `unavailable`: statusline cache and local-log estimate both failed. This is the waiting-for-terminal path when the bridge is installed and no rate-limit data has ever been seen.
 

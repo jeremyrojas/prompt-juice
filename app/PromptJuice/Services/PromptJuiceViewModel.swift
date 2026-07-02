@@ -93,6 +93,15 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
 
+    var visibleWeeklyRowCount: Int {
+        visibleSnapshots.filter { showsWeeklyLine(for: $0) }.count
+    }
+
+    func showsWeeklyLine(for snapshot: UsageSnapshot) -> Bool {
+        weeklyText(for: snapshot) != nil
+            && weeklyBarRemainingPercent(for: snapshot) != nil
+    }
+
     var isCheckingUsage: Bool {
         let visible = visibleSnapshots
         guard !visible.isEmpty else {
@@ -606,7 +615,7 @@ final class PromptJuiceViewModel: ObservableObject {
         let refreshDate = now()
         var didAgeSnapshot = false
 
-        snapshots = snapshots.map { snapshot in
+        let agedSnapshots = snapshots.map { snapshot in
             guard snapshot.identity == .claude,
                   snapshot.source == .claudeStatusline,
                   snapshot.confidence == .exact,
@@ -631,6 +640,7 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         if didAgeSnapshot {
+            snapshots = agedSnapshots
             logSnapshotState(reason: "exact snapshot aged")
         }
     }
@@ -1392,12 +1402,6 @@ final class PromptJuiceViewModel: ObservableObject {
         over refreshed: ProviderSnapshot,
         refreshDate: Date
     ) -> Bool {
-        if refreshed.identity == .claude,
-           refreshed.isFreshSessionWindow,
-           refreshed.source == .claudeStatusline || refreshed.source == .claudeCache {
-            return false
-        }
-
         if existing.isExpired(at: refreshDate) || !existing.isAvailable {
             return false
         }
@@ -1440,8 +1444,12 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func snapshotPriority(_ snapshot: ProviderSnapshot) -> Int {
-        guard snapshot.isAvailable else {
+        if snapshot.isFreshSessionWindow {
             return 0
+        }
+
+        guard snapshot.isAvailable else {
+            return -1
         }
 
         switch snapshot.confidence {
@@ -1572,7 +1580,7 @@ final class PromptJuiceViewModel: ObservableObject {
                 weeklyWindow = weekly
                 isFreshWeeklyWindow = false
             } else if snapshot.weeklyWindow != nil {
-                weeklyWindow = ClaudeStatuslineSnapshotReader.freshWeeklyWindow(now: now)
+                weeklyWindow = nil
                 isFreshWeeklyWindow = true
             } else {
                 weeklyWindow = nil
@@ -1581,7 +1589,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
             return ProviderSnapshot(
                 identity: snapshot.identity,
-                rateWindow: ClaudeStatuslineSnapshotReader.freshSessionWindow(now: now),
+                rateWindow: .unavailable,
                 weeklyWindow: weeklyWindow,
                 source: snapshot.source,
                 confidence: snapshot.confidence == .unavailable ? .stale : snapshot.confidence,

@@ -194,7 +194,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         let viewModel = makeViewModel(
             claudeSnapshot: ProviderSnapshot(
                 identity: .claude,
-                rateWindow: ClaudeStatuslineSnapshotReader.freshSessionWindow(now: fixedNow),
+                rateWindow: .unavailable,
                 weeklyWindow: .available(
                     usedPercent: 30,
                     resetAt: weeklyResetAt,
@@ -236,7 +236,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                     resetAt: fixedNow.addingTimeInterval(2 * 60 * 60),
                     durationMinutes: 300
                 ),
-                weeklyWindow: ClaudeStatuslineSnapshotReader.freshWeeklyWindow(now: fixedNow),
+                weeklyWindow: nil,
                 source: .claudeStatusline,
                 confidence: .exact,
                 updatedAt: fixedNow,

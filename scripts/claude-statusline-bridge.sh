@@ -233,6 +233,23 @@ gc_promptjuice_session_cache() {
   rm -f "$temp"
 }
 
+run_promptjuice_session_gc_if_needed() {
+  local cache_dir marker now marker_mtime
+  cache_dir=$(dirname "$cache_path")
+  marker="$cache_dir/.gc-marker"
+  now=$(/bin/date +%s 2>/dev/null) || return 0
+
+  if [ -f "$marker" ]; then
+    marker_mtime=$(/usr/bin/stat -f %m "$marker" 2>/dev/null) || marker_mtime=0
+    if [ $((now - marker_mtime)) -le 3600 ]; then
+      return 0
+    fi
+  fi
+
+  gc_promptjuice_session_cache || return 0
+  /usr/bin/touch "$marker" 2>/dev/null || true
+}
+
 write_promptjuice_cache_plutil() {
   local raw_used raw_resets raw_duration raw_window
   raw_used=$(extract_raw_plutil_scalar "rate_limits.five_hour.used_percentage" string integer float) || return 1
@@ -324,5 +341,5 @@ run_delegate() {
 write_promptjuice_debug_info || true
 write_promptjuice_session_cache_plutil || true
 write_promptjuice_cache || write_promptjuice_unavailable_cache
-gc_promptjuice_session_cache || true
+run_promptjuice_session_gc_if_needed || true
 run_delegate

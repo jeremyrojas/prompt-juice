@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import XCTest
 @testable import PromptJuice
 
@@ -618,6 +619,59 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.snapshots.first { $0.provider == .claude }
         XCTAssertEqual(claude?.confidence, .stale)
         XCTAssertEqual(claude?.weeklyWindow?.usedPercent, 3)
+    }
+
+    func testTickDoesNotPublishSnapshotsWhenNothingAges() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+        var publishCount = 0
+        let cancellable = viewModel.$snapshots
+            .dropFirst()
+            .sink { _ in
+                publishCount += 1
+            }
+
+        viewModel.tick()
+
+        XCTAssertEqual(publishCount, 0)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    func testFreshClaudeRefreshDoesNotReplaceValidExistingSnapshot() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let validClaude = Self.claudeSnapshot(
+            usedPercent: 55,
+            resetMinutes: 180,
+            updatedAt: Self.fixedNow
+        )
+        let freshClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeCache,
+            confidence: .stale,
+            updatedAt: Self.fixedNow.addingTimeInterval(60),
+            statusDetail: "Fresh window",
+            isFreshSessionWindow: true
+        )
+        let claudeProvider = CountingUsageProviderClient(snapshots: [freshClaude])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [validClaude, Self.healthySnapshots[1]]),
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+
+        await waitUntil { claudeProvider.callCount == 1 }
+        let claude = viewModel.snapshots.first { $0.provider == .claude }
+        XCTAssertEqual(claude, validClaude)
     }
 
     func testRefreshStormCoalescesIntoOneActiveAndOnePendingFetch() async {

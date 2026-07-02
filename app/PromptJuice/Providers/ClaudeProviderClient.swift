@@ -322,8 +322,8 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
 
             return ProviderSnapshot(
                 identity: .claude,
-                rateWindow: freshSessionWindow(now: now),
-                weeklyWindow: mergedWeekly?.window ?? (weeklyCandidates.isEmpty ? nil : freshWeeklyWindow(now: now)),
+                rateWindow: .unavailable,
+                weeklyWindow: mergedWeekly?.window,
                 source: .claudeStatusline,
                 confidence: freshnessConfidence(updatedAt: newestUpdate, now: now),
                 updatedAt: newestUpdate,
@@ -337,28 +337,12 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
         return ProviderSnapshot(
             identity: .claude,
             rateWindow: mergedSession.window,
-            weeklyWindow: mergedWeekly?.window ?? (weeklyCandidates.isEmpty ? nil : freshWeeklyWindow(now: now)),
+            weeklyWindow: mergedWeekly?.window,
             source: .claudeStatusline,
             confidence: mergedSession.confidence,
             updatedAt: mergedSession.updatedAt,
             weeklyUpdatedAt: mergedWeekly?.updatedAt ?? weeklyCandidates.map(\.updatedAt).max(),
             isFreshWeeklyWindow: mergedWeekly == nil && !weeklyCandidates.isEmpty
-        )
-    }
-
-    static func freshSessionWindow(now: Date) -> RateWindow {
-        .available(
-            usedPercent: 0,
-            resetAt: now.addingTimeInterval(TimeInterval(fiveHourWindowMinutes * 60)),
-            durationMinutes: fiveHourWindowMinutes
-        )
-    }
-
-    static func freshWeeklyWindow(now: Date) -> RateWindow {
-        .available(
-            usedPercent: 0,
-            resetAt: now.addingTimeInterval(TimeInterval(sevenDayWindowMinutes * 60)),
-            durationMinutes: sevenDayWindowMinutes
         )
     }
 
@@ -543,26 +527,24 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
             return
         }
 
-        let sessionWindow: CachedClaudeWindow?
-        if snapshot.isFreshSessionWindow {
-            sessionWindow = nil
-        } else {
+        let existing = cachedSnapshot()
+
+        var sessionWindow = existing?.session
+        if !snapshot.isFreshSessionWindow, snapshot.rateWindow.isAvailable {
             sessionWindow = CachedClaudeWindow(
                 window: snapshot.rateWindow,
                 updatedAt: snapshot.updatedAt
             )
         }
 
-        let weeklyWindow: CachedClaudeWindow?
-        if snapshot.isFreshWeeklyWindow {
-            weeklyWindow = nil
-        } else if let weekly = snapshot.weeklyWindow {
+        var weeklyWindow = existing?.weekly
+        if !snapshot.isFreshWeeklyWindow,
+           let weekly = snapshot.weeklyWindow,
+           weekly.isAvailable {
             weeklyWindow = CachedClaudeWindow(
                 window: weekly,
                 updatedAt: snapshot.weeklyUpdatedAt ?? snapshot.updatedAt
             )
-        } else {
-            weeklyWindow = nil
         }
 
         guard sessionWindow != nil || weeklyWindow != nil else {
@@ -580,8 +562,7 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
     }
 
     func snapshot(now: Date, failureDetail: String?) -> ProviderSnapshot? {
-        guard let data = defaults.data(forKey: Key.lastGoodClaudeSnapshot),
-              let cached = try? JSONDecoder().decode(CachedClaudeSnapshot.self, from: data),
+        guard let cached = cachedSnapshot(),
               cached.session != nil || cached.weekly != nil else {
             return nil
         }
@@ -593,14 +574,14 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
             cached.weekly?.updatedAt
         ].compactMap { $0 }.max() ?? now
 
-        guard validSession != nil || validWeekly != nil || cached.session != nil || cached.weekly != nil else {
+        guard validSession != nil || validWeekly != nil else {
             return nil
         }
 
         return ProviderSnapshot(
             identity: .claude,
-            rateWindow: validSession ?? ClaudeStatuslineSnapshotReader.freshSessionWindow(now: now),
-            weeklyWindow: validWeekly ?? (cached.weekly == nil ? nil : ClaudeStatuslineSnapshotReader.freshWeeklyWindow(now: now)),
+            rateWindow: validSession ?? .unavailable,
+            weeklyWindow: validWeekly,
             source: .claudeCache,
             confidence: .stale,
             updatedAt: cached.session?.updatedAt ?? newestUpdatedAt,
@@ -609,6 +590,14 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
             isFreshSessionWindow: validSession == nil,
             isFreshWeeklyWindow: validWeekly == nil && cached.weekly != nil
         )
+    }
+
+    private func cachedSnapshot() -> CachedClaudeSnapshot? {
+        guard let data = defaults.data(forKey: Key.lastGoodClaudeSnapshot) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(CachedClaudeSnapshot.self, from: data)
     }
 }
 

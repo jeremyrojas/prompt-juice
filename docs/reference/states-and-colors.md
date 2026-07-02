@@ -85,7 +85,7 @@ script, that file exists, and `statusLine.refreshInterval` is `10`.
 | 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
 | 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | open Settings |
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
-| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining | Fresh window · starts with your next Claude Code message | open Settings |
+| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining; no reset countdown | Fresh window · starts with your next Claude Code message | open Settings |
 | 6 | valid weekly window | same as session state | same as session state | Week: N% left · resets 4d; `as of 9:46` when older than 30 min | session tooltip | open Settings |
 | 7 | fresh weekly window | same as session state | same as session state | Week: 100% left · fresh week | session tooltip | open Settings |
 | 8 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
@@ -101,6 +101,8 @@ Desktop-only users stay on Estimate by design.
 Notes:
 - The fetch axis only changes the **number presentation + hover**, never the color (that's the severity axis).
 - The only at-rest visible tell of a guess is the `~`. Source/age live in the hover tooltip only — facts, never promises.
+- Fresh session windows are presentation-only: they carry no reset timestamp, always evaluate healthy, and wait behind any valid real reading.
+- Last-good Claude cache is used only while the cached session or weekly reset is still ahead. After both pass reset, Claude returns to the waiting/setup path.
 - Claude's visible fill uses `min(session remaining, weekly remaining)`, with fresh or unknown windows counting as 100. Severity and alerts still use the five-hour session window only.
 
 ---

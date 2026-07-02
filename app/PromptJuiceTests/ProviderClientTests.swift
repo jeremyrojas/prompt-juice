@@ -226,6 +226,8 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertTrue(snapshot.isFreshSessionWindow, "Expired session files now mean a fresh Claude window.")
         XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
+        XCTAssertNil(snapshot.rateWindow.resetAt)
         XCTAssertEqual(snapshot.remainingPercent, 100)
         XCTAssertTrue(snapshot.isAvailable)
     }
@@ -309,6 +311,7 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertTrue(snapshot.isFreshSessionWindow, "Expired five-hour windows now produce the fresh state.")
         XCTAssertEqual(snapshot.confidence, .stale)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 22)
         XCTAssertEqual(snapshot.weeklyUpdatedAt, oldUpdate)
         XCTAssertEqual(snapshot.remainingPercent, 78)
@@ -335,6 +338,7 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertFalse(snapshot.isFreshSessionWindow)
         XCTAssertTrue(snapshot.isFreshWeeklyWindow, "Expired weekly data now renders as a fresh week.")
+        XCTAssertNil(snapshot.weeklyWindow)
         XCTAssertEqual(snapshot.weeklyRemainingPercent, 100)
         XCTAssertEqual(snapshot.remainingPercent, 95)
     }
@@ -537,6 +541,125 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.confidence, .stale)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 22)
         XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
+    }
+
+    func testClaudeSnapshotCacheReturnsNilWhenAllWindowsExpired() {
+        let suiteName = "PromptJuiceClaudeExpiredCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 33,
+                resetAt: now.addingTimeInterval(1_800),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        ))
+
+        XCTAssertNil(
+            cache.snapshot(
+                now: now.addingTimeInterval(3_600),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+    }
+
+    func testClaudeSnapshotCachePreservesWeeklyAcrossSessionOnlySave() throws {
+        let suiteName = "PromptJuiceClaudeWeeklyMergeCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 44,
+                resetAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        ))
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 11,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now.addingTimeInterval(60)
+        ))
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(90),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 11)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 44)
+        XCTAssertEqual(snapshot.remainingPercent, 56)
+    }
+
+    func testClaudeSnapshotCacheCarriesValidWeeklyAsFreshSession() throws {
+        let suiteName = "PromptJuiceClaudeWeeklyOnlyCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 35,
+                resetAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        ))
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(1_800),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+
+        XCTAssertTrue(snapshot.isFreshSessionWindow)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
+        XCTAssertEqual(snapshot.remainingPercent, 65)
     }
 
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsUnavailableByDefault() {
@@ -1330,6 +1453,40 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: oldSession.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: nonMatching.path))
         XCTAssertEqual(try sessionCacheFiles(in: statusDir).count, 64)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: statusDir.appendingPathComponent(".gc-marker").path))
+    }
+
+    func testClaudeStatuslineBridgeGCMarkerSkipsFreshMarker() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+
+        let oldSession = statusDir.appendingPathComponent("session-old.json")
+        try #"{"rate_limits":{"five_hour":{"used_percentage":1,"resets_at":"1800001800","duration_minutes":300}}}"#
+            .write(to: oldSession, atomically: true, encoding: .utf8)
+        try setModificationDate(Date().addingTimeInterval(-8 * 24 * 60 * 60), for: oldSession)
+
+        let marker = statusDir.appendingPathComponent(".gc-marker")
+        try "fresh".write(to: marker, atomically: true, encoding: .utf8)
+        try setModificationDate(Date(), for: marker)
+
+        let input = #"{"session_id":"fresh","rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1800001800}}}"#
+        let result = try runClaudeStatuslineBridge(
+            input: input,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: oldSession.path))
     }
 
     func testEstimatedClaudeSnapshotCanTriggerAlert() {

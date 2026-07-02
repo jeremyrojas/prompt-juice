@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = PromptJuiceViewModel()
+    private let claudeBridgeInstaller = ClaudeBridgeInstaller()
     private let claudeStatusCachePoller = ClaudeStatusCachePoller()
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: viewModel,
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         observeViewModel()
         observeHostLifecycle()
+        syncClaudeBridgeScript(reason: "launch")
         startTicker()
         startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
@@ -111,10 +113,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
-            selector: #selector(refreshAfterHostLifecycleChange),
+            selector: #selector(refreshAfterWake),
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
+    }
+
+    @objc private func refreshAfterWake() {
+        syncClaudeBridgeScript(reason: "wake")
+        refreshAfterHostLifecycleChange()
     }
 
     @objc private func refreshAfterHostLifecycleChange() {
@@ -130,6 +137,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.refreshClaudeStatusCacheNow(reason: "host lifecycle")
         viewModel.refreshUsageQuietly()
         updateStatusItemGlyph(force: true)
+    }
+
+    private func syncClaudeBridgeScript(reason: String) {
+        claudeBridgeInstaller.ensureInstalledBridgeCurrent(reason: reason)
+        viewModel.refreshClaudeBridgeState()
     }
 
     /// Redraws the menu-bar droplet from the current aggregate. The fill is the

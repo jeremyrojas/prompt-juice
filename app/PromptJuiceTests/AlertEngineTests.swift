@@ -123,6 +123,31 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testFreshSessionNeverTriggersUseSoon() {
+        let snapshot = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            statusDetail: "Fresh window",
+            isFreshSessionWindow: true
+        )
+        let advancedNow = now.addingTimeInterval(4.5 * 60 * 60)
+
+        XCTAssertFalse(
+            engine.shouldUseSoon(
+                for: snapshot,
+                thresholds: thresholds,
+                now: advancedNow
+            )
+        )
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: advancedNow),
+            .healthy
+        )
+    }
+
     func testSeverityLowTakesPriorityOverUseSoon() {
         let snapshot = makeSnapshot(
             usedPercent: 90,

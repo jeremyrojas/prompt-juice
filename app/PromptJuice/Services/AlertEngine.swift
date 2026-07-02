@@ -7,6 +7,7 @@ struct AlertEngine {
         now: Date = Date()
     ) -> Bool {
         guard snapshot.confidence.canTriggerAlert,
+              !snapshot.isFreshSessionWindow,
               !snapshot.isExpired(at: now),
               let minutesUntilReset = snapshot.rateWindow.minutesUntilReset(now: now),
               snapshot.rateWindow.remainingPercent != nil else {
@@ -59,6 +60,10 @@ struct AlertEngine {
         }
 
         let remaining = snapshot.sessionRemainingPercent
+
+        if snapshot.isFreshSessionWindow {
+            return .healthy
+        }
 
         if remaining <= 0 {
             return .empty

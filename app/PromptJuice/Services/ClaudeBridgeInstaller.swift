@@ -6,6 +6,11 @@ import Foundation
 /// copies the bundled script to Application Support and writes the settings.
 struct ClaudeBridgeInstaller {
     static let statusLineRefreshIntervalSeconds = 10
+    private static let defaultBundledScriptURL = Bundle.main.url(
+        forResource: "claude-statusline-bridge",
+        withExtension: "sh"
+    )
+    private static let defaultBundledScriptData = defaultBundledScriptURL.flatMap { try? Data(contentsOf: $0) }
 
     enum InstallError: Error, LocalizedError, Equatable {
         case bundledScriptMissing
@@ -53,7 +58,7 @@ struct ClaudeBridgeInstaller {
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        bundledScriptURL: URL? = Bundle.main.url(forResource: "claude-statusline-bridge", withExtension: "sh"),
+        bundledScriptURL: URL? = Self.defaultBundledScriptURL,
         fileManager: FileManager = .default
     ) {
         self.homeDirectory = homeDirectory
@@ -136,16 +141,7 @@ struct ClaudeBridgeInstaller {
     /// Apply an approved plan: copy the script to Application Support, then write
     /// the merged settings atomically.
     func apply(_ plan: Plan) throws {
-        guard let bundledScriptURL else {
-            throw InstallError.bundledScriptMissing
-        }
-
-        try fileManager.createDirectory(at: installDirectory, withIntermediateDirectories: true)
-        if fileManager.fileExists(atPath: installedScriptURL.path) {
-            try fileManager.removeItem(at: installedScriptURL)
-        }
-        try fileManager.copyItem(at: bundledScriptURL, to: installedScriptURL)
-        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installedScriptURL.path)
+        try installBundledBridgeScriptIfNeeded()
 
         try fileManager.createDirectory(
             at: settingsURL.deletingLastPathComponent(),
@@ -168,30 +164,80 @@ struct ClaudeBridgeInstaller {
             return false
         }
 
-        // The approved settings already delegate to this Application Support path,
-        // so refreshing the app-owned script keeps the same user-approved command.
-        try? ensureInstalledBridgeContentCurrent()
-
         return fileManager.fileExists(atPath: installedScriptURL.path)
     }
 
-    private func ensureInstalledBridgeContentCurrent() throws {
-        guard let bundledScriptURL else {
+    func ensureInstalledBridgeCurrent(reason: String = "lifecycle") {
+        guard settingsAuthorizeInstalledBridgeSync() else {
             return
         }
 
-        let bundledData = try Data(contentsOf: bundledScriptURL)
+        do {
+            try installBundledBridgeScriptIfNeeded()
+            PromptJuiceLog.usage.debug("Claude bridge script sync passed: \(reason, privacy: .public)")
+        } catch {
+            PromptJuiceLog.usage.notice(
+                "Claude bridge script sync failed: \(reason, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func settingsAuthorizeInstalledBridgeSync() -> Bool {
+        guard let data = try? Data(contentsOf: settingsURL),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let root = object as? [String: Any],
+              let statusLine = root["statusLine"] as? [String: Any],
+              let command = statusLine["command"] as? String else {
+            return false
+        }
+
+        return commandReferencesInstalledBridge(command)
+            && statusLineRefreshInterval(statusLine) == Self.statusLineRefreshIntervalSeconds
+    }
+
+    private func installBundledBridgeScriptIfNeeded() throws {
+        let bundledData = try bundledScriptData()
         let installedData = try? Data(contentsOf: installedScriptURL)
         guard installedData != bundledData else {
             return
         }
 
         try fileManager.createDirectory(at: installDirectory, withIntermediateDirectories: true)
-        if fileManager.fileExists(atPath: installedScriptURL.path) {
-            try fileManager.removeItem(at: installedScriptURL)
+
+        let tempURL = installDirectory
+            .appendingPathComponent(".claude-statusline-bridge.\(UUID().uuidString).tmp")
+        try bundledData.write(to: tempURL, options: [])
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempURL.path)
+        defer {
+            if fileManager.fileExists(atPath: tempURL.path) {
+                try? fileManager.removeItem(at: tempURL)
+            }
         }
-        try fileManager.copyItem(at: bundledScriptURL, to: installedScriptURL)
+
+        if fileManager.fileExists(atPath: installedScriptURL.path) {
+            _ = try fileManager.replaceItemAt(
+                installedScriptURL,
+                withItemAt: tempURL,
+                backupItemName: nil,
+                options: [.usingNewMetadataOnly]
+            )
+        } else {
+            try fileManager.moveItem(at: tempURL, to: installedScriptURL)
+        }
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installedScriptURL.path)
+    }
+
+    private func bundledScriptData() throws -> Data {
+        guard let bundledScriptURL else {
+            throw InstallError.bundledScriptMissing
+        }
+
+        if bundledScriptURL == Self.defaultBundledScriptURL,
+           let data = Self.defaultBundledScriptData {
+            return data
+        }
+
+        return try Data(contentsOf: bundledScriptURL)
     }
 
     private func statusLineRefreshInterval(_ statusLine: [String: Any]) -> Int? {

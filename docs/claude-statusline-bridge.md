@@ -107,15 +107,17 @@ PromptJuice reads up to 64 newest `session-*.json` files and merges each window 
 
 Expired files therefore cannot poison a fresh session. Long-idle Claude Code processes can keep rewriting old windows, but those windows are ignored after their reset time.
 
-When every known five-hour window has expired, PromptJuice shows **Fresh window** with 100% session remaining. When every known weekly window has expired, PromptJuice shows a fresh week. A weekly reading older than 30 minutes displays an `as of` time.
+When every known five-hour window has expired while some rate-limit data is still present, PromptJuice shows **Fresh window** with 100% session remaining. Fresh window is presentation-only: it carries no reset timestamp or countdown. When every known weekly window has expired, PromptJuice shows a fresh week. A weekly reading older than 30 minutes displays an `as of` time.
 
 ## Garbage Collection
 
-Each bridge run performs cheap cache cleanup inside `ClaudeStatus/`:
+Cache cleanup uses a `.gc-marker` file inside `ClaudeStatus/`. The bridge runs cleanup when the marker is missing or older than one hour, then touches the marker. Cleanup rules:
 
 - delete `session-*.json` files whose mtime is older than 7 days;
 - if more than 64 session files remain, delete the oldest by mtime down to 64;
 - leave non-matching names untouched.
+
+Delete or pre-age `.gc-marker` to force cleanup on the next bridge invocation.
 
 ## Environment
 
