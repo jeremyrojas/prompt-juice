@@ -76,6 +76,12 @@ struct ProviderSnapshot: Identifiable, Equatable {
         return resetAt <= now
     }
 
+    func hasActiveResetWindow(at now: Date) -> Bool {
+        isAvailable
+            && rateWindow.resetAt != nil
+            && !isExpired(at: now)
+    }
+
     var clampedUsedPercent: Double {
         rateWindow.clampedUsedPercent ?? 0
     }

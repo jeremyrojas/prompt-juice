@@ -4,7 +4,6 @@ enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
     static let plainRowHeight: CGFloat = 48
     static let weeklyRowHeight: CGFloat = 70
-    static let rowHeight: CGFloat = weeklyRowHeight
     static let rowSpacing: CGFloat = 7
 
     static func height(mode: PanelMode, rowCount: Int, weeklyRowCount: Int = 0) -> CGFloat {

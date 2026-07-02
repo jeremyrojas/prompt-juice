@@ -42,7 +42,7 @@ struct AlertEngine {
         }
 
         return snapshots
-            .filter { $0.isAvailable && !$0.isExpired(at: now) }
+            .filter { $0.hasActiveResetWindow(at: now) }
             .max { $0.sessionRemainingPercent < $1.sessionRemainingPercent }
     }
 

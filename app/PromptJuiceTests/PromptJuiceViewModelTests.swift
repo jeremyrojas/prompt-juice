@@ -124,6 +124,43 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.detail.contains("resets in"))
     }
 
+    func testManualSubtitleUsesCodexResetWhenClaudeIsFresh() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [
+                ProviderSnapshot(
+                    identity: .claude,
+                    rateWindow: .unavailable,
+                    source: .claudeStatusline,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow.addingTimeInterval(-2 * 60 * 60),
+                    statusDetail: "Fresh window",
+                    isFreshSessionWindow: true
+                ),
+                ProviderSnapshot(
+                    identity: .codex,
+                    rateWindow: .available(
+                        usedPercent: 20,
+                        resetAt: Self.fixedNow.addingTimeInterval(3 * 60 * 60),
+                        durationMinutes: 300
+                    ),
+                    source: .fixture,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow
+                )
+            ]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(
+            viewModel.detail,
+            "Claude Fresh window · Codex 80% · resets in 3h 0m"
+        )
+        XCTAssertTrue(viewModel.detail.hasSuffix("resets in 3h 0m"))
+    }
+
     func testManualVerdictIsCalmWhenHealthy() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

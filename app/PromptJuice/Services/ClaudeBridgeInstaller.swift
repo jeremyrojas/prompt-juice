@@ -151,16 +151,7 @@ struct ClaudeBridgeInstaller {
     }
 
     func isBridgeCurrent() -> Bool {
-        guard let data = try? Data(contentsOf: settingsURL),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let root = object as? [String: Any],
-              let statusLine = root["statusLine"] as? [String: Any],
-              let command = statusLine["command"] as? String else {
-            return false
-        }
-
-        guard commandReferencesInstalledBridge(command),
-              statusLineRefreshInterval(statusLine) == Self.statusLineRefreshIntervalSeconds else {
+        guard installedBridgeSettingsAreCurrent() else {
             return false
         }
 
@@ -168,7 +159,7 @@ struct ClaudeBridgeInstaller {
     }
 
     func ensureInstalledBridgeCurrent(reason: String = "lifecycle") {
-        guard settingsAuthorizeInstalledBridgeSync() else {
+        guard installedBridgeSettingsAreCurrent() else {
             return
         }
 
@@ -182,7 +173,7 @@ struct ClaudeBridgeInstaller {
         }
     }
 
-    private func settingsAuthorizeInstalledBridgeSync() -> Bool {
+    private func installedBridgeSettingsAreCurrent() -> Bool {
         guard let data = try? Data(contentsOf: settingsURL),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],

@@ -97,6 +97,40 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testPreferredSnapshotFallbackUsesSnapshotsWithResetWindows() {
+        let freshClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now.addingTimeInterval(-2 * 60 * 60),
+            statusDetail: "Fresh window",
+            isFreshSessionWindow: true
+        )
+        let codex = makeSnapshot(
+            identity: .codex,
+            usedPercent: 20,
+            resetMinutesFromNow: 180,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(
+            engine.preferredSnapshot(
+                in: [freshClaude, codex],
+                thresholds: thresholds,
+                now: now
+            ),
+            codex
+        )
+        XCTAssertNil(
+            engine.preferredSnapshot(
+                in: [freshClaude],
+                thresholds: thresholds,
+                now: now
+            )
+        )
+    }
+
     func testSeverityHealthyWhenPlentyAndFarFromReset() {
         let snapshot = makeSnapshot(
             usedPercent: 20,

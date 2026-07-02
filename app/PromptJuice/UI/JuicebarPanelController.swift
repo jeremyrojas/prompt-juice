@@ -437,6 +437,10 @@ final class JuicebarPanelController {
         )
     }
 
+    var panelFrameForTesting: NSRect? {
+        panel?.frame
+    }
+
     init(
         viewModel: PromptJuiceViewModel,
         onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in }
@@ -447,22 +451,21 @@ final class JuicebarPanelController {
         viewModel.$mode
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self, let panel = self.panel, panel.isVisible else {
-                    return
-                }
-
-                self.position(panel)
+                self?.applyPanelFrameIfVisible(force: true)
             }
             .store(in: &cancellables)
 
         viewModel.$enabledProviders
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self, let panel = self.panel, panel.isVisible else {
-                    return
-                }
+                self?.applyPanelFrameIfVisible(force: true)
+            }
+            .store(in: &cancellables)
 
-                self.position(panel)
+        viewModel.$snapshots
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyPanelFrameIfVisible(force: false)
             }
             .store(in: &cancellables)
     }
@@ -483,7 +486,7 @@ final class JuicebarPanelController {
         viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
-        position(panel)
+        applyPanelFrame(panel, force: true)
         installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(panel.contentView)
@@ -702,12 +705,29 @@ final class JuicebarPanelController {
         return false
     }
 
-    private func position(_ panel: NSWindow) {
+    private func applyPanelFrameIfVisible(force: Bool) {
+        guard let panel, panel.isVisible else {
+            return
+        }
+
+        applyPanelFrame(panel, force: force)
+    }
+
+    private func applyPanelFrame(_ panel: NSWindow, force: Bool) {
+        let size = panelSize
+        if !force, panel.frame.size == size {
+            return
+        }
+
+        position(panel, size: size)
+    }
+
+    private func position(_ panel: NSWindow, size: NSSize) {
         let screen = targetScreen()
         let frame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        let x = frame.midX - panelSize.width / 2
-        let y = frame.maxY - panelSize.height - 10
-        panel.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
+        let x = frame.midX - size.width / 2
+        let y = frame.maxY - size.height - 10
+        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
     }
 
     private func targetScreen() -> NSScreen? {

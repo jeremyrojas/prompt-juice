@@ -117,10 +117,11 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var primarySnapshot: UsageSnapshot? {
-        visibleSnapshots
-            .filter(\.isAvailable)
+        let refreshDate = now()
+        return visibleSnapshots
+            .filter { $0.hasActiveResetWindow(at: refreshDate) }
             .min { first, second in
-                first.resetAt < second.resetAt
+                (first.rateWindow.resetAt ?? .distantFuture) < (second.rateWindow.resetAt ?? .distantFuture)
             }
     }
 
