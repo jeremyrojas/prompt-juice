@@ -85,9 +85,12 @@ script, that file exists, and `statusLine.refreshInterval` is `10`.
 | 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
 | 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | open Settings |
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
-| 5 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
-| 6 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | open Settings |
-| 7 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |
+| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining | Fresh window · starts with your next Claude Code message | open Settings |
+| 6 | valid weekly window | same as session state | same as session state | Week: N% left · resets 4d; `as of 9:46` when older than 30 min | session tooltip | open Settings |
+| 7 | fresh weekly window | same as session state | same as session state | Week: 100% left · fresh week | session tooltip | open Settings |
+| 8 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
+| 9 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | open Settings |
+| 10 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |
 
 On apply, the setup sheet shows a success + next-step confirmation ("You're almost set") before the user returns to Settings.
 
@@ -98,6 +101,7 @@ Desktop-only users stay on Estimate by design.
 Notes:
 - The fetch axis only changes the **number presentation + hover**, never the color (that's the severity axis).
 - The only at-rest visible tell of a guess is the `~`. Source/age live in the hover tooltip only — facts, never promises.
+- Claude's visible fill uses `min(session remaining, weekly remaining)`, with fresh or unknown windows counting as 100. Severity and alerts still use the five-hour session window only.
 
 ---
 
@@ -108,7 +112,7 @@ Source: [`AppDelegate.updateStatusItemGlyph`](../../app/PromptJuice/App/AppDeleg
 | Property | Rule |
 |---|---|
 | Tint | amber if any provider is `useSoon`, else plain (uncolored) |
-| Fill | the `useSoon` provider's % when a nudge is active, else the lowest available % (binding constraint), else 100 |
+| Fill | the `useSoon` provider's session % when a nudge is active, else the lowest available provider fill; Claude provider fill is `min(session, weekly)`, else 100 |
 | Redraw | every ~1s, deduped on `"percent-severity"` |
 
 ---

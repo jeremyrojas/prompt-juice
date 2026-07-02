@@ -587,6 +587,39 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testTickAgesExactClaudeStatuslineSnapshotToEarlier() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let oldClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 29,
+                resetAt: Self.fixedNow.addingTimeInterval(3 * 60 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 3,
+                resetAt: Self.fixedNow.addingTimeInterval(5 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: Self.fixedNow.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 1),
+            weeklyUpdatedAt: Self.fixedNow.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 1)
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [oldClaude, Self.healthySnapshots[1]]),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.tick()
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }
+        XCTAssertEqual(claude?.confidence, .stale)
+        XCTAssertEqual(claude?.weeklyWindow?.usedPercent, 3)
+    }
+
     func testRefreshStormCoalescesIntoOneActiveAndOnePendingFetch() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -641,7 +674,12 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(slowClaudeProvider.callCount, 1)
 
         slowClaudeProvider.releaseRefresh()
-        await waitUntil { viewModel.snapshots.contains(claudeUnavailable) }
+        await waitUntil {
+            viewModel.snapshots.contains { snapshot in
+                snapshot.provider == .claude
+                    && snapshot.statusDetail != "Refreshing usage"
+            }
+        }
     }
 
     func testRefreshReplacesExpiredSnapshotWithOlderSourceTimestamp() async {

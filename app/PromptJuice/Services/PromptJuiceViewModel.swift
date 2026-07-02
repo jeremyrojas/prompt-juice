@@ -116,7 +116,8 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var claudeLiveUpgrade: ClaudeLiveUpgrade {
-        if snapshots.first(where: { $0.provider == .claude })?.confidence == .exact {
+        if let claude = snapshots.first(where: { $0.provider == .claude }),
+           claude.confidence == .exact || claude.isFreshSessionWindow {
             return .live
         }
 
@@ -251,7 +252,11 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         var parts = visibleSnapshots.map { snapshot -> String in
-            snapshot.isAvailable
+            if snapshot.isFreshSessionWindow {
+                return "\(snapshot.displayName) Fresh window"
+            }
+
+            return snapshot.isAvailable
                 ? "\(snapshot.displayName) \(remainingPercentDisplayValueText(for: snapshot))"
                 : unavailableHeaderSubtitle(for: snapshot)
         }
@@ -391,7 +396,11 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func scopedDetail(for snapshot: UsageSnapshot) -> String {
-        "\(remainingPercentDisplayValueText(for: snapshot)) · \(fullResetText(for: snapshot))"
+        if snapshot.isFreshSessionWindow {
+            return "Fresh window · starts with your next Claude Code message"
+        }
+
+        return "\(remainingPercentDisplayValueText(for: snapshot)) · \(fullResetText(for: snapshot))"
     }
 
     private var alertSnapshot: UsageSnapshot? {
@@ -558,6 +567,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func tick() {
         refreshExpiredSnapshotsIfNeeded()
+        ageExactClaudeSnapshotsIfNeeded()
         objectWillChange.send()
     }
 
@@ -590,6 +600,39 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         refreshUsageQuietly()
+    }
+
+    private func ageExactClaudeSnapshotsIfNeeded() {
+        let refreshDate = now()
+        var didAgeSnapshot = false
+
+        snapshots = snapshots.map { snapshot in
+            guard snapshot.identity == .claude,
+                  snapshot.source == .claudeStatusline,
+                  snapshot.confidence == .exact,
+                  !snapshot.isFreshSessionWindow,
+                  refreshDate.timeIntervalSince(snapshot.updatedAt) > ClaudeStatuslineSnapshotReader.maximumCacheAge else {
+                return snapshot
+            }
+
+            didAgeSnapshot = true
+            return ProviderSnapshot(
+                identity: snapshot.identity,
+                rateWindow: snapshot.rateWindow,
+                weeklyWindow: snapshot.weeklyWindow,
+                source: snapshot.source,
+                confidence: .stale,
+                updatedAt: snapshot.updatedAt,
+                weeklyUpdatedAt: snapshot.weeklyUpdatedAt,
+                statusDetail: snapshot.statusDetail,
+                isFreshSessionWindow: snapshot.isFreshSessionWindow,
+                isFreshWeeklyWindow: snapshot.isFreshWeeklyWindow
+            )
+        }
+
+        if didAgeSnapshot {
+            logSnapshotState(reason: "exact snapshot aged")
+        }
     }
 
     func percentText(for snapshot: UsageSnapshot) -> String {
@@ -636,6 +679,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func resetText(for snapshot: UsageSnapshot) -> String {
+        if snapshot.isFreshSessionWindow {
+            return "fresh"
+        }
+
         guard let minutes = snapshot.rateWindow.minutesUntilReset(now: now()) else {
             return "n/a"
         }
@@ -650,7 +697,11 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func fullResetText(for snapshot: UsageSnapshot) -> String {
-        "resets in \(resetText(for: snapshot))"
+        if snapshot.isFreshSessionWindow {
+            return "Fresh window"
+        }
+
+        return "resets in \(resetText(for: snapshot))"
     }
 
     func shouldUseSoon(for snapshot: UsageSnapshot) -> Bool {
@@ -662,17 +713,80 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func statusText(for snapshot: UsageSnapshot) -> String {
-        alertEngine.statusText(
+        if snapshot.isFreshSessionWindow {
+            return "Fresh window"
+        }
+
+        return alertEngine.statusText(
             for: snapshot,
             thresholds: thresholds,
             now: now()
         )
     }
 
+    func weeklyText(for snapshot: UsageSnapshot) -> String? {
+        guard snapshot.provider == .claude else {
+            return nil
+        }
+
+        if snapshot.isFreshWeeklyWindow {
+            return "Week: 100% left · fresh week"
+        }
+
+        guard let weeklyWindow = snapshot.weeklyWindow,
+              let remaining = snapshot.weeklyRemainingPercent else {
+            return nil
+        }
+
+        var text = "Week: \(Int(remaining.rounded()))% left · resets \(weeklyResetText(for: weeklyWindow))"
+
+        if let weeklyUpdatedAt = snapshot.weeklyUpdatedAt,
+           now().timeIntervalSince(weeklyUpdatedAt) > 30 * 60 {
+            text += " · as of \(clockTime(weeklyUpdatedAt))"
+        }
+
+        return text
+    }
+
+    func weeklyBarRemainingPercent(for snapshot: UsageSnapshot) -> Double? {
+        guard snapshot.provider == .claude else {
+            return nil
+        }
+
+        return snapshot.weeklyRemainingPercent
+    }
+
+    private func weeklyResetText(for window: RateWindow) -> String {
+        guard let minutes = window.minutesUntilReset(now: now()) else {
+            return "n/a"
+        }
+
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+
+        let hours = minutes / 60
+        if hours < 24 {
+            return "\(hours)h"
+        }
+
+        let days = hours / 24
+        let remainderHours = hours % 24
+        if remainderHours == 0 {
+            return "\(days)d"
+        }
+
+        return "\(days)d \(remainderHours)h"
+    }
+
     /// Friendly hover text for a row — where the reading came from, stated as a
     /// fact (never a promise). Lives in a tooltip, never inline.
     func sourceTooltip(for snapshot: UsageSnapshot) -> String {
         if snapshot.provider == .claude {
+            if snapshot.isFreshSessionWindow {
+                return "Fresh window · starts with your next Claude Code message"
+            }
+
             switch snapshot.confidence {
             case .exact:
                 return "Read from Claude Code"
@@ -734,6 +848,11 @@ final class PromptJuiceViewModel: ObservableObject {
 
     var claudeMeasurementPopoverDetail: String {
         if let snapshot = snapshots.first(where: { $0.provider == .claude }),
+           snapshot.isFreshSessionWindow {
+            return "Fresh window. Usage starts with your next Claude Code message."
+        }
+
+        if let snapshot = snapshots.first(where: { $0.provider == .claude }),
            snapshot.confidence == .stale {
             return "Right now it's showing your last exact reading from \(clockTime(snapshot.updatedAt)). Claude Code will replace it when the statusline sends a current window."
         }
@@ -775,6 +894,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
         switch snapshot.confidence {
         case .exact:
+            if snapshot.isFreshSessionWindow {
+                return "Fresh window"
+            }
+
             if provider == .codex {
                 return "Live · \(fullResetText(for: snapshot))"
             }
@@ -782,6 +905,10 @@ final class PromptJuiceViewModel: ObservableObject {
         case .estimated:
             return "Estimate"
         case .stale:
+            if snapshot.isFreshSessionWindow {
+                return "Fresh window"
+            }
+
             return "Read earlier · \(clockTime(snapshot.updatedAt))"
         case .unavailable:
             return provider == .claude ? "Not set up yet" : "Not detected"
@@ -997,6 +1124,15 @@ final class PromptJuiceViewModel: ObservableObject {
             over: refreshedSnapshot,
             refreshDate: refreshDate
            ) {
+            let settledExisting = settledExistingSnapshot(existing, over: refreshedSnapshot)
+            if settledExisting != existing {
+                var mergedSnapshots = snapshots.filter { $0.provider != settledExisting.provider }
+                mergedSnapshots.append(settledExisting)
+                snapshots = Self.sortedSnapshots(mergedSnapshots)
+                logSnapshotState(reason: "settled kept snapshot")
+                return true
+            }
+
             return false
         }
 
@@ -1243,7 +1379,7 @@ final class PromptJuiceViewModel: ObservableObject {
                     over: currentSnapshot,
                     refreshDate: refreshDate
                    ) {
-                    return existing
+                    return settledExistingSnapshot(existing, over: currentSnapshot)
                 }
 
                 return currentSnapshot
@@ -1256,6 +1392,12 @@ final class PromptJuiceViewModel: ObservableObject {
         over refreshed: ProviderSnapshot,
         refreshDate: Date
     ) -> Bool {
+        if refreshed.identity == .claude,
+           refreshed.isFreshSessionWindow,
+           refreshed.source == .claudeStatusline || refreshed.source == .claudeCache {
+            return false
+        }
+
         if existing.isExpired(at: refreshDate) || !existing.isAvailable {
             return false
         }
@@ -1273,6 +1415,28 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return existing.updatedAt > refreshed.updatedAt
+    }
+
+    private func settledExistingSnapshot(
+        _ existing: ProviderSnapshot,
+        over refreshed: ProviderSnapshot
+    ) -> ProviderSnapshot {
+        guard existing.statusDetail == "Refreshing usage" else {
+            return existing
+        }
+
+        return ProviderSnapshot(
+            identity: existing.identity,
+            rateWindow: existing.rateWindow,
+            weeklyWindow: existing.weeklyWindow,
+            source: existing.source,
+            confidence: existing.confidence,
+            updatedAt: existing.updatedAt,
+            weeklyUpdatedAt: existing.weeklyUpdatedAt,
+            statusDetail: refreshed.statusDetail,
+            isFreshSessionWindow: existing.isFreshSessionWindow,
+            isFreshWeeklyWindow: existing.isFreshWeeklyWindow
+        )
     }
 
     private func snapshotPriority(_ snapshot: ProviderSnapshot) -> Int {
@@ -1396,6 +1560,37 @@ final class PromptJuiceViewModel: ObservableObject {
     ) -> ProviderSnapshot {
         guard snapshot.isExpired(at: now) else {
             return snapshot
+        }
+
+        if snapshot.identity == .claude,
+           snapshot.source == .claudeStatusline || snapshot.source == .claudeCache {
+            let weeklyWindow: RateWindow?
+            let isFreshWeeklyWindow: Bool
+            if let weekly = snapshot.weeklyWindow,
+               let resetAt = weekly.resetAt,
+               resetAt > now {
+                weeklyWindow = weekly
+                isFreshWeeklyWindow = false
+            } else if snapshot.weeklyWindow != nil {
+                weeklyWindow = ClaudeStatuslineSnapshotReader.freshWeeklyWindow(now: now)
+                isFreshWeeklyWindow = true
+            } else {
+                weeklyWindow = nil
+                isFreshWeeklyWindow = false
+            }
+
+            return ProviderSnapshot(
+                identity: snapshot.identity,
+                rateWindow: ClaudeStatuslineSnapshotReader.freshSessionWindow(now: now),
+                weeklyWindow: weeklyWindow,
+                source: snapshot.source,
+                confidence: snapshot.confidence == .unavailable ? .stale : snapshot.confidence,
+                updatedAt: snapshot.updatedAt,
+                weeklyUpdatedAt: snapshot.weeklyUpdatedAt,
+                statusDetail: "Fresh window",
+                isFreshSessionWindow: true,
+                isFreshWeeklyWindow: isFreshWeeklyWindow
+            )
         }
 
         return ProviderSnapshot(

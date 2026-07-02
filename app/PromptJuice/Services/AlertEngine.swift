@@ -9,12 +9,12 @@ struct AlertEngine {
         guard snapshot.confidence.canTriggerAlert,
               !snapshot.isExpired(at: now),
               let minutesUntilReset = snapshot.rateWindow.minutesUntilReset(now: now),
-              let remainingPercent = snapshot.rateWindow.remainingPercent else {
+              snapshot.rateWindow.remainingPercent != nil else {
             return false
         }
 
         return minutesUntilReset <= thresholds.remainingMinutes
-            && remainingPercent >= Double(thresholds.remainingPercent)
+            && snapshot.sessionRemainingPercent >= Double(thresholds.remainingPercent)
     }
 
     func alertingSnapshots(
@@ -36,13 +36,13 @@ struct AlertEngine {
             in: snapshots,
             thresholds: thresholds,
             now: now
-        ).max(by: { $0.remainingPercent < $1.remainingPercent }) {
+        ).max(by: { $0.sessionRemainingPercent < $1.sessionRemainingPercent }) {
             return highestRemainingAlert
         }
 
         return snapshots
             .filter { $0.isAvailable && !$0.isExpired(at: now) }
-            .max { $0.remainingPercent < $1.remainingPercent }
+            .max { $0.sessionRemainingPercent < $1.sessionRemainingPercent }
     }
 
     /// The single judgment for one provider, used by the chip, row/bar color,
@@ -58,7 +58,7 @@ struct AlertEngine {
             return .unavailable
         }
 
-        let remaining = snapshot.remainingPercent
+        let remaining = snapshot.sessionRemainingPercent
 
         if remaining <= 0 {
             return .empty
@@ -105,11 +105,11 @@ struct AlertEngine {
             return "Unavailable"
         }
 
-        if snapshot.remainingPercent <= 0 {
+        if snapshot.sessionRemainingPercent <= 0 {
             return "Empty"
         }
 
-        if snapshot.remainingPercent >= Double(UsageSeverity.lowRemainingFloor) {
+        if snapshot.sessionRemainingPercent >= Double(UsageSeverity.lowRemainingFloor) {
             return "Some left"
         }
 

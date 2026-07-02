@@ -155,8 +155,7 @@ struct ClaudeBridgeInstaller {
     }
 
     func isBridgeCurrent() -> Bool {
-        guard fileManager.fileExists(atPath: installedScriptURL.path),
-              let data = try? Data(contentsOf: settingsURL),
+        guard let data = try? Data(contentsOf: settingsURL),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
               let statusLine = root["statusLine"] as? [String: Any],
@@ -164,8 +163,35 @@ struct ClaudeBridgeInstaller {
             return false
         }
 
-        return commandReferencesInstalledBridge(command)
-            && statusLineRefreshInterval(statusLine) == Self.statusLineRefreshIntervalSeconds
+        guard commandReferencesInstalledBridge(command),
+              statusLineRefreshInterval(statusLine) == Self.statusLineRefreshIntervalSeconds else {
+            return false
+        }
+
+        // The approved settings already delegate to this Application Support path,
+        // so refreshing the app-owned script keeps the same user-approved command.
+        try? ensureInstalledBridgeContentCurrent()
+
+        return fileManager.fileExists(atPath: installedScriptURL.path)
+    }
+
+    private func ensureInstalledBridgeContentCurrent() throws {
+        guard let bundledScriptURL else {
+            return
+        }
+
+        let bundledData = try Data(contentsOf: bundledScriptURL)
+        let installedData = try? Data(contentsOf: installedScriptURL)
+        guard installedData != bundledData else {
+            return
+        }
+
+        try fileManager.createDirectory(at: installDirectory, withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: installedScriptURL.path) {
+            try fileManager.removeItem(at: installedScriptURL)
+        }
+        try fileManager.copyItem(at: bundledScriptURL, to: installedScriptURL)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installedScriptURL.path)
     }
 
     private func statusLineRefreshInterval(_ statusLine: [String: Any]) -> Int? {

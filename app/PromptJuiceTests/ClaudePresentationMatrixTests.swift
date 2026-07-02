@@ -188,6 +188,70 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         XCTAssertTrue(viewModel.detail.contains("Codex 69%"))
     }
 
+    func testFreshSessionWithWeeklyCarryForwardPresentation() {
+        let weeklyUpdatedAt = fixedNow.addingTimeInterval(-9 * 60 * 60)
+        let weeklyResetAt = fixedNow.addingTimeInterval(4 * 24 * 60 * 60)
+        let viewModel = makeViewModel(
+            claudeSnapshot: ProviderSnapshot(
+                identity: .claude,
+                rateWindow: ClaudeStatuslineSnapshotReader.freshSessionWindow(now: fixedNow),
+                weeklyWindow: .available(
+                    usedPercent: 30,
+                    resetAt: weeklyResetAt,
+                    durationMinutes: 10_080
+                ),
+                source: .claudeStatusline,
+                confidence: .stale,
+                updatedAt: weeklyUpdatedAt,
+                weeklyUpdatedAt: weeklyUpdatedAt,
+                statusDetail: "Fresh window",
+                isFreshSessionWindow: true
+            ),
+            bridgeCurrent: true
+        )
+
+        viewModel.showManualCheck()
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .live)
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Fresh window")
+        XCTAssertEqual(viewModel.sourceTooltip(for: claude), "Fresh window · starts with your next Claude Code message")
+        XCTAssertEqual(viewModel.claudeMeasurementPopoverDetail, "Fresh window. Usage starts with your next Claude Code message.")
+        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "70%")
+        XCTAssertEqual(viewModel.severity(for: claude), .healthy)
+        XCTAssertEqual(viewModel.menuBarRemainingPercent, 70, accuracy: 0.001)
+        XCTAssertEqual(
+            viewModel.weeklyText(for: claude),
+            "Week: 70% left · resets 4d · as of \(clockTime(weeklyUpdatedAt))"
+        )
+        XCTAssertTrue(viewModel.detail.contains("Claude Fresh window"))
+    }
+
+    func testFreshWeeklyPresentation() {
+        let viewModel = makeViewModel(
+            claudeSnapshot: ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .available(
+                    usedPercent: 5,
+                    resetAt: fixedNow.addingTimeInterval(2 * 60 * 60),
+                    durationMinutes: 300
+                ),
+                weeklyWindow: ClaudeStatuslineSnapshotReader.freshWeeklyWindow(now: fixedNow),
+                source: .claudeStatusline,
+                confidence: .exact,
+                updatedAt: fixedNow,
+                weeklyUpdatedAt: staleUpdatedAt,
+                isFreshWeeklyWindow: true
+            ),
+            bridgeCurrent: true
+        )
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }!
+
+        XCTAssertEqual(viewModel.weeklyText(for: claude), "Week: 100% left · fresh week")
+        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "95%")
+    }
+
     private func makeViewModel(
         claudeSnapshot: ProviderSnapshot,
         codexSnapshot: ProviderSnapshot? = nil,

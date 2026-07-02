@@ -2,7 +2,7 @@ import SwiftUI
 
 enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
-    static let rowHeight: CGFloat = 48
+    static let rowHeight: CGFloat = 70
     static let rowSpacing: CGFloat = 7
 
     static func height(mode: PanelMode, rowCount: Int) -> CGFloat {
@@ -186,9 +186,23 @@ private struct ProviderUsageRow: View {
             } else {
                 ghostBar
             }
+
+            if let weeklyText = viewModel.weeklyText(for: snapshot),
+               let weeklyRemaining = viewModel.weeklyBarRemainingPercent(for: snapshot) {
+                VStack(spacing: 3) {
+                    Text(weeklyText)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.48))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(1)
+
+                    CapacityBar(remainingPercent: weeklyRemaining, color: providerColor.opacity(0.82))
+                        .frame(height: 4)
+                }
+            }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .glassInset(
             cornerRadius: 14,
             accentColor: isSelected ? providerColor : nil,
@@ -202,7 +216,11 @@ private struct ProviderUsageRow: View {
 
     @ViewBuilder
     private var trailing: some View {
-        if snapshot.isAvailable {
+        if snapshot.isFreshSessionWindow {
+            Text("Fresh window")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.72))
+        } else if snapshot.isAvailable {
             Text(percentLabel)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.54))

@@ -83,11 +83,15 @@ PromptJuice shows each provider reading with a confidence label:
 
 For Claude, Live readings are exact usage numbers from Claude Code's status line. That status line runs only in the Claude Code terminal CLI. PromptJuice configures Claude Code to refresh the bridge every 10 seconds while Claude Code is open, so long-running terminal workflows can update without another typed message.
 
+The Claude bridge writes one `ClaudeStatus/session-<session_id>.json` file per terminal session with both the five-hour session window and the seven-day weekly window when Claude supplies them. PromptJuice merges those session files, ignores expired windows, and uses the highest usage from matching server windows. This keeps old idle terminal sessions from replacing a newer reading.
+
+When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining. A valid weekly window continues to show on the Claude row and can reduce the row/header/menu-bar fill until the week resets.
+
 If the desktop app is your only Claude surface, PromptJuice stays on Estimate because the desktop app does not support status lines yet. The upstream Claude Code issue is [anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456).
 
 To get Live readings for Claude: open **Settings -> Claude -> Set up live readings**, approve the status line bridge, then use Claude Code in the terminal.
 
-The Claude bridge uses macOS `/usr/bin/plutil` to read Claude Code's status line JSON. A `PROMPTJUICE_CLAUDE_STATUSLINE_PARSER=jq` rollback path remains available for compatibility testing.
+The Claude bridge uses macOS `/usr/bin/plutil` to read Claude Code's status line JSON.
 
 ## Provider Integrations
 
@@ -96,9 +100,10 @@ PromptJuice treats every provider snapshot as local state with a source and conf
 - `demo` with `exact` confidence powers the built-in prototype data.
 - `codexAppServer` with `exact` confidence comes from `codex app-server` and `account/rateLimits/read`.
 - `codexCache` with `stale` confidence reuses the last good Codex window when a live read fails before reset.
-- `claudeStatusline` with `exact` confidence comes from the Claude Code statusline bridge cache.
+- `claudeStatusline` with `exact` confidence comes from current Claude Code statusline session files.
+- `claudeStatusline` with `stale` confidence carries a still-valid session or weekly window forward from earlier statusline files.
 - `claudeLocalLogs` with `estimated` confidence comes from local Claude project logs.
-- `claudeCache` with `stale` confidence reuses the last good Claude statusline window before reset.
+- `claudeCache` with `stale` confidence reuses last-good Claude session and weekly windows before their reset times.
 - `unavailable` confidence gives the UI a calm failure state with a short diagnostic.
 
 Read the setup and troubleshooting details in [docs/provider-integrations.md](docs/provider-integrations.md). Claude statusline bridge details live in [docs/claude-statusline-bridge.md](docs/claude-statusline-bridge.md).
