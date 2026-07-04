@@ -178,6 +178,8 @@ struct ClaudeLiveUsageProviderClient: UsageProviderClient {
 
 struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
     private static let fiveHourWindowMinutes = 5 * 60
+    private static let sevenDayWindowMinutes = 7 * 24 * 60
+    private static let sameWindowResetTolerance: TimeInterval = 90
     static let maximumCacheAge: TimeInterval = 2 * 60
     static let maximumCacheBytes = 64 * 1024
 
@@ -188,13 +190,19 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
     }
 
     func snapshot(now: Date = Date()) throws -> ProviderSnapshot {
-        let data: Data
-
         do {
+            let sessionFiles = Self.sessionCacheFiles(
+                in: cacheURL.deletingLastPathComponent()
+            )
+
+            if !sessionFiles.isEmpty {
+                return try Self.snapshot(fromSessionFiles: sessionFiles, now: now)
+            }
+
             try Self.validateCacheFile(at: cacheURL)
             let updatedAt = try Self.cacheModificationDate(at: cacheURL, now: now)
-            data = try Data(contentsOf: cacheURL)
-            return try Self.snapshot(from: data, now: now, updatedAt: updatedAt)
+            let data = try Data(contentsOf: cacheURL)
+            return try Self.legacySnapshot(from: data, now: now, updatedAt: updatedAt)
         } catch {
             if let usageError = error as? ClaudeUsageError {
                 throw usageError
@@ -220,10 +228,10 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
     }
 
     static func snapshot(from data: Data, now: Date) throws -> ProviderSnapshot {
-        try snapshot(from: data, now: now, updatedAt: now)
+        try legacySnapshot(from: data, now: now, updatedAt: now)
     }
 
-    private static func snapshot(
+    private static func legacySnapshot(
         from data: Data,
         now: Date,
         updatedAt: Date
@@ -234,35 +242,232 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
             throw ClaudeUsageError.missingFiveHourRateLimit
         }
 
-        guard let usedPercent = fiveHour.usedPercentage,
-              usedPercent.isFinite,
-              let resetsAtText = fiveHour.resetsAt,
-              let resetAt = Self.parseResetDate(resetsAtText),
+        guard let sessionCandidate = windowCandidate(
+            from: fiveHour,
+            kind: .fiveHour,
+            updatedAt: updatedAt
+        ),
+              let resetAt = sessionCandidate.window.resetAt,
               resetAt > now else {
             throw ClaudeUsageError.invalidFiveHourRateLimit
         }
 
+        let weeklyCandidate = windowCandidate(
+            from: payload.rateLimits?.sevenDay,
+            kind: .sevenDay,
+            updatedAt: updatedAt
+        )
+        let weeklyWindow = weeklyCandidate.flatMap { candidate -> RateWindow? in
+            guard let resetAt = candidate.window.resetAt,
+                  resetAt > now else {
+                return nil
+            }
+            return candidate.window
+        }
+
         return ProviderSnapshot(
             identity: .claude,
-            rateWindow: .available(
-                usedPercent: usedPercent,
-                resetAt: resetAt,
-                durationMinutes: fiveHour.durationMinutes ?? fiveHour.windowMinutes ?? Self.fiveHourWindowMinutes
-            ),
+            rateWindow: sessionCandidate.window,
+            weeklyWindow: weeklyWindow,
             source: .claudeStatusline,
             confidence: .exact,
+            updatedAt: updatedAt,
+            weeklyUpdatedAt: weeklyWindow == nil ? nil : updatedAt
+        )
+    }
+
+    private static func snapshot(
+        fromSessionFiles files: [StatuslineCacheFile],
+        now: Date
+    ) throws -> ProviderSnapshot {
+        var sessionCandidates: [WindowCandidate] = []
+        var weeklyCandidates: [WindowCandidate] = []
+
+        for file in files {
+            guard let data = try? Data(contentsOf: file.url),
+                  let payload = try? JSONDecoder().decode(ClaudeStatuslinePayload.self, from: data),
+                  let rateLimits = payload.rateLimits else {
+                continue
+            }
+
+            if let candidate = windowCandidate(
+                from: rateLimits.fiveHour,
+                kind: .fiveHour,
+                updatedAt: file.modificationDate
+            ) {
+                sessionCandidates.append(candidate)
+            }
+
+            if let candidate = windowCandidate(
+                from: rateLimits.sevenDay,
+                kind: .sevenDay,
+                updatedAt: file.modificationDate
+            ) {
+                weeklyCandidates.append(candidate)
+            }
+        }
+
+        let mergedSession = mergedWindow(from: sessionCandidates, now: now)
+        let mergedWeekly = mergedWindow(from: weeklyCandidates, now: now)
+        let sawRateLimitData = !sessionCandidates.isEmpty || !weeklyCandidates.isEmpty
+
+        guard let mergedSession else {
+            guard sawRateLimitData else {
+                throw ClaudeUsageError.missingFiveHourRateLimit
+            }
+
+            let newestUpdate = (sessionCandidates + weeklyCandidates)
+                .map(\.updatedAt)
+                .max() ?? now
+
+            return ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .unavailable,
+                weeklyWindow: mergedWeekly?.window,
+                source: .claudeStatusline,
+                confidence: freshnessConfidence(updatedAt: newestUpdate, now: now),
+                updatedAt: newestUpdate,
+                weeklyUpdatedAt: mergedWeekly?.updatedAt ?? weeklyCandidates.map(\.updatedAt).max(),
+                statusDetail: "Fresh window",
+                isFreshSessionWindow: true,
+                isFreshWeeklyWindow: mergedWeekly == nil && !weeklyCandidates.isEmpty
+            )
+        }
+
+        return ProviderSnapshot(
+            identity: .claude,
+            rateWindow: mergedSession.window,
+            weeklyWindow: mergedWeekly?.window,
+            source: .claudeStatusline,
+            confidence: mergedSession.confidence,
+            updatedAt: mergedSession.updatedAt,
+            weeklyUpdatedAt: mergedWeekly?.updatedAt ?? weeklyCandidates.map(\.updatedAt).max(),
+            isFreshWeeklyWindow: mergedWeekly == nil && !weeklyCandidates.isEmpty
+        )
+    }
+
+    private static func windowCandidate(
+        from window: ClaudeStatuslineRateLimitWindow?,
+        kind: ClaudeStatuslineWindowKind,
+        updatedAt: Date
+    ) -> WindowCandidate? {
+        guard let window,
+              let usedPercent = window.usedPercentage,
+              usedPercent.isFinite,
+              let resetsAtText = window.resetsAt,
+              let resetAt = parseResetDate(resetsAtText) else {
+            return nil
+        }
+
+        return WindowCandidate(
+            window: .available(
+                usedPercent: usedPercent,
+                resetAt: resetAt,
+                durationMinutes: window.durationMinutes ?? window.windowMinutes ?? kind.defaultDurationMinutes
+            ),
             updatedAt: updatedAt
         )
     }
 
-    private static func cacheModificationDate(at url: URL, now: Date) throws -> Date {
-        let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
-        guard let modificationDate = values.contentModificationDate else {
-            throw ClaudeUsageError.statuslineCacheUnavailable
+    private static func mergedWindow(
+        from candidates: [WindowCandidate],
+        now: Date
+    ) -> MergedWindow? {
+        let survivors = candidates.filter { candidate in
+            guard let resetAt = candidate.window.resetAt else {
+                return false
+            }
+
+            return resetAt > now
         }
+
+        guard let maxResetAt = survivors.compactMap(\.window.resetAt).max() else {
+            return nil
+        }
+
+        let sameWindow = survivors.filter { candidate in
+            guard let resetAt = candidate.window.resetAt else {
+                return false
+            }
+
+            return abs(resetAt.timeIntervalSince(maxResetAt)) <= sameWindowResetTolerance
+        }
+
+        guard let chosen = sameWindow.max(by: { first, second in
+            let firstUsed = first.window.usedPercent ?? 0
+            let secondUsed = second.window.usedPercent ?? 0
+            if firstUsed != secondUsed {
+                return firstUsed < secondUsed
+            }
+
+            return first.updatedAt < second.updatedAt
+        }) else {
+            return nil
+        }
+
+        return MergedWindow(
+            window: chosen.window,
+            updatedAt: chosen.updatedAt,
+            confidence: freshnessConfidence(updatedAt: chosen.updatedAt, now: now)
+        )
+    }
+
+    private static func freshnessConfidence(updatedAt: Date, now: Date) -> SnapshotConfidence {
+        now.timeIntervalSince(updatedAt) <= maximumCacheAge ? .exact : .stale
+    }
+
+    private static func sessionCacheFiles(in directory: URL) -> [StatuslineCacheFile] {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [
+                .isRegularFileKey,
+                .isSymbolicLinkKey,
+                .fileSizeKey,
+                .contentModificationDateKey
+            ],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return urls
+            .filter { url in
+                url.lastPathComponent.hasPrefix("session-")
+                    && url.lastPathComponent.hasSuffix(".json")
+            }
+            .compactMap { url -> StatuslineCacheFile? in
+                guard (try? validateCacheFile(at: url)) != nil,
+                      let modificationDate = try? rawCacheModificationDate(at: url) else {
+                    return nil
+                }
+
+                return StatuslineCacheFile(url: url, modificationDate: modificationDate)
+            }
+            .sorted { first, second in
+                if first.modificationDate != second.modificationDate {
+                    return first.modificationDate > second.modificationDate
+                }
+
+                return first.url.path < second.url.path
+            }
+            .prefix(64)
+            .map { $0 }
+    }
+
+    private static func cacheModificationDate(at url: URL, now: Date) throws -> Date {
+        let modificationDate = try rawCacheModificationDate(at: url)
 
         guard now.timeIntervalSince(modificationDate) <= maximumCacheAge else {
             throw ClaudeUsageError.statuslineCacheStale
+        }
+
+        return modificationDate
+    }
+
+    private static func rawCacheModificationDate(at url: URL) throws -> Date {
+        let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
+        guard let modificationDate = values.contentModificationDate else {
+            throw ClaudeUsageError.statuslineCacheUnavailable
         }
 
         return modificationDate
@@ -318,18 +523,37 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
     func save(_ snapshot: ProviderSnapshot) {
         guard snapshot.identity == .claude,
               snapshot.source == .claudeStatusline,
-              snapshot.confidence == .exact,
-              let usedPercent = snapshot.rateWindow.usedPercent,
-              let resetAt = snapshot.rateWindow.resetAt,
-              let durationMinutes = snapshot.rateWindow.durationMinutes else {
+              snapshot.confidence != .unavailable else {
+            return
+        }
+
+        let existing = cachedSnapshot()
+
+        var sessionWindow = existing?.session
+        if !snapshot.isFreshSessionWindow, snapshot.rateWindow.isAvailable {
+            sessionWindow = CachedClaudeWindow(
+                window: snapshot.rateWindow,
+                updatedAt: snapshot.updatedAt
+            )
+        }
+
+        var weeklyWindow = existing?.weekly
+        if !snapshot.isFreshWeeklyWindow,
+           let weekly = snapshot.weeklyWindow,
+           weekly.isAvailable {
+            weeklyWindow = CachedClaudeWindow(
+                window: weekly,
+                updatedAt: snapshot.weeklyUpdatedAt ?? snapshot.updatedAt
+            )
+        }
+
+        guard sessionWindow != nil || weeklyWindow != nil else {
             return
         }
 
         let cached = CachedClaudeSnapshot(
-            usedPercent: usedPercent,
-            resetAt: resetAt,
-            durationMinutes: durationMinutes,
-            updatedAt: snapshot.updatedAt
+            session: sessionWindow,
+            weekly: weeklyWindow
         )
 
         if let data = try? JSONEncoder().encode(cached) {
@@ -338,24 +562,42 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
     }
 
     func snapshot(now: Date, failureDetail: String?) -> ProviderSnapshot? {
-        guard let data = defaults.data(forKey: Key.lastGoodClaudeSnapshot),
-              let cached = try? JSONDecoder().decode(CachedClaudeSnapshot.self, from: data),
-              cached.resetAt > now else {
+        guard let cached = cachedSnapshot(),
+              cached.session != nil || cached.weekly != nil else {
+            return nil
+        }
+
+        let validSession = cached.session?.rateWindowIfUnexpired(now: now)
+        let validWeekly = cached.weekly?.rateWindowIfUnexpired(now: now)
+        let newestUpdatedAt = [
+            cached.session?.updatedAt,
+            cached.weekly?.updatedAt
+        ].compactMap { $0 }.max() ?? now
+
+        guard validSession != nil || validWeekly != nil else {
             return nil
         }
 
         return ProviderSnapshot(
             identity: .claude,
-            rateWindow: .available(
-                usedPercent: cached.usedPercent,
-                resetAt: cached.resetAt,
-                durationMinutes: cached.durationMinutes
-            ),
+            rateWindow: validSession ?? .unavailable,
+            weeklyWindow: validWeekly,
             source: .claudeCache,
             confidence: .stale,
-            updatedAt: cached.updatedAt,
-            statusDetail: failureDetail
+            updatedAt: cached.session?.updatedAt ?? newestUpdatedAt,
+            weeklyUpdatedAt: cached.weekly?.updatedAt,
+            statusDetail: failureDetail,
+            isFreshSessionWindow: validSession == nil,
+            isFreshWeeklyWindow: validWeekly == nil && cached.weekly != nil
         )
+    }
+
+    private func cachedSnapshot() -> CachedClaudeSnapshot? {
+        guard let data = defaults.data(forKey: Key.lastGoodClaudeSnapshot) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(CachedClaudeSnapshot.self, from: data)
     }
 }
 
@@ -747,10 +989,42 @@ private struct ClaudeStatuslinePayload: Decodable {
 
 private struct ClaudeStatuslineRateLimits: Decodable {
     let fiveHour: ClaudeStatuslineRateLimitWindow?
+    let sevenDay: ClaudeStatuslineRateLimitWindow?
 
     private enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
+        case sevenDay = "seven_day"
     }
+}
+
+private enum ClaudeStatuslineWindowKind {
+    case fiveHour
+    case sevenDay
+
+    var defaultDurationMinutes: Int {
+        switch self {
+        case .fiveHour:
+            5 * 60
+        case .sevenDay:
+            7 * 24 * 60
+        }
+    }
+}
+
+private struct StatuslineCacheFile {
+    let url: URL
+    let modificationDate: Date
+}
+
+private struct WindowCandidate {
+    let window: RateWindow
+    let updatedAt: Date
+}
+
+private struct MergedWindow {
+    let window: RateWindow
+    let updatedAt: Date
+    let confidence: SnapshotConfidence
 }
 
 private struct ClaudeStatuslineRateLimitWindow: Decodable {
@@ -853,11 +1127,98 @@ private struct ClaudeStatuslineRateLimitWindow: Decodable {
     }
 }
 
-private struct CachedClaudeSnapshot: Codable {
+private struct CachedClaudeWindow: Codable, Equatable {
     let usedPercent: Double
     let resetAt: Date
     let durationMinutes: Int
     let updatedAt: Date
+
+    init?(
+        window: RateWindow,
+        updatedAt: Date
+    ) {
+        guard let usedPercent = window.usedPercent,
+              let resetAt = window.resetAt,
+              let durationMinutes = window.durationMinutes else {
+            return nil
+        }
+
+        self.usedPercent = usedPercent
+        self.resetAt = resetAt
+        self.durationMinutes = durationMinutes
+        self.updatedAt = updatedAt
+    }
+
+    init(
+        usedPercent: Double,
+        resetAt: Date,
+        durationMinutes: Int,
+        updatedAt: Date
+    ) {
+        self.usedPercent = usedPercent
+        self.resetAt = resetAt
+        self.durationMinutes = durationMinutes
+        self.updatedAt = updatedAt
+    }
+
+    func rateWindowIfUnexpired(now: Date) -> RateWindow? {
+        guard resetAt > now else {
+            return nil
+        }
+
+        return .available(
+            usedPercent: usedPercent,
+            resetAt: resetAt,
+            durationMinutes: durationMinutes
+        )
+    }
+}
+
+private struct CachedClaudeSnapshot: Codable {
+    let session: CachedClaudeWindow?
+    let weekly: CachedClaudeWindow?
+
+    init(session: CachedClaudeWindow?, weekly: CachedClaudeWindow?) {
+        self.session = session
+        self.weekly = weekly
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case session
+        case weekly
+        case usedPercent
+        case resetAt
+        case durationMinutes
+        case updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let session = try? container.decodeIfPresent(CachedClaudeWindow.self, forKey: .session) {
+            self.session = session
+        } else if let usedPercent = try? container.decode(Double.self, forKey: .usedPercent),
+                  let resetAt = try? container.decode(Date.self, forKey: .resetAt),
+                  let durationMinutes = try? container.decode(Int.self, forKey: .durationMinutes),
+                  let updatedAt = try? container.decode(Date.self, forKey: .updatedAt) {
+            self.session = CachedClaudeWindow(
+                usedPercent: usedPercent,
+                resetAt: resetAt,
+                durationMinutes: durationMinutes,
+                updatedAt: updatedAt
+            )
+        } else {
+            self.session = nil
+        }
+
+        weekly = try? container.decodeIfPresent(CachedClaudeWindow.self, forKey: .weekly)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(session, forKey: .session)
+        try container.encodeIfPresent(weekly, forKey: .weekly)
+    }
 }
 
 enum ClaudeUsageError: Error, LocalizedError, Equatable {

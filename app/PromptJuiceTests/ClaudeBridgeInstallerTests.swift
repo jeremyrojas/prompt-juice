@@ -18,6 +18,10 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         ClaudeBridgeInstaller(homeDirectory: home, bundledScriptURL: nil)
     }
 
+    private func installer(bundledScriptURL: URL) -> ClaudeBridgeInstaller {
+        ClaudeBridgeInstaller(homeDirectory: home, bundledScriptURL: bundledScriptURL)
+    }
+
     private func writeSettings(_ json: String) throws {
         let dir = home.appendingPathComponent(".claude", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -193,6 +197,84 @@ final class ClaudeBridgeInstallerTests: XCTestCase {
         """#)
 
         XCTAssertTrue(installer.isBridgeCurrent())
+    }
+
+    func testBridgeCurrentIsPureWhenInstalledScriptContentDiffers() throws {
+        let bundledScriptURL = home.appendingPathComponent("bundled-bridge.sh")
+        try "#!/usr/bin/env bash\nprintf new\n".write(to: bundledScriptURL, atomically: true, encoding: .utf8)
+
+        let installer = installer(bundledScriptURL: bundledScriptURL)
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try FileManager.default.createDirectory(at: installer.installDirectory, withIntermediateDirectories: true)
+        try "#!/usr/bin/env bash\nprintf old\n".write(to: installer.installedScriptURL, atomically: true, encoding: .utf8)
+        try writeSettings(
+            statusLineCommand: installedCommand,
+            refreshInterval: ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds
+        )
+
+        XCTAssertTrue(installer.isBridgeCurrent())
+        XCTAssertEqual(try String(contentsOf: installer.installedScriptURL, encoding: .utf8), "#!/usr/bin/env bash\nprintf old\n")
+
+        installer.ensureInstalledBridgeCurrent(reason: "test")
+
+        XCTAssertEqual(try String(contentsOf: installer.installedScriptURL, encoding: .utf8), "#!/usr/bin/env bash\nprintf new\n")
+    }
+
+    func testBridgeSyncLeavesMatchingInstalledScriptUntouched() throws {
+        let bundledScriptURL = home.appendingPathComponent("bundled-bridge.sh")
+        let content = "#!/usr/bin/env bash\nprintf same\n"
+        try content.write(to: bundledScriptURL, atomically: true, encoding: .utf8)
+
+        let installer = installer(bundledScriptURL: bundledScriptURL)
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try FileManager.default.createDirectory(at: installer.installDirectory, withIntermediateDirectories: true)
+        try content.write(to: installer.installedScriptURL, atomically: true, encoding: .utf8)
+        let oldDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: installer.installedScriptURL.path)
+        try writeSettings(
+            statusLineCommand: installedCommand,
+            refreshInterval: ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds
+        )
+
+        XCTAssertTrue(installer.isBridgeCurrent())
+        installer.ensureInstalledBridgeCurrent(reason: "test")
+        let attributes = try FileManager.default.attributesOfItem(atPath: installer.installedScriptURL.path)
+        XCTAssertEqual(attributes[.modificationDate] as? Date, oldDate)
+    }
+
+    func testBridgeSyncCopiesMissingInstalledScriptWhenSettingsAreCurrent() throws {
+        let bundledScriptURL = home.appendingPathComponent("bundled-bridge.sh")
+        let content = "#!/usr/bin/env bash\nprintf current\n"
+        try content.write(to: bundledScriptURL, atomically: true, encoding: .utf8)
+
+        let installer = installer(bundledScriptURL: bundledScriptURL)
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try writeSettings(
+            statusLineCommand: installedCommand,
+            refreshInterval: ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds
+        )
+
+        XCTAssertFalse(installer.isBridgeCurrent())
+
+        installer.ensureInstalledBridgeCurrent(reason: "test")
+
+        XCTAssertTrue(installer.isBridgeCurrent())
+        XCTAssertEqual(try String(contentsOf: installer.installedScriptURL, encoding: .utf8), content)
+    }
+
+    func testBridgeSyncFailureLeavesExistingInstalledScriptInPlace() throws {
+        let installer = ClaudeBridgeInstaller(homeDirectory: home, bundledScriptURL: nil)
+        let installedCommand = "bash '\(installer.installedScriptURL.path)'"
+        try FileManager.default.createDirectory(at: installer.installDirectory, withIntermediateDirectories: true)
+        try "#!/usr/bin/env bash\nprintf old\n".write(to: installer.installedScriptURL, atomically: true, encoding: .utf8)
+        try writeSettings(
+            statusLineCommand: installedCommand,
+            refreshInterval: ClaudeBridgeInstaller.statusLineRefreshIntervalSeconds
+        )
+
+        installer.ensureInstalledBridgeCurrent(reason: "test")
+
+        XCTAssertEqual(try String(contentsOf: installer.installedScriptURL, encoding: .utf8), "#!/usr/bin/env bash\nprintf old\n")
     }
 
     func testBridgeCurrentFalseWhenRefreshIntervalIsMissing() throws {

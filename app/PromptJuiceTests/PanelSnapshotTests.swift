@@ -131,7 +131,8 @@ final class PanelSnapshotTests: XCTestCase {
         viewModel.showManualCheck()
         let panelHeight = PromptJuicePanelMetrics.height(
             mode: viewModel.mode,
-            rowCount: viewModel.visibleSnapshots.count
+            rowCount: viewModel.visibleSnapshots.count,
+            weeklyRowCount: viewModel.visibleWeeklyRowCount
         )
 
         let content = ZStack {
@@ -219,7 +220,8 @@ final class PanelSnapshotTests: XCTestCase {
     private func renderAwaitingSessionPanel(viewModel: PromptJuiceViewModel) throws {
         let panelHeight = PromptJuicePanelMetrics.height(
             mode: viewModel.mode,
-            rowCount: viewModel.visibleSnapshots.count
+            rowCount: viewModel.visibleSnapshots.count,
+            weeklyRowCount: viewModel.visibleWeeklyRowCount
         )
         let content = ZStack {
             LinearGradient(

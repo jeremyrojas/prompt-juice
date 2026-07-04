@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import XCTest
 @testable import PromptJuice
 
@@ -121,6 +122,43 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.detail.contains("Claude 43%"))
         XCTAssertTrue(viewModel.detail.contains("Codex 69%"))
         XCTAssertTrue(viewModel.detail.contains("resets in"))
+    }
+
+    func testManualSubtitleUsesCodexResetWhenClaudeIsFresh() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [
+                ProviderSnapshot(
+                    identity: .claude,
+                    rateWindow: .unavailable,
+                    source: .claudeStatusline,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow.addingTimeInterval(-2 * 60 * 60),
+                    statusDetail: "Fresh window",
+                    isFreshSessionWindow: true
+                ),
+                ProviderSnapshot(
+                    identity: .codex,
+                    rateWindow: .available(
+                        usedPercent: 20,
+                        resetAt: Self.fixedNow.addingTimeInterval(3 * 60 * 60),
+                        durationMinutes: 300
+                    ),
+                    source: .fixture,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow
+                )
+            ]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(
+            viewModel.detail,
+            "Claude Fresh window · Codex 80% · resets in 3h 0m"
+        )
+        XCTAssertTrue(viewModel.detail.hasSuffix("resets in 3h 0m"))
     }
 
     func testManualVerdictIsCalmWhenHealthy() {
@@ -587,6 +625,92 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(provider.callCount, 2)
     }
 
+    func testTickAgesExactClaudeStatuslineSnapshotToEarlier() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let oldClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 29,
+                resetAt: Self.fixedNow.addingTimeInterval(3 * 60 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 3,
+                resetAt: Self.fixedNow.addingTimeInterval(5 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: Self.fixedNow.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 1),
+            weeklyUpdatedAt: Self.fixedNow.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 1)
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [oldClaude, Self.healthySnapshots[1]]),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.tick()
+
+        let claude = viewModel.snapshots.first { $0.provider == .claude }
+        XCTAssertEqual(claude?.confidence, .stale)
+        XCTAssertEqual(claude?.weeklyWindow?.usedPercent, 3)
+    }
+
+    func testTickDoesNotPublishSnapshotsWhenNothingAges() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+        var publishCount = 0
+        let cancellable = viewModel.$snapshots
+            .dropFirst()
+            .sink { _ in
+                publishCount += 1
+            }
+
+        viewModel.tick()
+
+        XCTAssertEqual(publishCount, 0)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    func testFreshClaudeRefreshDoesNotReplaceValidExistingSnapshot() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let validClaude = Self.claudeSnapshot(
+            usedPercent: 55,
+            resetMinutes: 180,
+            updatedAt: Self.fixedNow
+        )
+        let freshClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeCache,
+            confidence: .stale,
+            updatedAt: Self.fixedNow.addingTimeInterval(60),
+            statusDetail: "Fresh window",
+            isFreshSessionWindow: true
+        )
+        let claudeProvider = CountingUsageProviderClient(snapshots: [freshClaude])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [validClaude, Self.healthySnapshots[1]]),
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+
+        await waitUntil { claudeProvider.callCount == 1 }
+        let claude = viewModel.snapshots.first { $0.provider == .claude }
+        XCTAssertEqual(claude, validClaude)
+    }
+
     func testRefreshStormCoalescesIntoOneActiveAndOnePendingFetch() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -641,7 +765,12 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(slowClaudeProvider.callCount, 1)
 
         slowClaudeProvider.releaseRefresh()
-        await waitUntil { viewModel.snapshots.contains(claudeUnavailable) }
+        await waitUntil {
+            viewModel.snapshots.contains { snapshot in
+                snapshot.provider == .claude
+                    && snapshot.statusDetail != "Refreshing usage"
+            }
+        }
     }
 
     func testRefreshReplacesExpiredSnapshotWithOlderSourceTimestamp() async {

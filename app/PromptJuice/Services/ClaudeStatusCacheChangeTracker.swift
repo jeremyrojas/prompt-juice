@@ -2,10 +2,17 @@ import Darwin
 import Foundation
 
 final class ClaudeStatusCacheChangeTracker {
-    private struct CacheSignature: Equatable {
+    private struct LatestFileSignature: Equatable {
         let fileID: UInt64?
         let size: UInt64?
         let modificationDate: Date?
+    }
+
+    private struct CacheSignature: Equatable {
+        let latest: LatestFileSignature?
+        let sessionFileCount: Int
+        let sessionMaxModificationDate: Date?
+        let sessionTotalSize: UInt64
     }
 
     let cacheURL: URL
@@ -38,19 +45,72 @@ final class ClaudeStatusCacheChangeTracker {
         for url: URL,
         fileManager: FileManager
     ) -> CacheSignature? {
-        guard (try? ClaudeStatuslineSnapshotReader.validateCacheFile(at: url)) != nil else {
-            return nil
-        }
+        let latestSignature = latestSignature(for: url, fileManager: fileManager)
+        let sessionSignature = sessionSignature(
+            in: url.deletingLastPathComponent(),
+            fileManager: fileManager
+        )
 
-        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path) else {
+        guard latestSignature != nil || sessionSignature.count > 0 else {
             return nil
         }
 
         return CacheSignature(
+            latest: latestSignature,
+            sessionFileCount: sessionSignature.count,
+            sessionMaxModificationDate: sessionSignature.maxModificationDate,
+            sessionTotalSize: sessionSignature.totalSize
+        )
+    }
+
+    private static func latestSignature(
+        for url: URL,
+        fileManager: FileManager
+    ) -> LatestFileSignature? {
+        guard (try? ClaudeStatuslineSnapshotReader.validateCacheFile(at: url)) != nil else {
+            return nil
+        }
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path) else {
+            return nil
+        }
+
+        return LatestFileSignature(
             fileID: uint64Value(attributes[.systemFileNumber]),
             size: uint64Value(attributes[.size]),
             modificationDate: attributes[.modificationDate] as? Date
         )
+    }
+
+    private static func sessionSignature(
+        in directory: URL,
+        fileManager: FileManager
+    ) -> (count: Int, maxModificationDate: Date?, totalSize: UInt64) {
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else {
+            return (0, nil, 0)
+        }
+
+        var count = 0
+        var maxModificationDate: Date?
+        var totalSize: UInt64 = 0
+
+        for url in urls where url.lastPathComponent.hasPrefix("session-") && url.lastPathComponent.hasSuffix(".json") {
+            guard (try? ClaudeStatuslineSnapshotReader.validateCacheFile(at: url)) != nil,
+                  let attributes = try? fileManager.attributesOfItem(atPath: url.path) else {
+                continue
+            }
+
+            count += 1
+            totalSize += uint64Value(attributes[.size]) ?? 0
+            if let modificationDate = attributes[.modificationDate] as? Date,
+               maxModificationDate == nil || modificationDate > maxModificationDate! {
+                maxModificationDate = modificationDate
+            }
+        }
+
+        return (count, maxModificationDate, totalSize)
     }
 
     private static func uint64Value(_ value: Any?) -> UInt64? {

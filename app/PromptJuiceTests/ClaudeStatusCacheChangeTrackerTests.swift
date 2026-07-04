@@ -33,6 +33,37 @@ final class ClaudeStatusCacheChangeTrackerTests: XCTestCase {
         XCTAssertFalse(tracker.consumeChange())
     }
 
+    func testDetectsSessionFileReplacement() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PromptJuiceSessionTrackerTests-\(UUID().uuidString)", isDirectory: true)
+        let cacheURL = root
+            .appendingPathComponent("ClaudeStatus", isDirectory: true)
+            .appendingPathComponent("latest.json")
+
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let tracker = ClaudeStatusCacheChangeTracker(cacheURL: cacheURL)
+
+        XCTAssertFalse(tracker.consumeChange())
+
+        try writeSessionCache(usedPercent: 12.5, sessionID: "one", to: cacheURL.deletingLastPathComponent())
+
+        XCTAssertTrue(tracker.consumeChange())
+        XCTAssertFalse(tracker.consumeChange())
+
+        try writeSessionCache(usedPercent: 18.5, sessionID: "two", to: cacheURL.deletingLastPathComponent())
+
+        XCTAssertTrue(tracker.consumeChange())
+        XCTAssertFalse(tracker.consumeChange())
+    }
+
     func testPollerDetectsAtomicCacheReplacement() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("PromptJuiceCachePollerTests-\(UUID().uuidString)", isDirectory: true)
@@ -121,5 +152,22 @@ final class ClaudeStatusCacheChangeTrackerTests: XCTestCase {
         }
 
         try FileManager.default.moveItem(at: temporaryURL, to: cacheURL)
+    }
+
+    private func writeSessionCache(usedPercent: Double, sessionID: String, to directory: URL) throws {
+        let temporaryURL = directory
+            .appendingPathComponent(".session-\(UUID().uuidString).json")
+        let payload = """
+        {"rate_limits":{"five_hour":{"used_percentage":\(usedPercent),"resets_at":"1800001800","duration_minutes":300}}}
+        """
+        let sessionURL = directory.appendingPathComponent("session-\(sessionID).json")
+
+        try payload.write(to: temporaryURL, atomically: true, encoding: .utf8)
+
+        if FileManager.default.fileExists(atPath: sessionURL.path) {
+            try FileManager.default.removeItem(at: sessionURL)
+        }
+
+        try FileManager.default.moveItem(at: temporaryURL, to: sessionURL)
     }
 }

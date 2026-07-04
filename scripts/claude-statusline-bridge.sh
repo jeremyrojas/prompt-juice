@@ -67,6 +67,7 @@ normalize_positive_integer() {
 normalize_duration() {
   local raw_duration="${1:-}"
   local raw_window="${2:-}"
+  local default_duration="${3:-300}"
   local normalized
 
   if normalized=$(normalize_positive_integer "$raw_duration"); then
@@ -79,7 +80,7 @@ normalize_duration() {
     return 0
   fi
 
-  printf '300'
+  printf '%s' "$default_duration"
 }
 
 write_payload_atomic() {
@@ -109,6 +110,18 @@ write_file_atomic() {
   fi
 }
 
+sanitized_session_id() {
+  local raw_session sanitized
+  raw_session=$(extract_raw_plutil_scalar "session_id" string 2>/dev/null | trim_value) || raw_session=""
+  sanitized=$(printf '%s' "$raw_session" | /usr/bin/tr -cd 'A-Za-z0-9._-' | /usr/bin/cut -c 1-64)
+
+  if [ -n "$sanitized" ]; then
+    printf '%s' "$sanitized"
+  else
+    printf 'unknown'
+  fi
+}
+
 json_string_or_null() {
   local value="${1:-}"
 
@@ -122,18 +135,119 @@ json_string_or_null() {
 write_promptjuice_debug_info() {
   [ "${PROMPTJUICE_CLAUDE_STATUS_DEBUG:-1}" = "0" ] && return 0
 
-  local cache_dir debug_path observed raw_used raw_resets raw_duration raw_window payload
+  local cache_dir debug_path observed session_id raw_used raw_resets raw_duration raw_window raw_weekly_used raw_weekly_resets raw_weekly_duration raw_weekly_window payload
   cache_dir=$(dirname "$cache_path")
   debug_path="${PROMPTJUICE_CLAUDE_STATUS_DEBUG_PATH:-$cache_dir/debug-latest.json}"
   observed=$(/bin/date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || /bin/date 2>/dev/null || printf '')
+  session_id=$(sanitized_session_id)
 
   raw_used=$(extract_raw_plutil_scalar "rate_limits.five_hour.used_percentage" string integer float 2>/dev/null | trim_value) || raw_used=""
   raw_resets=$(extract_raw_plutil_scalar "rate_limits.five_hour.resets_at" string integer float date 2>/dev/null | trim_value) || raw_resets=""
   raw_duration=$(extract_raw_plutil_scalar "rate_limits.five_hour.duration_minutes" string integer float 2>/dev/null | trim_value) || raw_duration=""
   raw_window=$(extract_raw_plutil_scalar "rate_limits.five_hour.window_minutes" string integer float 2>/dev/null | trim_value) || raw_window=""
 
-  payload='{"observed_at":'"$(json_string_or_null "$observed")"',"parser":'"$(json_string_or_null "$parser")"',"five_hour":{"used_percentage":'"$(json_string_or_null "$raw_used")"',"resets_at":'"$(json_string_or_null "$raw_resets")"',"duration_minutes":'"$(json_string_or_null "$raw_duration")"',"window_minutes":'"$(json_string_or_null "$raw_window")"'}}'
+  raw_weekly_used=$(extract_raw_plutil_scalar "rate_limits.seven_day.used_percentage" string integer float 2>/dev/null | trim_value) || raw_weekly_used=""
+  raw_weekly_resets=$(extract_raw_plutil_scalar "rate_limits.seven_day.resets_at" string integer float date 2>/dev/null | trim_value) || raw_weekly_resets=""
+  raw_weekly_duration=$(extract_raw_plutil_scalar "rate_limits.seven_day.duration_minutes" string integer float 2>/dev/null | trim_value) || raw_weekly_duration=""
+  raw_weekly_window=$(extract_raw_plutil_scalar "rate_limits.seven_day.window_minutes" string integer float 2>/dev/null | trim_value) || raw_weekly_window=""
+
+  payload='{"observed_at":'"$(json_string_or_null "$observed")"',"parser":'"$(json_string_or_null "$parser")"',"session_id":'"$(json_string_or_null "$session_id")"',"five_hour":{"used_percentage":'"$(json_string_or_null "$raw_used")"',"resets_at":'"$(json_string_or_null "$raw_resets")"',"duration_minutes":'"$(json_string_or_null "$raw_duration")"',"window_minutes":'"$(json_string_or_null "$raw_window")"'},"seven_day":{"used_percentage":'"$(json_string_or_null "$raw_weekly_used")"',"resets_at":'"$(json_string_or_null "$raw_weekly_resets")"',"duration_minutes":'"$(json_string_or_null "$raw_weekly_duration")"',"window_minutes":'"$(json_string_or_null "$raw_weekly_window")"'}}'
   write_file_atomic "$debug_path" "$payload"
+}
+
+session_window_payload() {
+  local name="$1"
+  local default_duration="$2"
+  local raw_used raw_resets raw_duration raw_window used resets duration escaped_resets
+
+  raw_used=$(extract_raw_plutil_scalar "rate_limits.$name.used_percentage" string integer float) || return 1
+  raw_resets=$(extract_raw_plutil_scalar "rate_limits.$name.resets_at" string integer float date) || return 1
+  raw_duration=$(extract_raw_plutil_scalar "rate_limits.$name.duration_minutes" string integer float) || true
+  raw_window=$(extract_raw_plutil_scalar "rate_limits.$name.window_minutes" string integer float) || true
+
+  used=$(normalize_nonnegative_number "$raw_used") || return 1
+  resets=$(printf '%s' "$raw_resets" | trim_value)
+  [ -n "$resets" ] || return 1
+  duration=$(normalize_duration "$raw_duration" "$raw_window" "$default_duration")
+  escaped_resets=$(printf '%s' "$resets" | json_escape)
+
+  printf '"%s":{"used_percentage":%s,"resets_at":"%s","duration_minutes":%s}' "$name" "$used" "$escaped_resets" "$duration"
+}
+
+write_promptjuice_session_cache_plutil() {
+  local cache_dir session_id session_path observed five_hour seven_day windows payload
+  cache_dir=$(dirname "$cache_path")
+  session_id=$(sanitized_session_id)
+  session_path="$cache_dir/session-$session_id.json"
+  observed=$(/bin/date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || /bin/date 2>/dev/null || printf '')
+
+  five_hour=$(session_window_payload "five_hour" "300" 2>/dev/null) || five_hour=""
+  seven_day=$(session_window_payload "seven_day" "10080" 2>/dev/null) || seven_day=""
+
+  [ -n "$five_hour$seven_day" ] || return 1
+
+  windows="$five_hour"
+  if [ -n "$seven_day" ]; then
+    if [ -n "$windows" ]; then
+      windows="$windows,$seven_day"
+    else
+      windows="$seven_day"
+    fi
+  fi
+
+  payload='{"observed_at":'"$(json_string_or_null "$observed")"',"session_id":'"$(json_string_or_null "$session_id")"',"rate_limits":{'"$windows"'}}'
+  write_file_atomic "$session_path" "$payload"
+}
+
+gc_promptjuice_session_cache() {
+  local cache_dir now path mtime temp count delete_count
+  cache_dir=$(dirname "$cache_path")
+  [ -d "$cache_dir" ] || return 0
+  now=$(/bin/date +%s 2>/dev/null) || return 0
+
+  for path in "$cache_dir"/session-*.json; do
+    [ -e "$path" ] || continue
+    [ -f "$path" ] || continue
+    mtime=$(/usr/bin/stat -f %m "$path" 2>/dev/null) || continue
+    if [ $((now - mtime)) -gt 604800 ]; then
+      rm -f "$path"
+    fi
+  done
+
+  temp=$(mktemp "$cache_dir/.session-gc.XXXXXX" 2>/dev/null) || return 0
+  for path in "$cache_dir"/session-*.json; do
+    [ -e "$path" ] || continue
+    [ -f "$path" ] || continue
+    mtime=$(/usr/bin/stat -f %m "$path" 2>/dev/null) || continue
+    printf '%s\t%s\n' "$mtime" "$path" >> "$temp"
+  done
+
+  count=$(/usr/bin/wc -l < "$temp" | /usr/bin/tr -d '[:space:]')
+  if [ "${count:-0}" -gt 64 ]; then
+    delete_count=$((count - 64))
+    /usr/bin/sort -n "$temp" | /usr/bin/head -n "$delete_count" | while IFS="$(printf '\t')" read -r _ path; do
+      [ -n "$path" ] && rm -f "$path"
+    done
+  fi
+
+  rm -f "$temp"
+}
+
+run_promptjuice_session_gc_if_needed() {
+  local cache_dir marker now marker_mtime
+  cache_dir=$(dirname "$cache_path")
+  marker="$cache_dir/.gc-marker"
+  now=$(/bin/date +%s 2>/dev/null) || return 0
+
+  if [ -f "$marker" ]; then
+    marker_mtime=$(/usr/bin/stat -f %m "$marker" 2>/dev/null) || marker_mtime=0
+    if [ $((now - marker_mtime)) -le 3600 ]; then
+      return 0
+    fi
+  fi
+
+  gc_promptjuice_session_cache || return 0
+  /usr/bin/touch "$marker" 2>/dev/null || true
 }
 
 write_promptjuice_cache_plutil() {
@@ -225,5 +339,7 @@ run_delegate() {
 }
 
 write_promptjuice_debug_info || true
+write_promptjuice_session_cache_plutil || true
 write_promptjuice_cache || write_promptjuice_unavailable_cache
+run_promptjuice_session_gc_if_needed || true
 run_delegate

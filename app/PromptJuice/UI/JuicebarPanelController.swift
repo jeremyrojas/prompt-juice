@@ -44,23 +44,30 @@ enum PanelClickRouter {
     static func rowRects(
         in bounds: NSRect,
         mode: PanelMode,
-        providers: [UsageProvider]
+        providers: [UsageProvider],
+        weeklyProviders: Set<UsageProvider> = []
     ) -> [(provider: UsageProvider, rect: NSRect)] {
-        let rowHeight = PromptJuicePanelMetrics.rowHeight
         let rowSpacing = PromptJuicePanelMetrics.rowSpacing
-        let rowsHeight = CGFloat(providers.count) * rowHeight
+        let rowHeights = providers.map { provider in
+            PromptJuicePanelMetrics.rowHeight(
+                hasWeeklyLine: weeklyProviders.contains(provider)
+            )
+        }
+        let rowsHeight = rowHeights.reduce(0, +)
             + CGFloat(max(providers.count - 1, 0)) * rowSpacing
         let rowsBottomInset = mode == .alert ? alertRowsBottomInset : manualRowsBottomInset
         let firstRowTopY = bounds.height - rowsBottomInset - rowsHeight
+        var rowY = firstRowTopY
 
         return providers.indices.map { index in
-            let rowY = firstRowTopY + CGFloat(index) * (rowHeight + rowSpacing)
+            let rowHeight = rowHeights[index]
             let rowRect = NSRect(
                 x: horizontalInset,
                 y: rowY,
                 width: bounds.width - horizontalInset * 2,
                 height: rowHeight
             )
+            rowY += rowHeight + rowSpacing
             return (provider: providers[index], rect: rowRect)
         }
     }
@@ -69,7 +76,8 @@ enum PanelClickRouter {
         at point: NSPoint,
         in bounds: NSRect,
         mode: PanelMode,
-        providers: [UsageProvider]
+        providers: [UsageProvider],
+        weeklyProviders: Set<UsageProvider> = []
     ) -> PanelClickTarget? {
         let width = bounds.width
         let height = bounds.height
@@ -96,7 +104,12 @@ enum PanelClickRouter {
             }
         }
 
-        for (provider, rowRect) in rowRects(in: bounds, mode: mode, providers: providers) {
+        for (provider, rowRect) in rowRects(
+            in: bounds,
+            mode: mode,
+            providers: providers,
+            weeklyProviders: weeklyProviders
+        ) {
             if contains(point, in: rowRect) {
                 return .provider(provider)
             }
@@ -121,6 +134,7 @@ private protocol PanelToolTipRefreshing: AnyObject {
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let modeProvider: () -> PanelMode
     private let providers: () -> [UsageProvider]
+    private let weeklyProviders: () -> Set<UsageProvider>
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onCancel: () -> Void
@@ -133,6 +147,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     required init(rootView: Content) {
         self.modeProvider = { .manual }
         self.providers = { [] }
+        self.weeklyProviders = { [] }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
         self.onCancel = {}
@@ -144,12 +159,14 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         rootView: Content,
         modeProvider: @escaping () -> PanelMode,
         providers: @escaping () -> [UsageProvider],
+        weeklyProviders: @escaping () -> Set<UsageProvider> = { [] },
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.modeProvider = modeProvider
         self.providers = providers
+        self.weeklyProviders = weeklyProviders
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
         self.onCancel = onCancel
@@ -243,7 +260,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             at: point,
             in: bounds,
             mode: modeProvider(),
-            providers: providers()
+            providers: providers(),
+            weeklyProviders: weeklyProviders()
         )
     }
 
@@ -259,7 +277,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             at: point,
             in: bounds,
             mode: modeProvider(),
-            providers: providers()
+            providers: providers(),
+            weeklyProviders: weeklyProviders()
         ) else {
             return nil
         }
@@ -412,9 +431,14 @@ final class JuicebarPanelController {
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
                 mode: viewModel.mode,
-                rowCount: viewModel.visibleSnapshots.count
+                rowCount: viewModel.visibleSnapshots.count,
+                weeklyRowCount: viewModel.visibleWeeklyRowCount
             )
         )
+    }
+
+    var panelFrameForTesting: NSRect? {
+        panel?.frame
     }
 
     init(
@@ -427,22 +451,21 @@ final class JuicebarPanelController {
         viewModel.$mode
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self, let panel = self.panel, panel.isVisible else {
-                    return
-                }
-
-                self.position(panel)
+                self?.applyPanelFrameIfVisible(force: true)
             }
             .store(in: &cancellables)
 
         viewModel.$enabledProviders
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self, let panel = self.panel, panel.isVisible else {
-                    return
-                }
+                self?.applyPanelFrameIfVisible(force: true)
+            }
+            .store(in: &cancellables)
 
-                self.position(panel)
+        viewModel.$snapshots
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyPanelFrameIfVisible(force: false)
             }
             .store(in: &cancellables)
     }
@@ -463,7 +486,7 @@ final class JuicebarPanelController {
         viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
         let panel = ensurePanel()
         snoozeAutoHideTask?.cancel()
-        position(panel)
+        applyPanelFrame(panel, force: true)
         installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(panel.contentView)
@@ -523,6 +546,17 @@ final class JuicebarPanelController {
             },
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
+            },
+            weeklyProviders: { [weak viewModel] in
+                guard let viewModel else {
+                    return []
+                }
+
+                return Set(
+                    viewModel.visibleSnapshots
+                        .filter { viewModel.showsWeeklyLine(for: $0) }
+                        .map(\.provider)
+                )
             },
             toolTipProvider: { [weak viewModel] provider in
                 guard let snapshot = viewModel?.visibleSnapshots.first(where: { $0.provider == provider }) else {
@@ -671,12 +705,29 @@ final class JuicebarPanelController {
         return false
     }
 
-    private func position(_ panel: NSWindow) {
+    private func applyPanelFrameIfVisible(force: Bool) {
+        guard let panel, panel.isVisible else {
+            return
+        }
+
+        applyPanelFrame(panel, force: force)
+    }
+
+    private func applyPanelFrame(_ panel: NSWindow, force: Bool) {
+        let size = panelSize
+        if !force, panel.frame.size == size {
+            return
+        }
+
+        position(panel, size: size)
+    }
+
+    private func position(_ panel: NSWindow, size: NSSize) {
         let screen = targetScreen()
         let frame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        let x = frame.midX - panelSize.width / 2
-        let y = frame.maxY - panelSize.height - 10
-        panel.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
+        let x = frame.midX - size.width / 2
+        let y = frame.maxY - size.height - 10
+        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
     }
 
     private func targetScreen() -> NSScreen? {

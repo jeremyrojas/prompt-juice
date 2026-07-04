@@ -177,6 +177,172 @@ final class ProviderClientTests: XCTestCase {
         }
     }
 
+    func testClaudeStatuslineReaderIgnoresExpiredPoisonSessionFiles() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "zzz",
+            fiveHourUsed: 0,
+            fiveHourReset: now.addingTimeInterval(-6 * 24 * 60 * 60),
+            to: statusDir,
+            modificationDate: now
+        )
+        try writeSessionCache(
+            sessionID: "aaa",
+            fiveHourUsed: 37,
+            fiveHourReset: now.addingTimeInterval(3 * 60 * 60),
+            to: statusDir,
+            modificationDate: now.addingTimeInterval(-60)
+        )
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 37)
+        XCTAssertEqual(snapshot.remainingPercent, 63)
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
+    }
+
+    func testClaudeStatuslineReaderTreatsZombieOnlySessionsAsFreshWindow() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "zzz",
+            fiveHourUsed: 0,
+            fiveHourReset: now.addingTimeInterval(-60),
+            to: statusDir,
+            modificationDate: now
+        )
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertTrue(snapshot.isFreshSessionWindow, "Expired session files now mean a fresh Claude window.")
+        XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
+        XCTAssertNil(snapshot.rateWindow.resetAt)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertTrue(snapshot.isAvailable)
+    }
+
+    func testClaudeStatuslineReaderUsesMaxUsedWithinSameWindow() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+        let resetAt = now.addingTimeInterval(2 * 60 * 60)
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "older-high",
+            fiveHourUsed: 45,
+            fiveHourReset: resetAt,
+            to: statusDir,
+            modificationDate: now.addingTimeInterval(-90)
+        )
+        try writeSessionCache(
+            sessionID: "newer-low",
+            fiveHourUsed: 20,
+            fiveHourReset: resetAt.addingTimeInterval(30),
+            to: statusDir,
+            modificationDate: now
+        )
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 45)
+        XCTAssertEqual(snapshot.updatedAt, now.addingTimeInterval(-90))
+    }
+
+    func testClaudeStatuslineReaderLetsNewerServerWindowSupersedeOlderUsage() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "old-window",
+            fiveHourUsed: 80,
+            fiveHourReset: now.addingTimeInterval(60 * 60),
+            to: statusDir,
+            modificationDate: now
+        )
+        try writeSessionCache(
+            sessionID: "new-window",
+            fiveHourUsed: 5,
+            fiveHourReset: now.addingTimeInterval(4 * 60 * 60),
+            to: statusDir,
+            modificationDate: now.addingTimeInterval(-60)
+        )
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 5)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, now.addingTimeInterval(4 * 60 * 60))
+    }
+
+    func testClaudeStatuslineReaderCarriesWeeklyForwardWithFreshSession() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+        let oldUpdate = now.addingTimeInterval(-9 * 60 * 60)
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "overnight",
+            fiveHourUsed: 95,
+            fiveHourReset: now.addingTimeInterval(-60),
+            sevenDayUsed: 22,
+            sevenDayReset: now.addingTimeInterval(4 * 24 * 60 * 60),
+            to: statusDir,
+            modificationDate: oldUpdate
+        )
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertTrue(snapshot.isFreshSessionWindow, "Expired five-hour windows now produce the fresh state.")
+        XCTAssertEqual(snapshot.confidence, .stale)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 22)
+        XCTAssertEqual(snapshot.weeklyUpdatedAt, oldUpdate)
+        XCTAssertEqual(snapshot.remainingPercent, 78)
+    }
+
+    func testClaudeStatuslineReaderShowsFreshWeekWhenWeeklyResetPassed() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "expired-week",
+            fiveHourUsed: 5,
+            fiveHourReset: now.addingTimeInterval(2 * 60 * 60),
+            sevenDayUsed: 99,
+            sevenDayReset: now.addingTimeInterval(-60),
+            to: statusDir,
+            modificationDate: now
+        )
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
+        XCTAssertTrue(snapshot.isFreshWeeklyWindow, "Expired weekly data now renders as a fresh week.")
+        XCTAssertNil(snapshot.weeklyWindow)
+        XCTAssertEqual(snapshot.weeklyRemainingPercent, 100)
+        XCTAssertEqual(snapshot.remainingPercent, 95)
+    }
+
     func testClaudeStatuslineReaderAcceptsNumericResetTimestamp() throws {
         let fixture = """
         {
@@ -375,6 +541,125 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.confidence, .stale)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 22)
         XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
+    }
+
+    func testClaudeSnapshotCacheReturnsNilWhenAllWindowsExpired() {
+        let suiteName = "PromptJuiceClaudeExpiredCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 33,
+                resetAt: now.addingTimeInterval(1_800),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        ))
+
+        XCTAssertNil(
+            cache.snapshot(
+                now: now.addingTimeInterval(3_600),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+    }
+
+    func testClaudeSnapshotCachePreservesWeeklyAcrossSessionOnlySave() throws {
+        let suiteName = "PromptJuiceClaudeWeeklyMergeCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 44,
+                resetAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        ))
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 11,
+                resetAt: now.addingTimeInterval(1_200),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now.addingTimeInterval(60)
+        ))
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(90),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 11)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 44)
+        XCTAssertEqual(snapshot.remainingPercent, 56)
+    }
+
+    func testClaudeSnapshotCacheCarriesValidWeeklyAsFreshSession() throws {
+        let suiteName = "PromptJuiceClaudeWeeklyOnlyCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 35,
+                resetAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        ))
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(1_800),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+
+        XCTAssertTrue(snapshot.isFreshSessionWindow)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
+        XCTAssertEqual(snapshot.remainingPercent, 65)
     }
 
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsUnavailableByDefault() {
@@ -873,6 +1158,59 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_001_800))
     }
 
+    func testClaudeStatuslineBridgeWritesSessionCacheWithSanitizedIDAndWeeklyWindow() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+        let input = """
+        {
+          "session_id": "abc/DEF_123!@#xyz",
+          "rate_limits": {
+            "five_hour": {
+              "used_percentage": "12.5",
+              "resets_at": 1800001800,
+              "duration_minutes": "300"
+            },
+            "seven_day": {
+              "used_percentage": "33",
+              "resets_at": 1800345600,
+              "window_minutes": "10080"
+            }
+          }
+        }
+        """
+
+        let result = try runClaudeStatuslineBridge(
+            input: input,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        let sessionURL = cacheURL.deletingLastPathComponent()
+            .appendingPathComponent("session-abcDEF_123xyz.json")
+        let sessionRoot = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: sessionURL)) as? [String: Any])
+        XCTAssertEqual(sessionRoot["session_id"] as? String, "abcDEF_123xyz")
+        let rateLimits = try XCTUnwrap(sessionRoot["rate_limits"] as? [String: Any])
+        let sevenDay = try XCTUnwrap(rateLimits["seven_day"] as? [String: Any])
+        XCTAssertEqual(sevenDay["used_percentage"] as? Double, 33)
+        XCTAssertEqual(sevenDay["resets_at"] as? String, "1800345600")
+        XCTAssertEqual(sevenDay["duration_minutes"] as? Int, 10080)
+
+        let latestText = try String(contentsOf: cacheURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(
+            latestText,
+            #"{"rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":"1800001800","duration_minutes":300}}}"#
+        )
+    }
+
     func testClaudeStatuslineBridgeAutoParserWritesCache() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -1069,9 +1407,86 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(result.output, "custom statusline")
         let marker = try JSONSerialization.jsonObject(with: Data(contentsOf: cacheURL)) as? [String: Any]
         XCTAssertNotNil(marker?["rate_limits"])
+        XCTAssertEqual(try sessionCacheFiles(in: cacheURL.deletingLastPathComponent()).count, 0)
         XCTAssertThrowsError(
             try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
         )
+    }
+
+    func testClaudeStatuslineBridgeGCSessionsByAgeAndCount() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+
+        let oldSession = statusDir.appendingPathComponent("session-old.json")
+        try #"{"rate_limits":{"five_hour":{"used_percentage":1,"resets_at":"1800001800","duration_minutes":300}}}"#
+            .write(to: oldSession, atomically: true, encoding: .utf8)
+        try setModificationDate(Date().addingTimeInterval(-8 * 24 * 60 * 60), for: oldSession)
+
+        let nonMatching = statusDir.appendingPathComponent("session-old.txt")
+        try "keep me".write(to: nonMatching, atomically: true, encoding: .utf8)
+        try setModificationDate(Date().addingTimeInterval(-8 * 24 * 60 * 60), for: nonMatching)
+
+        for index in 0..<66 {
+            let url = statusDir.appendingPathComponent("session-extra-\(index).json")
+            try #"{"rate_limits":{"five_hour":{"used_percentage":1,"resets_at":"1800001800","duration_minutes":300}}}"#
+                .write(to: url, atomically: true, encoding: .utf8)
+            try setModificationDate(Date().addingTimeInterval(Double(index - 1_000)), for: url)
+        }
+
+        let input = #"{"session_id":"fresh","rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1800001800}}}"#
+        let result = try runClaudeStatuslineBridge(
+            input: input,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldSession.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: nonMatching.path))
+        XCTAssertEqual(try sessionCacheFiles(in: statusDir).count, 64)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: statusDir.appendingPathComponent(".gc-marker").path))
+    }
+
+    func testClaudeStatuslineBridgeGCMarkerSkipsFreshMarker() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+        let delegateURL = try makeDelegateScript(
+            in: root,
+            delegateInputURL: root.appendingPathComponent("delegate-input.json"),
+            output: "custom statusline"
+        )
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+
+        let oldSession = statusDir.appendingPathComponent("session-old.json")
+        try #"{"rate_limits":{"five_hour":{"used_percentage":1,"resets_at":"1800001800","duration_minutes":300}}}"#
+            .write(to: oldSession, atomically: true, encoding: .utf8)
+        try setModificationDate(Date().addingTimeInterval(-8 * 24 * 60 * 60), for: oldSession)
+
+        let marker = statusDir.appendingPathComponent(".gc-marker")
+        try "fresh".write(to: marker, atomically: true, encoding: .utf8)
+        try setModificationDate(Date(), for: marker)
+
+        let input = #"{"session_id":"fresh","rate_limits":{"five_hour":{"used_percentage":12,"resets_at":1800001800}}}"#
+        let result = try runClaudeStatuslineBridge(
+            input: input,
+            cacheURL: cacheURL,
+            delegateURL: delegateURL
+        )
+
+        XCTAssertEqual(result.status, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: oldSession.path))
     }
 
     func testEstimatedClaudeSnapshotCanTriggerAlert() {
@@ -1221,6 +1636,37 @@ final class ProviderClientTests: XCTestCase {
         )
     }
 
+    private func writeSessionCache(
+        sessionID: String,
+        fiveHourUsed: Double? = nil,
+        fiveHourReset: Date? = nil,
+        sevenDayUsed: Double? = nil,
+        sevenDayReset: Date? = nil,
+        to statusDir: URL,
+        modificationDate: Date
+    ) throws {
+        var windows: [String] = []
+
+        if let fiveHourUsed, let fiveHourReset {
+            windows.append("""
+            "five_hour":{"used_percentage":\(fiveHourUsed),"resets_at":"\(Int(fiveHourReset.timeIntervalSince1970))","duration_minutes":300}
+            """)
+        }
+
+        if let sevenDayUsed, let sevenDayReset {
+            windows.append("""
+            "seven_day":{"used_percentage":\(sevenDayUsed),"resets_at":"\(Int(sevenDayReset.timeIntervalSince1970))","duration_minutes":10080}
+            """)
+        }
+
+        let payload = """
+        {"observed_at":"2027-01-15T00:00:00Z","session_id":"\(sessionID)","rate_limits":{\(windows.joined(separator: ","))}}
+        """
+        let url = statusDir.appendingPathComponent("session-\(sessionID).json")
+        try payload.write(to: url, atomically: true, encoding: .utf8)
+        try setModificationDate(modificationDate, for: url)
+    }
+
     private func requireJQ() throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -1239,6 +1685,17 @@ final class ProviderClientTests: XCTestCase {
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let rateLimits = try XCTUnwrap(root["rate_limits"] as? [String: Any])
         return try XCTUnwrap(rateLimits["five_hour"] as? [String: Any])
+    }
+
+    private func sessionCacheFiles(in statusDir: URL) throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(
+            at: statusDir,
+            includingPropertiesForKeys: nil
+        )
+        .filter {
+            $0.lastPathComponent.hasPrefix("session-")
+                && $0.lastPathComponent.hasSuffix(".json")
+        }
     }
 
     private func makeDelegateScript(
@@ -1309,6 +1766,16 @@ final class ProviderClientTests: XCTestCase {
 
         if FileManager.default.fileExists(atPath: cacheURL.path) {
             try setModificationDate(now, for: cacheURL)
+        }
+        if let sessionFiles = try? FileManager.default.contentsOfDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            includingPropertiesForKeys: nil
+        ) {
+            for sessionFile in sessionFiles
+                where sessionFile.lastPathComponent.hasPrefix("session-")
+                    && sessionFile.lastPathComponent.hasSuffix(".json") {
+                try? setModificationDate(now, for: sessionFile)
+            }
         }
 
         return (

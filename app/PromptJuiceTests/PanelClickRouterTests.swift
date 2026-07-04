@@ -52,6 +52,49 @@ final class PanelClickRouterTests: XCTestCase {
         assertSingleProvider(.codex)
     }
 
+    func testManualModeRoutesMixedWeeklyAndPlainRows() {
+        let providers: [UsageProvider] = [.claude, .codex]
+        let weeklyProviders: Set<UsageProvider> = [.claude]
+        let bounds = panelBounds(
+            mode: .manual,
+            providerCount: providers.count,
+            weeklyProviderCount: weeklyProviders.count
+        )
+        let rows = PanelClickRouter.rowRects(
+            in: bounds,
+            mode: .manual,
+            providers: providers,
+            weeklyProviders: weeklyProviders
+        )
+
+        XCTAssertEqual(rows[0].rect.height, PromptJuicePanelMetrics.weeklyRowHeight)
+        XCTAssertEqual(rows[1].rect.height, PromptJuicePanelMetrics.plainRowHeight)
+        XCTAssertEqual(
+            bounds.height,
+            63 + PromptJuicePanelMetrics.weeklyRowHeight + PromptJuicePanelMetrics.plainRowHeight + PromptJuicePanelMetrics.rowSpacing
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: rows[0].rect.center,
+                in: bounds,
+                mode: .manual,
+                providers: providers,
+                weeklyProviders: weeklyProviders
+            ),
+            .provider(.claude)
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: rows[1].rect.center,
+                in: bounds,
+                mode: .manual,
+                providers: providers,
+                weeklyProviders: weeklyProviders
+            ),
+            .provider(.codex)
+        )
+    }
+
     private func assertSingleProvider(_ provider: UsageProvider) {
         let providers = [provider]
         let bounds = panelBounds(mode: .manual, providerCount: providers.count)
@@ -86,11 +129,23 @@ final class PanelClickRouterTests: XCTestCase {
     }
 
     private func panelBounds(mode: PanelMode, providerCount: Int) -> NSRect {
+        panelBounds(mode: mode, providerCount: providerCount, weeklyProviderCount: 0)
+    }
+
+    private func panelBounds(
+        mode: PanelMode,
+        providerCount: Int,
+        weeklyProviderCount: Int
+    ) -> NSRect {
         NSRect(
             x: 0,
             y: 0,
             width: PromptJuicePanelMetrics.width,
-            height: PromptJuicePanelMetrics.height(mode: mode, rowCount: providerCount)
+            height: PromptJuicePanelMetrics.height(
+                mode: mode,
+                rowCount: providerCount,
+                weeklyRowCount: weeklyProviderCount
+            )
         )
     }
 
