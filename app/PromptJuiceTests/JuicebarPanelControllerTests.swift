@@ -4,12 +4,12 @@ import XCTest
 
 @MainActor
 final class JuicebarPanelControllerTests: XCTestCase {
-    func testOpenPanelResizesWhenWeeklyLineAppearsAfterSnapshotRefresh() async throws {
+    func testOpenPanelResizesWhenSelectedWeeklyRowExpands() async throws {
         let fixture = makeFixture()
         fixture.store.usageSourceMode = .fixture
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
 
-        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let provider = MutableUsageProviderClient(snapshots: Self.weeklySnapshots)
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
@@ -37,9 +37,9 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         let initialFrame = try XCTUnwrap(controller.panelFrameForTesting)
         XCTAssertEqual(initialFrame.height, initialHeight)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
 
-        provider.setSnapshots(Self.weeklySnapshots)
-        viewModel.refreshUsage()
+        viewModel.toggleSelection(.claude)
 
         await waitUntil {
             viewModel.visibleWeeklyRowCount == 1
@@ -85,6 +85,15 @@ final class JuicebarPanelControllerTests: XCTestCase {
             ),
             .provider(.codex)
         )
+
+        viewModel.toggleSelection(.claude)
+
+        await waitUntil {
+            viewModel.visibleWeeklyRowCount == 0
+                && controller.panelFrameForTesting?.height == initialHeight
+        }
+
+        XCTAssertEqual(controller.panelFrameForTesting?.height, initialHeight)
     }
 
     private func makeFixture() -> (

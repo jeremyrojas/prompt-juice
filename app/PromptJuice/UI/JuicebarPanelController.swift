@@ -468,6 +468,13 @@ final class JuicebarPanelController {
                 self?.applyPanelFrameIfVisible(force: false)
             }
             .store(in: &cancellables)
+
+        viewModel.$selectedProvider
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyPanelFrameIfVisible(force: false)
+            }
+            .store(in: &cancellables)
     }
 
     func toggle() {

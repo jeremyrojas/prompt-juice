@@ -14,7 +14,8 @@ Current path:
 4. Send `initialized`.
 5. Call `account/rateLimits/read`.
 6. Decode the preferred Codex bucket from `rateLimitsByLimitId["codex"]`, then `rateLimits`.
-7. Map the primary rate-limit window into a `ProviderSnapshot`.
+7. Map the primary rate-limit window into the session `rateWindow`.
+8. Map a valid secondary rate-limit window into `weeklyWindow` when the response includes one.
 
 PromptJuice looks for Codex in this order:
 
@@ -26,8 +27,8 @@ PromptJuice looks for Codex in this order:
 
 ### Codex Source Labels
 
-- `codexAppServer` + `exact`: `account/rateLimits/read` returned a complete primary window.
-- `codexCache` + `stale`: live read failed and a last-good window is still before reset.
+- `codexAppServer` + `exact`: `account/rateLimits/read` returned a complete primary window and may include a weekly secondary window.
+- `codexCache` + `stale`: live read failed and a last-good session or weekly window is still before reset.
 - `codexAppServer` + `unavailable`: the executable, launch, initialization, read, timeout, or parser step failed.
 
 ### Codex Troubleshooting
@@ -52,6 +53,8 @@ export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
 ```
 
 The app detail line includes the source and confidence label. Unavailable Codex reads include a short status detail such as launch failure, timeout, server error, or unreadable rate-limit response.
+
+Rows show session usage at rest. Tapping the Codex row scopes the header and expands that row to show `Week: N% left · resets 3d 4h` when a weekly window is available. Single-bucket responses leave `weeklyWindow` empty. The Codex cache keeps session and weekly windows independently until each reset time.
 
 ## Claude
 
@@ -105,7 +108,7 @@ The bridge also writes legacy `latest.json` with the five-hour window only so ol
 
 PromptJuice merges session files by dropping expired windows, choosing the greatest surviving `resets_at`, grouping reset times within 90 seconds, then picking the highest `used_percentage` in that group. This makes old idle Claude Code sessions harmless even when they keep rewriting expired windows.
 
-When every known five-hour window has expired while rate-limit history remains, Claude shows **Fresh window** at 100% session remaining with no reset countdown. When the weekly window is still valid, the Claude row also shows `Week: N% left` and can constrain the row/header/menu-bar fill. Weekly readings older than 30 minutes include an `as of` time. After all cached Claude windows pass reset, PromptJuice returns to the waiting/setup path so a broken bridge is visible.
+When every known five-hour window has expired while rate-limit history remains, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows show session usage at rest. Tapping the Claude row scopes the header and expands that row to show `Week: N% left`; weekly readings older than 30 minutes include an `as of` time. After all cached Claude windows pass reset, PromptJuice returns to the waiting/setup path so a broken bridge is visible.
 
 Setup details live in [claude-statusline-bridge.md](claude-statusline-bridge.md).
 

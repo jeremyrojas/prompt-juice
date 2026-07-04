@@ -99,10 +99,6 @@ struct ProviderSnapshot: Identifiable, Equatable {
     }
 
     var remainingPercent: Double {
-        guard identity == .claude else {
-            return sessionRemainingPercent
-        }
-
         return min(sessionRemainingPercent, weeklyRemainingPercent ?? 100)
     }
 

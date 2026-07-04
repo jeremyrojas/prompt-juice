@@ -1155,6 +1155,68 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.headerSeverity, .healthy)
     }
 
+    func testWeeklyRowsExpandOnlyForSelectedProvider() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.weeklySnapshots),
+            now: { Self.fixedNow }
+        )
+        let claude = viewModel.visibleSnapshots.first { $0.provider == .claude }!
+        let codex = viewModel.visibleSnapshots.first { $0.provider == .codex }!
+
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
+        XCTAssertFalse(viewModel.showsWeeklyLine(for: claude))
+        XCTAssertFalse(viewModel.showsWeeklyLine(for: codex))
+        XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: claude), "80%")
+        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "65%")
+
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 1)
+        XCTAssertTrue(viewModel.showsWeeklyLine(for: claude))
+        XCTAssertFalse(viewModel.showsWeeklyLine(for: codex))
+        XCTAssertEqual(
+            viewModel.weeklyText(for: claude),
+            "Week: 65% left · resets 3d 4h"
+        )
+
+        viewModel.toggleSelection(.codex)
+
+        XCTAssertEqual(viewModel.selectedProvider, .codex)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 1)
+        XCTAssertFalse(viewModel.showsWeeklyLine(for: claude))
+        XCTAssertTrue(viewModel.showsWeeklyLine(for: codex))
+        XCTAssertEqual(
+            viewModel.weeklyText(for: codex),
+            "Week: 70% left · resets 4d"
+        )
+
+        viewModel.toggleSelection(.codex)
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
+    }
+
+    func testSelectedProviderWithoutWeeklyDoesNotExpand() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+        let claude = viewModel.visibleSnapshots.first { $0.provider == .claude }!
+
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
+        XCTAssertFalse(viewModel.showsWeeklyLine(for: claude))
+    }
+
     func testSelectingCodexScopesHeaderToCodex() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -1211,16 +1273,18 @@ final class PromptJuiceViewModelTests: XCTestCase {
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            providerClient: StaticUsageProviderClient(snapshots: Self.weeklySnapshots),
             now: { Self.fixedNow }
         )
 
         viewModel.toggleSelection(.codex)
         XCTAssertEqual(viewModel.selectedProvider, .codex)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 1)
 
         viewModel.dismissCurrentWindow()
 
         XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
     }
 
     func testClearSelectionReturnsToOverview() {
@@ -1380,6 +1444,43 @@ final class PromptJuiceViewModelTests: XCTestCase {
             source: .fixture,
             confidence: .exact,
             updatedAt: fixedNow
+        )
+    ]
+
+    private static let weeklySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(240 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 35,
+                resetAt: fixedNow.addingTimeInterval((3 * 24 + 4) * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow,
+            weeklyUpdatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 12,
+                resetAt: fixedNow.addingTimeInterval(250 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 30,
+                resetAt: fixedNow.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow,
+            weeklyUpdatedAt: fixedNow
         )
     ]
 

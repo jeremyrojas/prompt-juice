@@ -191,12 +191,13 @@ private struct ProviderUsageRow: View {
             }
 
             if snapshot.isAvailable {
-                CapacityBar(remainingPercent: snapshot.remainingPercent, color: severityColor)
+                CapacityBar(remainingPercent: snapshot.sessionRemainingPercent, color: severityColor)
             } else {
                 ghostBar
             }
 
-            if let weeklyText = viewModel.weeklyText(for: snapshot),
+            if hasWeeklyLine,
+               let weeklyText = viewModel.weeklyText(for: snapshot),
                let weeklyRemaining = viewModel.weeklyBarRemainingPercent(for: snapshot) {
                 VStack(spacing: 3) {
                     Text(weeklyText)
@@ -317,7 +318,7 @@ private struct ProviderUsageRow: View {
 
     /// Estimates get a leading `~`; the only visible tell that a reading is a guess.
     private var percentLabel: String {
-        viewModel.remainingPercentDisplayValueText(for: snapshot)
+        viewModel.sessionRemainingPercentDisplayValueText(for: snapshot)
     }
 
     private var resetColor: Color {
@@ -360,7 +361,7 @@ private struct ProviderUsageRow: View {
 
     private var accessibilityValue: String {
         snapshot.isAvailable
-            ? "\(viewModel.percentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
+            ? "\(viewModel.sessionRemainingPercentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
             : unavailableLabel
     }
 }

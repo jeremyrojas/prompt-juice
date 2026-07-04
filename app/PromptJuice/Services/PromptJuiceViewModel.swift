@@ -98,7 +98,8 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func showsWeeklyLine(for snapshot: UsageSnapshot) -> Bool {
-        weeklyText(for: snapshot) != nil
+        selectedProvider == snapshot.provider
+            && weeklyText(for: snapshot) != nil
             && weeklyBarRemainingPercent(for: snapshot) != nil
     }
 
@@ -190,8 +191,7 @@ final class PromptJuiceViewModel: ObservableObject {
     /// among available providers). 100 when nothing is available yet.
     var menuBarRemainingPercent: Double {
         // Clash rule: when a use-soon nudge is active, the fill follows the nudged
-        // provider (the actionable one), not the lowest — so an amber droplet
-        // matches its "use it" headline instead of showing the other provider's low %.
+        // provider's effective remaining so the amber droplet matches its headline.
         if aggregateSeverity == .useSoon, let alertSnapshot {
             return alertSnapshot.remainingPercent
         }
@@ -675,6 +675,27 @@ final class PromptJuiceViewModel: ObservableObject {
         return snapshot.confidence == .estimated ? "~\(value)" : value
     }
 
+    func sessionRemainingPercentText(for snapshot: UsageSnapshot) -> String {
+        guard snapshot.isAvailable else {
+            return "unavailable"
+        }
+
+        return "\(Int(snapshot.sessionRemainingPercent.rounded()))% left"
+    }
+
+    func sessionRemainingPercentValueText(for snapshot: UsageSnapshot) -> String {
+        guard snapshot.isAvailable else {
+            return "n/a"
+        }
+
+        return "\(Int(snapshot.sessionRemainingPercent.rounded()))%"
+    }
+
+    func sessionRemainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
+        let value = sessionRemainingPercentValueText(for: snapshot)
+        return snapshot.confidence == .estimated ? "~\(value)" : value
+    }
+
     func remainingText(for snapshot: UsageSnapshot) -> String {
         guard let minutes = snapshot.rateWindow.minutesUntilReset(now: now()) else {
             return "Unavailable"
@@ -736,10 +757,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func weeklyText(for snapshot: UsageSnapshot) -> String? {
-        guard snapshot.provider == .claude else {
-            return nil
-        }
-
         if snapshot.isFreshWeeklyWindow {
             return "Week: 100% left · fresh week"
         }
@@ -760,10 +777,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func weeklyBarRemainingPercent(for snapshot: UsageSnapshot) -> Double? {
-        guard snapshot.provider == .claude else {
-            return nil
-        }
-
         return snapshot.weeklyRemainingPercent
     }
 

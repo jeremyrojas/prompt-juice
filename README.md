@@ -85,7 +85,7 @@ For Claude, Live readings are exact usage numbers from Claude Code's status line
 
 The Claude bridge writes one `ClaudeStatus/session-<session_id>.json` file per terminal session with both the five-hour session window and the seven-day weekly window when Claude supplies them. PromptJuice merges those session files, ignores expired windows, and uses the highest usage from matching server windows. This keeps old idle terminal sessions from replacing a newer reading.
 
-When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining with no reset countdown. A valid weekly window continues to show on the Claude row and can reduce the row/header/menu-bar fill until the week resets. After cached Claude windows pass reset, PromptJuice returns to waiting/setup so bridge problems are visible.
+When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows stay focused on the current session window; tapping a Claude or Codex row scopes the header and expands that row to show the weekly window. The header droplet and menu-bar droplet use the lower of session and weekly remaining, while the amber alert nudge still comes only from session reset timing.
 
 If the desktop app is your only Claude surface, PromptJuice stays on Estimate because the desktop app does not support status lines yet. The upstream Claude Code issue is [anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456).
 
@@ -99,7 +99,7 @@ PromptJuice treats every provider snapshot as local state with a source and conf
 
 - `demo` with `exact` confidence powers the built-in prototype data.
 - `codexAppServer` with `exact` confidence comes from `codex app-server` and `account/rateLimits/read`.
-- `codexCache` with `stale` confidence reuses the last good Codex window when a live read fails before reset.
+- `codexCache` with `stale` confidence reuses last-good Codex session and weekly windows before their reset times.
 - `claudeStatusline` with `exact` confidence comes from current Claude Code statusline session files.
 - `claudeStatusline` with `stale` confidence carries a still-valid session or weekly window forward from earlier statusline files.
 - `claudeLocalLogs` with `estimated` confidence comes from local Claude project logs.
