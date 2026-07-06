@@ -49,6 +49,7 @@ struct CachedProviderWindow: Codable, Equatable {
 
 struct CachedProviderSnapshot: Codable, Equatable {
     let session: CachedProviderWindow?
+    // retained for future weekly UI; not currently displayed
     let weekly: CachedProviderWindow?
 
     init(session: CachedProviderWindow?, weekly: CachedProviderWindow?) {

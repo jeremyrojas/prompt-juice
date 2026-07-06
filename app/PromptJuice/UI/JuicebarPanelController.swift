@@ -557,17 +557,8 @@ final class JuicebarPanelController {
         case .snooze:
             viewModel.snooze()
             scheduleSnoozeAutoHide()
-        case .provider(let provider):
-            // Only Claude's "Set up" state jumps to Settings; every other tap
-            // scopes the header summary to that provider. (Settings stays
-            // reachable from the menu-bar menu.)
-            if provider == .claude, viewModel.claudeRowOffersSetup {
-                dismissSurface()
-                onClaudeSettingsRequested(true)
-                return
-            }
-
-            viewModel.toggleSelection(provider)
+        case .provider:
+            break
         case .background:
             viewModel.clearSelection()
         }

@@ -208,7 +208,7 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
-    func testWeeklyLowUsesEffectiveRemainingForSeverity() {
+    func testWeeklyMinimumIsDormantForSeverity() {
         let snapshot = makeSnapshot(
             identity: .codex,
             usedPercent: 20,
@@ -219,18 +219,19 @@ final class AlertEngineTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.sessionRemainingPercent, 80)
-        XCTAssertEqual(snapshot.remainingPercent, 5)
+        XCTAssertEqual(snapshot.remainingPercent, 80)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 5)
         XCTAssertEqual(
             engine.severity(for: snapshot, thresholds: thresholds, now: now),
-            .low
+            .healthy
         )
         XCTAssertEqual(
             engine.statusText(for: snapshot, thresholds: thresholds, now: now),
-            "Low"
+            "Some left"
         )
     }
 
-    func testWeeklyEmptyUsesEffectiveRemainingForSeverity() {
+    func testWeeklyEmptyIsDormantForSeverity() {
         let snapshot = makeSnapshot(
             identity: .claude,
             usedPercent: 20,
@@ -241,10 +242,11 @@ final class AlertEngineTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.sessionRemainingPercent, 80)
-        XCTAssertEqual(snapshot.remainingPercent, 0)
+        XCTAssertEqual(snapshot.remainingPercent, 80)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 0)
         XCTAssertEqual(
             engine.severity(for: snapshot, thresholds: thresholds, now: now),
-            .empty
+            .healthy
         )
     }
 

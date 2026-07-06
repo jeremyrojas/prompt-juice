@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class JuicebarPanelControllerTests: XCTestCase {
-    func testOpenPanelKeepsFrameStableWhenSelectedProviderHasWeekly() async throws {
+    func testOpenPanelKeepsFrameStableWhenSnapshotHasWeekly() async throws {
         let fixture = makeFixture()
         fixture.store.usageSourceMode = .fixture
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -32,18 +32,13 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let initialFrame = try XCTUnwrap(controller.panelFrameForTesting)
         XCTAssertEqual(initialFrame.height, initialHeight)
 
-        viewModel.toggleSelection(.claude)
-
-        await waitUntil {
-            viewModel.selectedProvider == .claude
-        }
-
         let selectedFrame = try XCTUnwrap(controller.panelFrameForTesting)
         XCTAssertEqual(selectedFrame.height, initialFrame.height)
         XCTAssertEqual(
             viewModel.detail,
-            "Week: 95% left · resets in 5d"
+            "Resets in 3h 0m"
         )
+        XCTAssertEqual(viewModel.headerRemainingPercent, 80)
 
         let providers = viewModel.visibleSnapshots.map(\.provider)
         let bounds = NSRect(origin: .zero, size: selectedFrame.size)
@@ -76,13 +71,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
             ),
             .provider(.codex)
         )
-
-        viewModel.toggleSelection(.claude)
-
-        await waitUntil {
-            viewModel.selectedProvider == nil
-        }
-
         XCTAssertEqual(controller.panelFrameForTesting?.height, initialHeight)
     }
 

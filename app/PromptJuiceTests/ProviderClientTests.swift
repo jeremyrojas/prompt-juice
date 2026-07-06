@@ -15,7 +15,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshots[1].rateWindow.minutesUntilReset(now: now), 52)
     }
 
-    func testRemainingPercentUsesWeeklyMinimumForBothProviders() {
+    func testEffectiveRemainingPercentUsesWeeklyMinimumForBothProviders() {
         let snapshots = [ProviderIdentity.claude, .codex].map { identity in
             ProviderSnapshot(
                 identity: identity,
@@ -38,7 +38,8 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(snapshots.map(\.sessionRemainingPercent), [80, 80])
         XCTAssertEqual(snapshots.map(\.weeklyRemainingPercent), [12, 12])
-        XCTAssertEqual(snapshots.map(\.remainingPercent), [12, 12])
+        XCTAssertEqual(snapshots.map(\.remainingPercent), [80, 80])
+        XCTAssertEqual(snapshots.map(\.effectiveRemainingPercent), [12, 12])
     }
 
     func testCodexStubProviderReturnsUnavailableSnapshot() {
@@ -246,7 +247,8 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.confidence, .stale)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 30)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 44)
-        XCTAssertEqual(snapshot.remainingPercent, 56)
+        XCTAssertEqual(snapshot.remainingPercent, 70)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 56)
         XCTAssertEqual(snapshot.statusDetail, "Codex app-server timed out")
     }
 
@@ -287,7 +289,8 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertTrue(snapshot.isFreshSessionWindow)
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
-        XCTAssertEqual(snapshot.remainingPercent, 65)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 65)
         XCTAssertEqual(snapshot.weeklyUpdatedAt, now)
     }
 
@@ -514,7 +517,8 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 22)
         XCTAssertEqual(snapshot.weeklyUpdatedAt, oldUpdate)
-        XCTAssertEqual(snapshot.remainingPercent, 78)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 78)
     }
 
     func testClaudeStatuslineReaderShowsFreshWeekWhenWeeklyResetPassed() throws {
@@ -869,7 +873,8 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 11)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 44)
-        XCTAssertEqual(snapshot.remainingPercent, 56)
+        XCTAssertEqual(snapshot.remainingPercent, 89)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 56)
     }
 
     func testClaudeSnapshotCacheCarriesValidWeeklyAsFreshSession() throws {
@@ -907,7 +912,8 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertTrue(snapshot.isFreshSessionWindow)
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
-        XCTAssertEqual(snapshot.remainingPercent, 65)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 65)
     }
 
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsUnavailableByDefault() {

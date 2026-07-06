@@ -118,10 +118,8 @@ Touch points: [`PromptJuiceIcon.statusBarImage()`](../app/PromptJuice/UI/PromptJ
   shows one stable aggregate = the **minimum remaining % among available
   providers**, amber when any provider is `shouldUseSoon`. Rationale: it answers
   "how much capacity is left" and the lowest provider runs out first.
-- **Selection is panel-only.** Clicking a provider row updates the panel's
-  header/detail (`selectProvider` → `headline`/`detail`) and the panel header
-  droplet (see 3.4). It does **not** change the menu-bar glyph. No extra glyph
-  states, no per-provider menu-bar text.
+- Provider rows are display-only. The panel header and menu-bar glyph both show
+  the aggregate across visible session readings.
 
 ### Checklist
 
@@ -193,9 +191,7 @@ just reports numbers. Touch points:
   ("Plenty of prompt juice left" / "Use prompt juice soon"). **Extend the
   verdict to manual mode** so the headline is always the answer.
 - Subtitle (`detail`, manual case) currently reads "Live Claude and Codex
-  usage." — replace with the live aggregate, e.g.
-  "Claude 92% · Codex 94% · resets in ~4h". A static label stops earning its
-  pixels after first launch.
+  usage." — replace with the next visible reset, e.g. "Resets in 4h 5m".
 
 ### 3.2 Label the countdown
 
@@ -220,9 +216,8 @@ just reports numbers. Touch points:
 - Replace with the **gauge droplet**, fill = aggregate level, tinted by the same
   judgment color as the chips. Then menu bar, panel header, and app icon are one
   mark.
-- **Follows selection**: the header droplet shows the aggregate by default, and
-  switches to the selected provider's level/judgment when a row is selected
-  (mirrors the header text). The menu-bar glyph stays on the aggregate regardless.
+- The header droplet shows the aggregate across visible session readings, and
+  the menu-bar glyph uses the same fill/tint.
 
 ### 3.5 Fix the color semantics (two failure modes, two colors)
 

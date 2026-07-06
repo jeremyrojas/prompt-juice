@@ -209,12 +209,7 @@ private struct ProviderUsageRow: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.72))
         } else if snapshot.isAvailable {
-            Text(percentLabel)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.54))
-                .monospacedDigit()
-
-            resetLabel
+            resetCluster
         } else {
             Text(unavailableLabel)
                 .font(.system(size: 11, weight: .medium))
@@ -294,17 +289,25 @@ private struct ProviderUsageRow: View {
         viewModel.sessionRemainingPercentDisplayValueText(for: snapshot)
     }
 
-    private var resetColor: Color {
-        severity.isAlerting ? severityColor : Color.white.opacity(0.86)
-    }
-
     @ViewBuilder
-    private var resetLabel: some View {
-        Text(viewModel.fullResetText(for: snapshot))
-            .font(.system(size: 11, weight: .semibold))
-            .monospacedDigit()
-        .foregroundStyle(resetColor)
-        .frame(width: 104, alignment: .trailing)
+    private var resetCluster: some View {
+        HStack(spacing: 5) {
+            Text(percentLabel)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.54))
+                .monospacedDigit()
+
+            Text("·")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.32))
+
+            Text(viewModel.fullResetText(for: snapshot))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(severity.isAlerting ? severityColor : Color.white.opacity(0.86))
+                .monospacedDigit()
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     /// One-alert model: only the amber use-soon nudge gets a chip.

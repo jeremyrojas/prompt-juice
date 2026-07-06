@@ -54,7 +54,7 @@ export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
 
 The app detail line includes the source and confidence label. Unavailable Codex reads include a short status detail such as launch failure, timeout, server error, or unreadable rate-limit response.
 
-Rows show session usage at a fixed 48 pt height with reset timing as plain text, such as `resets in 4h 33m`. Tapping the Codex row scopes the header; when a weekly window is available, the selected header detail becomes `Week: N% left · resets in 3d 4h`. Single-bucket responses leave `weeklyWindow` empty. The Codex cache keeps session and weekly windows independently until each reset time.
+Rows show session usage at a fixed 48 pt height with a grouped trailing cluster, such as `85% · resets in 4h 33m`. Provider rows are display-only. Single-bucket responses leave `weeklyWindow` empty. The Codex cache keeps session and weekly windows independently until each reset time; weekly data is retained for future UI.
 
 ## Claude
 
@@ -108,7 +108,7 @@ The bridge also writes legacy `latest.json` with the five-hour window only so ol
 
 PromptJuice merges session files by dropping expired windows, choosing the greatest surviving `resets_at`, grouping reset times within 90 seconds, then picking the highest `used_percentage` in that group. This makes old idle Claude Code sessions harmless even when they keep rewriting expired windows.
 
-When every known five-hour window has expired while rate-limit history remains, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows show session usage at a fixed 48 pt height with reset timing as plain text, such as `resets in 4h 33m`. Tapping the Claude row scopes the header; when a weekly window is available, the selected header detail becomes `Week: N% left · resets in 3d 4h`. Weekly readings older than 30 minutes include an `as of` time. After all cached Claude windows pass reset, PromptJuice returns to the waiting/setup path so a broken bridge is visible.
+When every known five-hour window has expired while rate-limit history remains, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows show session usage at a fixed 48 pt height with a grouped trailing cluster, such as `85% · resets in 4h 33m`. Provider rows are display-only. Weekly readings stay in the reader/cache layer for future UI. After all cached Claude windows pass reset, PromptJuice returns to the waiting/setup path so a broken bridge is visible.
 
 Setup details live in [claude-statusline-bridge.md](claude-statusline-bridge.md).
 
