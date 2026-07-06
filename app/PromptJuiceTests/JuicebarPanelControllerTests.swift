@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class JuicebarPanelControllerTests: XCTestCase {
-    func testOpenPanelResizesWhenSelectedWeeklyRowExpands() async throws {
+    func testOpenPanelKeepsFrameStableWhenSelectedProviderHasWeekly() async throws {
         let fixture = makeFixture()
         fixture.store.usageSourceMode = .fixture
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -19,13 +19,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let controller = JuicebarPanelController(viewModel: viewModel)
         let initialHeight = PromptJuicePanelMetrics.height(
             mode: .manual,
-            rowCount: 2,
-            weeklyRowCount: 0
-        )
-        let weeklyHeight = PromptJuicePanelMetrics.height(
-            mode: .manual,
-            rowCount: 2,
-            weeklyRowCount: 1
+            rowCount: 2
         )
 
         controller.show()
@@ -37,41 +31,39 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         let initialFrame = try XCTUnwrap(controller.panelFrameForTesting)
         XCTAssertEqual(initialFrame.height, initialHeight)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
 
         viewModel.toggleSelection(.claude)
 
         await waitUntil {
-            viewModel.visibleWeeklyRowCount == 1
-                && controller.panelFrameForTesting?.height == weeklyHeight
+            viewModel.selectedProvider == .claude
         }
 
-        let resizedFrame = try XCTUnwrap(controller.panelFrameForTesting)
-        XCTAssertEqual(resizedFrame.height, weeklyHeight)
-        XCTAssertGreaterThan(resizedFrame.height, initialFrame.height)
+        let selectedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(selectedFrame.height, initialFrame.height)
+        XCTAssertEqual(
+            viewModel.detail,
+            "80% · resets in 3h 0m · Week: 95% left · resets 5d"
+        )
 
         let providers = viewModel.visibleSnapshots.map(\.provider)
-        let weeklyProviders = Set(
-            viewModel.visibleSnapshots
-                .filter { viewModel.showsWeeklyLine(for: $0) }
-                .map(\.provider)
-        )
-        let bounds = NSRect(origin: .zero, size: resizedFrame.size)
+        let bounds = NSRect(origin: .zero, size: selectedFrame.size)
         let rows = PanelClickRouter.rowRects(
             in: bounds,
             mode: viewModel.mode,
-            providers: providers,
-            weeklyProviders: weeklyProviders
+            providers: providers
         )
 
         XCTAssertEqual(rows.map(\.provider), [.claude, .codex])
+        XCTAssertEqual(rows.map(\.rect.height), [
+            PromptJuicePanelMetrics.plainRowHeight,
+            PromptJuicePanelMetrics.plainRowHeight
+        ])
         XCTAssertEqual(
             PanelClickRouter.target(
                 at: rows[0].rect.center,
                 in: bounds,
                 mode: viewModel.mode,
-                providers: providers,
-                weeklyProviders: weeklyProviders
+                providers: providers
             ),
             .provider(.claude)
         )
@@ -80,8 +72,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
                 at: rows[1].rect.center,
                 in: bounds,
                 mode: viewModel.mode,
-                providers: providers,
-                weeklyProviders: weeklyProviders
+                providers: providers
             ),
             .provider(.codex)
         )
@@ -89,8 +80,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         viewModel.toggleSelection(.claude)
 
         await waitUntil {
-            viewModel.visibleWeeklyRowCount == 0
-                && controller.panelFrameForTesting?.height == initialHeight
+            viewModel.selectedProvider == nil
         }
 
         XCTAssertEqual(controller.panelFrameForTesting?.height, initialHeight)

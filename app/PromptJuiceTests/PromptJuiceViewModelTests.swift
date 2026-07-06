@@ -1155,7 +1155,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.headerSeverity, .healthy)
     }
 
-    func testWeeklyRowsExpandOnlyForSelectedProvider() {
+    func testSelectingProviderAddsWeeklyToScopedHeader() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -1164,20 +1164,21 @@ final class PromptJuiceViewModelTests: XCTestCase {
             now: { Self.fixedNow }
         )
         let claude = viewModel.visibleSnapshots.first { $0.provider == .claude }!
-        let codex = viewModel.visibleSnapshots.first { $0.provider == .codex }!
 
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
-        XCTAssertFalse(viewModel.showsWeeklyLine(for: claude))
-        XCTAssertFalse(viewModel.showsWeeklyLine(for: codex))
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertTrue(viewModel.detail.contains("Claude 65%"))
+        XCTAssertTrue(viewModel.detail.contains("Codex 70%"))
         XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: claude), "80%")
         XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "65%")
 
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 1)
-        XCTAssertTrue(viewModel.showsWeeklyLine(for: claude))
-        XCTAssertFalse(viewModel.showsWeeklyLine(for: codex))
+        XCTAssertEqual(
+            viewModel.detail,
+            "80% · resets in 4h 0m · Week: 65% left · resets 3d 4h"
+        )
+        XCTAssertEqual(viewModel.headerRemainingPercent, 65)
         XCTAssertEqual(
             viewModel.weeklyText(for: claude),
             "Week: 65% left · resets 3d 4h"
@@ -1186,21 +1187,22 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.toggleSelection(.codex)
 
         XCTAssertEqual(viewModel.selectedProvider, .codex)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 1)
-        XCTAssertFalse(viewModel.showsWeeklyLine(for: claude))
-        XCTAssertTrue(viewModel.showsWeeklyLine(for: codex))
         XCTAssertEqual(
-            viewModel.weeklyText(for: codex),
+            viewModel.detail,
+            "88% · resets in 4h 10m · Week: 70% left · resets 4d"
+        )
+        XCTAssertEqual(viewModel.headerRemainingPercent, 70)
+        XCTAssertEqual(
+            viewModel.weeklyText(for: viewModel.visibleSnapshots.first { $0.provider == .codex }!),
             "Week: 70% left · resets 4d"
         )
 
         viewModel.toggleSelection(.codex)
 
         XCTAssertNil(viewModel.selectedProvider)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
     }
 
-    func testSelectedProviderWithoutWeeklyDoesNotExpand() {
+    func testSelectedProviderWithoutWeeklyKeepsScopedSessionDetail() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -1208,13 +1210,11 @@ final class PromptJuiceViewModelTests: XCTestCase {
             providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
             now: { Self.fixedNow }
         )
-        let claude = viewModel.visibleSnapshots.first { $0.provider == .claude }!
 
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
-        XCTAssertFalse(viewModel.showsWeeklyLine(for: claude))
+        XCTAssertEqual(viewModel.detail, "90% · resets in 4h 0m")
     }
 
     func testSelectingCodexScopesHeaderToCodex() {
@@ -1279,12 +1279,13 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.toggleSelection(.codex)
         XCTAssertEqual(viewModel.selectedProvider, .codex)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 1)
+        XCTAssertEqual(viewModel.detail, "88% · resets in 4h 10m · Week: 70% left · resets 4d")
 
         viewModel.dismissCurrentWindow()
 
         XCTAssertNil(viewModel.selectedProvider)
-        XCTAssertEqual(viewModel.visibleWeeklyRowCount, 0)
+        XCTAssertTrue(viewModel.detail.contains("Claude 65%"))
+        XCTAssertTrue(viewModel.detail.contains("Codex 70%"))
     }
 
     func testClearSelectionReturnsToOverview() {

@@ -52,34 +52,27 @@ final class PanelClickRouterTests: XCTestCase {
         assertSingleProvider(.codex)
     }
 
-    func testManualModeRoutesMixedWeeklyAndPlainRows() {
+    func testManualModeKeepsRowsFixedHeight() {
         let providers: [UsageProvider] = [.claude, .codex]
-        let weeklyProviders: Set<UsageProvider> = [.claude]
-        let bounds = panelBounds(
-            mode: .manual,
-            providerCount: providers.count,
-            weeklyProviderCount: weeklyProviders.count
-        )
+        let bounds = panelBounds(mode: .manual, providerCount: providers.count)
         let rows = PanelClickRouter.rowRects(
             in: bounds,
             mode: .manual,
-            providers: providers,
-            weeklyProviders: weeklyProviders
+            providers: providers
         )
 
-        XCTAssertEqual(rows[0].rect.height, PromptJuicePanelMetrics.weeklyRowHeight)
+        XCTAssertEqual(rows[0].rect.height, PromptJuicePanelMetrics.plainRowHeight)
         XCTAssertEqual(rows[1].rect.height, PromptJuicePanelMetrics.plainRowHeight)
         XCTAssertEqual(
             bounds.height,
-            63 + PromptJuicePanelMetrics.weeklyRowHeight + PromptJuicePanelMetrics.plainRowHeight + PromptJuicePanelMetrics.rowSpacing
+            63 + PromptJuicePanelMetrics.plainRowHeight * 2 + PromptJuicePanelMetrics.rowSpacing
         )
         XCTAssertEqual(
             PanelClickRouter.target(
                 at: rows[0].rect.center,
                 in: bounds,
                 mode: .manual,
-                providers: providers,
-                weeklyProviders: weeklyProviders
+                providers: providers
             ),
             .provider(.claude)
         )
@@ -88,8 +81,7 @@ final class PanelClickRouterTests: XCTestCase {
                 at: rows[1].rect.center,
                 in: bounds,
                 mode: .manual,
-                providers: providers,
-                weeklyProviders: weeklyProviders
+                providers: providers
             ),
             .provider(.codex)
         )
@@ -129,22 +121,13 @@ final class PanelClickRouterTests: XCTestCase {
     }
 
     private func panelBounds(mode: PanelMode, providerCount: Int) -> NSRect {
-        panelBounds(mode: mode, providerCount: providerCount, weeklyProviderCount: 0)
-    }
-
-    private func panelBounds(
-        mode: PanelMode,
-        providerCount: Int,
-        weeklyProviderCount: Int
-    ) -> NSRect {
         NSRect(
             x: 0,
             y: 0,
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
                 mode: mode,
-                rowCount: providerCount,
-                weeklyRowCount: weeklyProviderCount
+                rowCount: providerCount
             )
         )
     }

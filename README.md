@@ -85,7 +85,7 @@ For Claude, Live readings are exact usage numbers from Claude Code's status line
 
 The Claude bridge writes one `ClaudeStatus/session-<session_id>.json` file per terminal session with both the five-hour session window and the seven-day weekly window when Claude supplies them. PromptJuice merges those session files, ignores expired windows, and uses the highest usage from matching server windows. This keeps old idle terminal sessions from replacing a newer reading.
 
-When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows stay focused on the current session window; tapping a Claude or Codex row scopes the header and expands that row to show the weekly window. The header droplet and menu-bar droplet use the lower of session and weekly remaining, while the amber alert nudge still comes only from session reset timing.
+When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows stay focused on the current session window; tapping a Claude or Codex row scopes the header, where any weekly window is appended to the selected provider detail. Rows keep a fixed 48 pt height. The header droplet and menu-bar droplet use the lower of session and weekly remaining, while the amber alert nudge still comes only from session reset timing.
 
 If the desktop app is your only Claude surface, PromptJuice stays on Estimate because the desktop app does not support status lines yet. The upstream Claude Code issue is [anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456).
 

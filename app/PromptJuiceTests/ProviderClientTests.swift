@@ -121,6 +121,81 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.statusDetail, "Codex app-server timed out")
     }
 
+    func testCodexSnapshotCacheDecodesLegacySessionBlob() throws {
+        let suiteName = "PromptJuiceCodexLegacyCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let resetAt = now.addingTimeInterval(3 * 60 * 60)
+        let updatedAt = now.addingTimeInterval(-10 * 60)
+        let legacy = LegacyProviderCacheBlob(
+            usedPercent: 41,
+            resetAt: resetAt,
+            durationMinutes: 300,
+            updatedAt: updatedAt
+        )
+        defaults.set(
+            try JSONEncoder().encode(legacy),
+            forKey: "lastGoodCodexSnapshot"
+        )
+
+        let snapshot = try XCTUnwrap(
+            CodexSnapshotCache(defaults: defaults).snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Codex app-server timed out"
+            )
+        )
+
+        XCTAssertEqual(snapshot.source, .codexCache)
+        XCTAssertEqual(snapshot.confidence, .stale)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 41)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, resetAt)
+        XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+        XCTAssertEqual(snapshot.updatedAt, updatedAt)
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
+        XCTAssertNil(snapshot.weeklyWindow)
+        XCTAssertEqual(snapshot.statusDetail, "Codex app-server timed out")
+    }
+
+    func testCodexSnapshotCacheOnlySavesExactAppServerSnapshots() {
+        let suiteName = "PromptJuiceCodexSaveEligibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = CodexSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 50,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .codexAppServer,
+            confidence: .stale,
+            updatedAt: now
+        ))
+        cache.save(ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 51,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        ))
+
+        XCTAssertNil(
+            cache.snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Codex app-server timed out"
+            )
+        )
+    }
+
     func testCodexSnapshotCachePreservesWeeklyAcrossSessionOnlySave() throws {
         let suiteName = "PromptJuiceCodexWeeklyCacheTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -666,6 +741,54 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.confidence, .stale)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 22)
         XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
+    }
+
+    func testClaudeSnapshotCacheSavesStatuslineSnapshotsUnlessUnavailable() throws {
+        let suiteName = "PromptJuiceClaudeSaveEligibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 52,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: now
+        ))
+
+        XCTAssertNil(
+            cache.snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .stale,
+            updatedAt: now
+        ))
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 22)
+        XCTAssertEqual(snapshot.source, .claudeCache)
     }
 
     func testClaudeSnapshotCacheReturnsNilWhenAllWindowsExpired() {
@@ -1926,6 +2049,13 @@ final class ProviderClientTests: XCTestCase {
 
     private func shellSingleQuotedContent(_ value: String) -> String {
         value.replacingOccurrences(of: "'", with: "'\\''")
+    }
+
+    private struct LegacyProviderCacheBlob: Encodable {
+        let usedPercent: Double
+        let resetAt: Date
+        let durationMinutes: Int
+        let updatedAt: Date
     }
 
     private let multiBucketFixture = """

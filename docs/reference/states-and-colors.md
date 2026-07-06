@@ -71,15 +71,15 @@ The `low` boundary (`< 15%`) is a fixed constant (`UsageSeverity.lowRemainingFlo
 
 ---
 
-## 4. Rows, expansion, and fetch/trust
+## 4. Rows, header detail, and fetch/trust
 
 Source: [`SnapshotConfidence.swift`](../../app/PromptJuice/Models/SnapshotConfidence.swift) · row in [`PromptJuicePanelView.swift`](../../app/PromptJuice/UI/PromptJuicePanelView.swift) · tooltip in [`PromptJuiceViewModel.sourceTooltip`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
-Rows are 48 pt single-line session rows at rest. Each row shows the session
-remaining number and session bar. Tapping a measured row scopes the header to that
-provider and expands only that row to 70 pt when a weekly window exists. Tapping
-the same row again or dismissing the panel clears selection and returns to the
-compact rows.
+Rows are 48 pt single-line session rows. Each row shows the session remaining
+number and session bar. Tapping a measured row scopes the header to that provider.
+When the selected provider has a weekly window, the scoped header detail appends
+the weekly summary after the session reset text. Tapping the same row again or
+dismissing the panel clears selection and returns to the overview header.
 
 Codex is normally exact/Live; it can be stale or unavailable, but never estimated.
 The fetch/trust matrix below is Claude-specific.
@@ -88,15 +88,15 @@ script, that file exists, and `statusLine.refreshInterval` is `10`.
 
 | # | Condition | Settings status | Settings affordance | Juicebar # | Juicebar tooltip | Row click |
 |---|---|---|---|---|---|---|
-| 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | open Settings |
-| 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
-| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | open Settings |
-| 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
-| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining; no reset countdown | Fresh window · starts with your next Claude Code message | open Settings |
-| 6 | selected row has a valid weekly window | same as session state | same as session state | expanded row: Week: N% left · resets 4d; `as of 9:46` when older than 30 min | session tooltip | open Settings |
-| 7 | selected row has a fresh weekly window | same as session state | same as session state | expanded row: Week: 100% left · fresh week | session tooltip | open Settings |
+| 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | scope header |
+| 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | scope header |
+| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | scope header |
+| 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | scope header |
+| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining; no reset countdown | Fresh window · starts with your next Claude Code message | scope header |
+| 6 | selected provider has a valid weekly window | same as session state | same as session state | scoped header: `80% · resets in 3h 0m · Week: N% left · resets 4d`; `as of 9:46` when older than 30 min | session tooltip | clear scope |
+| 7 | selected provider has a fresh weekly window | same as session state | same as session state | scoped header: `80% · resets in 3h 0m · Week: 100% left · fresh week` | session tooltip | clear scope |
 | 8 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
-| 9 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | open Settings |
+| 9 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | no action |
 | 10 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |
 
 On apply, the setup sheet shows a success + next-step confirmation ("You're almost set") before the user returns to Settings.

@@ -93,16 +93,6 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
 
-    var visibleWeeklyRowCount: Int {
-        visibleSnapshots.filter { showsWeeklyLine(for: $0) }.count
-    }
-
-    func showsWeeklyLine(for snapshot: UsageSnapshot) -> Bool {
-        selectedProvider == snapshot.provider
-            && weeklyText(for: snapshot) != nil
-            && weeklyBarRemainingPercent(for: snapshot) != nil
-    }
-
     var isCheckingUsage: Bool {
         let visible = visibleSnapshots
         guard !visible.isEmpty else {
@@ -406,11 +396,22 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func scopedDetail(for snapshot: UsageSnapshot) -> String {
+        var parts: [String]
+
         if snapshot.isFreshSessionWindow {
-            return "Fresh window · starts with your next Claude Code message"
+            parts = ["Fresh window", "starts with your next Claude Code message"]
+        } else {
+            parts = [
+                sessionRemainingPercentDisplayValueText(for: snapshot),
+                fullResetText(for: snapshot)
+            ]
         }
 
-        return "\(remainingPercentDisplayValueText(for: snapshot)) · \(fullResetText(for: snapshot))"
+        if let weeklyText = weeklyText(for: snapshot) {
+            parts.append(weeklyText)
+        }
+
+        return parts.joined(separator: " · ")
     }
 
     private var alertSnapshot: UsageSnapshot? {
@@ -647,53 +648,81 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func percentText(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.isAvailable else {
-            return "Unavailable"
-        }
-
-        return remainingPercentText(for: snapshot)
+        remainingPercentText(for: snapshot, basis: .effective, unavailableText: "Unavailable")
     }
 
     func remainingPercentText(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.isAvailable else {
-            return "unavailable"
-        }
-
-        return "\(Int(snapshot.remainingPercent.rounded()))% left"
+        remainingPercentText(for: snapshot, basis: .effective, unavailableText: "unavailable")
     }
 
     func remainingPercentValueText(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.isAvailable else {
-            return "n/a"
-        }
-
-        return "\(Int(snapshot.remainingPercent.rounded()))%"
+        remainingPercentValueText(for: snapshot, basis: .effective)
     }
 
     func remainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
-        let value = remainingPercentValueText(for: snapshot)
-        return snapshot.confidence == .estimated ? "~\(value)" : value
+        remainingPercentDisplayValueText(for: snapshot, basis: .effective)
     }
 
     func sessionRemainingPercentText(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.isAvailable else {
-            return "unavailable"
-        }
-
-        return "\(Int(snapshot.sessionRemainingPercent.rounded()))% left"
+        remainingPercentText(for: snapshot, basis: .session, unavailableText: "unavailable")
     }
 
     func sessionRemainingPercentValueText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentValueText(for: snapshot, basis: .session)
+    }
+
+    func sessionRemainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentDisplayValueText(for: snapshot, basis: .session)
+    }
+
+    private enum RemainingPercentBasis {
+        case effective
+        case session
+    }
+
+    private func remainingPercentText(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis,
+        unavailableText: String
+    ) -> String {
+        guard snapshot.isAvailable else {
+            return unavailableText
+        }
+
+        return "\(roundedRemainingPercent(for: snapshot, basis: basis))% left"
+    }
+
+    private func remainingPercentValueText(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis
+    ) -> String {
         guard snapshot.isAvailable else {
             return "n/a"
         }
 
-        return "\(Int(snapshot.sessionRemainingPercent.rounded()))%"
+        return "\(roundedRemainingPercent(for: snapshot, basis: basis))%"
     }
 
-    func sessionRemainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
-        let value = sessionRemainingPercentValueText(for: snapshot)
+    private func remainingPercentDisplayValueText(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis
+    ) -> String {
+        let value = remainingPercentValueText(for: snapshot, basis: basis)
         return snapshot.confidence == .estimated ? "~\(value)" : value
+    }
+
+    private func roundedRemainingPercent(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis
+    ) -> Int {
+        let percent = switch basis {
+        case .effective:
+            snapshot.remainingPercent
+        case .session:
+            snapshot.sessionRemainingPercent
+        }
+
+        return Int(percent.rounded())
     }
 
     func remainingText(for snapshot: UsageSnapshot) -> String {
@@ -774,10 +803,6 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return text
-    }
-
-    func weeklyBarRemainingPercent(for snapshot: UsageSnapshot) -> Double? {
-        return snapshot.weeklyRemainingPercent
     }
 
     private func weeklyResetText(for window: RateWindow) -> String {

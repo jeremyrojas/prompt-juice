@@ -44,23 +44,17 @@ enum PanelClickRouter {
     static func rowRects(
         in bounds: NSRect,
         mode: PanelMode,
-        providers: [UsageProvider],
-        weeklyProviders: Set<UsageProvider> = []
+        providers: [UsageProvider]
     ) -> [(provider: UsageProvider, rect: NSRect)] {
         let rowSpacing = PromptJuicePanelMetrics.rowSpacing
-        let rowHeights = providers.map { provider in
-            PromptJuicePanelMetrics.rowHeight(
-                hasWeeklyLine: weeklyProviders.contains(provider)
-            )
-        }
-        let rowsHeight = rowHeights.reduce(0, +)
+        let rowHeight = PromptJuicePanelMetrics.plainRowHeight
+        let rowsHeight = CGFloat(providers.count) * rowHeight
             + CGFloat(max(providers.count - 1, 0)) * rowSpacing
         let rowsBottomInset = mode == .alert ? alertRowsBottomInset : manualRowsBottomInset
         let firstRowTopY = bounds.height - rowsBottomInset - rowsHeight
         var rowY = firstRowTopY
 
         return providers.indices.map { index in
-            let rowHeight = rowHeights[index]
             let rowRect = NSRect(
                 x: horizontalInset,
                 y: rowY,
@@ -76,8 +70,7 @@ enum PanelClickRouter {
         at point: NSPoint,
         in bounds: NSRect,
         mode: PanelMode,
-        providers: [UsageProvider],
-        weeklyProviders: Set<UsageProvider> = []
+        providers: [UsageProvider]
     ) -> PanelClickTarget? {
         let width = bounds.width
         let height = bounds.height
@@ -107,8 +100,7 @@ enum PanelClickRouter {
         for (provider, rowRect) in rowRects(
             in: bounds,
             mode: mode,
-            providers: providers,
-            weeklyProviders: weeklyProviders
+            providers: providers
         ) {
             if contains(point, in: rowRect) {
                 return .provider(provider)
@@ -134,7 +126,6 @@ private protocol PanelToolTipRefreshing: AnyObject {
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let modeProvider: () -> PanelMode
     private let providers: () -> [UsageProvider]
-    private let weeklyProviders: () -> Set<UsageProvider>
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onCancel: () -> Void
@@ -147,7 +138,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     required init(rootView: Content) {
         self.modeProvider = { .manual }
         self.providers = { [] }
-        self.weeklyProviders = { [] }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
         self.onCancel = {}
@@ -159,14 +149,12 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         rootView: Content,
         modeProvider: @escaping () -> PanelMode,
         providers: @escaping () -> [UsageProvider],
-        weeklyProviders: @escaping () -> Set<UsageProvider> = { [] },
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.modeProvider = modeProvider
         self.providers = providers
-        self.weeklyProviders = weeklyProviders
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
         self.onCancel = onCancel
@@ -260,8 +248,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             at: point,
             in: bounds,
             mode: modeProvider(),
-            providers: providers(),
-            weeklyProviders: weeklyProviders()
+            providers: providers()
         )
     }
 
@@ -277,8 +264,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             at: point,
             in: bounds,
             mode: modeProvider(),
-            providers: providers(),
-            weeklyProviders: weeklyProviders()
+            providers: providers()
         ) else {
             return nil
         }
@@ -431,8 +417,7 @@ final class JuicebarPanelController {
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
                 mode: viewModel.mode,
-                rowCount: viewModel.visibleSnapshots.count,
-                weeklyRowCount: viewModel.visibleWeeklyRowCount
+                rowCount: viewModel.visibleSnapshots.count
             )
         )
     }
@@ -463,13 +448,6 @@ final class JuicebarPanelController {
             .store(in: &cancellables)
 
         viewModel.$snapshots
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.applyPanelFrameIfVisible(force: false)
-            }
-            .store(in: &cancellables)
-
-        viewModel.$selectedProvider
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.applyPanelFrameIfVisible(force: false)
@@ -553,17 +531,6 @@ final class JuicebarPanelController {
             },
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
-            },
-            weeklyProviders: { [weak viewModel] in
-                guard let viewModel else {
-                    return []
-                }
-
-                return Set(
-                    viewModel.visibleSnapshots
-                        .filter { viewModel.showsWeeklyLine(for: $0) }
-                        .map(\.provider)
-                )
             },
             toolTipProvider: { [weak viewModel] provider in
                 guard let snapshot = viewModel?.visibleSnapshots.first(where: { $0.provider == provider }) else {
