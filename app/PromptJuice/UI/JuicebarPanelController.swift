@@ -24,7 +24,6 @@ private final class JuicebarPanel: NSPanel {
 
 enum PanelClickTarget: Equatable {
     case close
-    case snooze
     case provider(UsageProvider)
     /// A click on empty panel chrome (header, gaps) — clears any selection
     /// without dismissing the panel.
@@ -34,24 +33,19 @@ enum PanelClickTarget: Equatable {
 enum PanelClickRouter {
     private static let horizontalInset: CGFloat = 12
     private static let manualRowsBottomInset: CGFloat = 14
-    private static let alertRowsBottomInset: CGFloat = 47
     private static let closeTopInset: CGFloat = 10
     private static let closeTrailingInset: CGFloat = 10
     private static let closeSize: CGFloat = 44
-    private static let snoozeBottomInset: CGFloat = 8
-    private static let snoozeHeight: CGFloat = 38
 
     static func rowRects(
         in bounds: NSRect,
-        mode: PanelMode,
         providers: [UsageProvider]
     ) -> [(provider: UsageProvider, rect: NSRect)] {
         let rowSpacing = PromptJuicePanelMetrics.rowSpacing
         let rowHeight = PromptJuicePanelMetrics.plainRowHeight
         let rowsHeight = CGFloat(providers.count) * rowHeight
             + CGFloat(max(providers.count - 1, 0)) * rowSpacing
-        let rowsBottomInset = mode == .alert ? alertRowsBottomInset : manualRowsBottomInset
-        let firstRowTopY = bounds.height - rowsBottomInset - rowsHeight
+        let firstRowTopY = bounds.height - manualRowsBottomInset - rowsHeight
         var rowY = firstRowTopY
 
         return providers.indices.map { index in
@@ -69,11 +63,9 @@ enum PanelClickRouter {
     static func target(
         at point: NSPoint,
         in bounds: NSRect,
-        mode: PanelMode,
         providers: [UsageProvider]
     ) -> PanelClickTarget? {
         let width = bounds.width
-        let height = bounds.height
 
         let closeRect = NSRect(
             x: width - closeTrailingInset - closeSize,
@@ -85,21 +77,8 @@ enum PanelClickRouter {
             return .close
         }
 
-        if mode == .alert {
-            let snoozeRect = NSRect(
-                x: horizontalInset,
-                y: height - snoozeBottomInset - snoozeHeight,
-                width: width - horizontalInset * 2,
-                height: snoozeHeight
-            )
-            if contains(point, in: snoozeRect) {
-                return .snooze
-            }
-        }
-
         for (provider, rowRect) in rowRects(
             in: bounds,
-            mode: mode,
             providers: providers
         ) {
             if contains(point, in: rowRect) {
@@ -124,7 +103,6 @@ private protocol PanelToolTipRefreshing: AnyObject {
 }
 
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
-    private let modeProvider: () -> PanelMode
     private let providers: () -> [UsageProvider]
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
@@ -136,7 +114,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     private var visibleToolTipWindow: NSWindow?
 
     required init(rootView: Content) {
-        self.modeProvider = { .manual }
         self.providers = { [] }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
@@ -147,13 +124,11 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     init(
         rootView: Content,
-        modeProvider: @escaping () -> PanelMode,
         providers: @escaping () -> [UsageProvider],
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        self.modeProvider = modeProvider
         self.providers = providers
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
@@ -247,7 +222,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         PanelClickRouter.target(
             at: point,
             in: bounds,
-            mode: modeProvider(),
             providers: providers()
         )
     }
@@ -263,7 +237,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         guard case .provider(let provider) = PanelClickRouter.target(
             at: point,
             in: bounds,
-            mode: modeProvider(),
             providers: providers()
         ) else {
             return nil
@@ -410,13 +383,11 @@ final class JuicebarPanelController {
     private var localClickMonitor: Any?
     private var globalClickMonitor: Any?
     private var localKeyMonitor: Any?
-    private var snoozeAutoHideTask: Task<Void, Never>?
 
     private var panelSize: NSSize {
         NSSize(
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                mode: viewModel.mode,
                 rowCount: viewModel.visibleSnapshots.count
             )
         )
@@ -436,13 +407,6 @@ final class JuicebarPanelController {
     ) {
         self.viewModel = viewModel
         self.onClaudeSettingsRequested = onClaudeSettingsRequested
-
-        viewModel.$mode
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.applyPanelFrameIfVisible(force: true)
-            }
-            .store(in: &cancellables)
 
         viewModel.$enabledProviders
             .receive(on: RunLoop.main)
@@ -474,7 +438,6 @@ final class JuicebarPanelController {
     func show() {
         viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
         let panel = ensurePanel()
-        snoozeAutoHideTask?.cancel()
         applyPanelFrame(panel, force: true)
         installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
@@ -482,7 +445,6 @@ final class JuicebarPanelController {
     }
 
     func hide() {
-        snoozeAutoHideTask?.cancel()
         (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
         removeEventMonitors()
         panel?.orderOut(nil)
@@ -522,17 +484,11 @@ final class JuicebarPanelController {
             viewModel: viewModel,
             onClose: { [weak self] in
                 self?.handleClick(.close)
-            },
-            onSnooze: { [weak self] in
-                self?.handleClick(.snooze)
             }
         )
 
         panel.contentView = ClickReadyHostingView(
             rootView: rootView,
-            modeProvider: { [weak viewModel] in
-                viewModel?.mode ?? .manual
-            },
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
             },
@@ -558,9 +514,6 @@ final class JuicebarPanelController {
         switch target {
         case .close:
             dismissSurface()
-        case .snooze:
-            viewModel.snooze()
-            scheduleSnoozeAutoHide()
         case .provider(let provider):
             if provider == .claude, viewModel.claudeRowOffersSetup {
                 dismissSurface()
@@ -575,18 +528,6 @@ final class JuicebarPanelController {
     private func dismissSurface() {
         viewModel.dismissCurrentWindow()
         hide()
-    }
-
-    private func scheduleSnoozeAutoHide() {
-        snoozeAutoHideTask?.cancel()
-        snoozeAutoHideTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            guard !Task.isCancelled else {
-                return
-            }
-
-            self?.hide()
-        }
     }
 
     private func installEventMonitors() {

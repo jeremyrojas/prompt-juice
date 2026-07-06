@@ -7,12 +7,44 @@ enum ClaudeLiveUpgrade: Equatable {
     case awaitingSession
 }
 
+struct UseSoonNotice: Equatable {
+    let provider: UsageProvider
+    let providerDisplayName: String
+    let remainingPercent: Int
+    let resetText: String
+    let windowID: String
+
+    var title: String {
+        "Use \(providerDisplayName) before it resets"
+    }
+
+    var body: String {
+        "\(remainingPercent)% left · resets in \(resetText)"
+    }
+
+    var notificationIdentifier: String {
+        Self.notificationIdentifier(provider: provider, windowID: windowID)
+    }
+
+    static func notificationIdentifier(provider: UsageProvider, windowID: String) -> String {
+        "promptjuice.use-soon.\(provider.rawValue).\(windowID)"
+    }
+}
+
+struct UseSoonNotificationWithdrawal: Equatable {
+    let provider: UsageProvider
+    let windowID: String
+
+    var notificationIdentifier: String {
+        UseSoonNotice.notificationIdentifier(provider: provider, windowID: windowID)
+    }
+}
+
 private typealias RefreshCompletion = @MainActor @Sendable () -> Void
 
 @MainActor
 final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var snapshots: [UsageSnapshot]
-    @Published private(set) var mode: PanelMode = .manual
     /// Dormant row selection state retained for future scoped provider UI.
     /// Provider row clicks currently leave this unchanged.
     @Published private(set) var selectedProvider: UsageProvider?
@@ -20,6 +52,7 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var thresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
     @Published private(set) var enabledProviders: Set<UsageProvider>
+    @Published private(set) var useSoonNotificationsEnabled: Bool
 
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
@@ -78,6 +111,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.claudeStatusCacheRefreshTimeoutNanoseconds = claudeStatusCacheRefreshTimeoutNanoseconds
         self.isClaudeBridgeCurrent = isClaudeBridgeCurrent
         self.isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
+        self.useSoonNotificationsEnabled = settingsStore.useSoonNotificationsEnabled
         thresholds = settingsStore.thresholds
         snapshots = if let providerClient {
             providerClient.snapshots(now: now())
@@ -281,85 +315,15 @@ final class PromptJuiceViewModel: ObservableObject {
         return names.joined(separator: ", ")
     }
 
-    private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.provider == .claude else {
-            return "\(snapshot.displayName) not detected"
-        }
-
-        return switch claudeLiveUpgrade {
-        case .awaitingSession:
-            "\(snapshot.displayName) waiting for terminal"
-        case .live, .setupAvailable:
-            "\(snapshot.displayName) not set up"
-        }
-    }
-
     var headline: String {
-        switch mode {
-        case .manual:
-            return manualVerdict
-        case .alert:
-            guard let alertSnapshot else {
-                return "Plenty of prompt juice left"
-            }
-
-            let alertingSnapshots = self.alertingSnapshots
-
-            if alertingSnapshots.count > 1 {
-                return "Use prompt juice soon"
-            }
-
-            if shouldUseSoon(for: alertSnapshot) {
-                return "\(alertSnapshot.displayName): \(remainingPercentDisplayValueText(for: alertSnapshot)) to use"
-            }
-
-            return "\(alertSnapshot.displayName) has \(remainingPercentText(for: alertSnapshot))"
-        case .snoozed:
-            return "Snoozed for this window"
-        }
+        manualVerdict
     }
 
     var detail: String {
-        switch mode {
-        case .manual:
-            return manualSubtitle
-        case .alert:
-            let alertingSnapshots = self.alertingSnapshots
-
-            if alertingSnapshots.count > 1 {
-                return alertingSnapshots
-                    .map { "\($0.displayName) \(remainingPercentText(for: $0)), \(resetText(for: $0))" }
-                    .joined(separator: " · ")
-            }
-
-            if let alertSnapshot {
-                if shouldUseSoon(for: alertSnapshot) {
-                    return fullResetText(for: alertSnapshot)
-                }
-
-                return "\(remainingPercentText(for: alertSnapshot)) · \(fullResetText(for: alertSnapshot))"
-            }
-
-            return "Good time to launch agents."
-        case .snoozed:
-            return "PromptJuice will stay quiet."
-        }
+        manualSubtitle
     }
 
     // MARK: - Selection
-
-    /// The tapped provider's snapshot, but only while it has a usable reading.
-    /// Scoping the header to a "not measured yet" provider says nothing, so it
-    /// falls back to the overview.
-    private var selectedSnapshot: UsageSnapshot? {
-        guard let selectedProvider,
-              let snapshot = visibleSnapshots.first(where: { $0.provider == selectedProvider }),
-              snapshot.isAvailable else {
-            return nil
-        }
-
-        return snapshot
-    }
 
     /// True only when the Claude row is showing its "Set up" cue.
     var claudeRowOffersSetup: Bool {
@@ -382,32 +346,6 @@ final class PromptJuiceViewModel: ObservableObject {
         selectedProvider = nil
     }
 
-    private func scopedHeadline(for snapshot: UsageSnapshot) -> String {
-        switch severity(for: snapshot) {
-        case .healthy:
-            return "\(snapshot.displayName) has plenty of juice"
-        case .useSoon:
-            return "Use \(snapshot.displayName) before it resets"
-        case .low:
-            return "\(snapshot.displayName) is running low"
-        case .empty:
-            return "\(snapshot.displayName) is out"
-        case .unavailable:
-            return unavailableHeaderSubtitle(for: snapshot)
-        }
-    }
-
-    private func scopedDetail(for snapshot: UsageSnapshot) -> String {
-        if snapshot.isFreshSessionWindow {
-            return "Fresh window · starts with your next Claude Code message"
-        }
-
-        return [
-            sessionRemainingPercentDisplayValueText(for: snapshot),
-            fullResetText(for: snapshot)
-        ].joined(separator: " · ")
-    }
-
     private var alertSnapshot: UsageSnapshot? {
         alertEngine.preferredSnapshot(
             in: visibleSnapshots,
@@ -425,37 +363,8 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func showManualCheck() {
-        mode = .manual
         actionMessage = nil
         refreshSnapshotsInBackground()
-    }
-
-    @discardableResult
-    func checkUsageAlert(force: Bool = false) -> Bool {
-        actionMessage = nil
-
-        if force {
-            clearSnoozeForCurrentWindow()
-            mode = .alert
-            return true
-        }
-
-        guard hasPendingAlert, !isCurrentWindowSnoozed else {
-            mode = .manual
-            return false
-        }
-
-        mode = .alert
-        return true
-    }
-
-    func snooze() {
-        if mode == .alert {
-            settingsStore.snoozedUsageWindowID = currentWindowID
-        }
-
-        mode = .snoozed
-        actionMessage = nil
     }
 
     func dismissCurrentWindow() {
@@ -473,6 +382,15 @@ final class PromptJuiceViewModel: ObservableObject {
         thresholds.remainingPercent = value
         settingsStore.saveThresholds(thresholds)
         refreshModeForThresholds()
+    }
+
+    func setUseSoonNotificationsEnabled(_ enabled: Bool) {
+        guard enabled != useSoonNotificationsEnabled else {
+            return
+        }
+
+        settingsStore.useSoonNotificationsEnabled = enabled
+        useSoonNotificationsEnabled = enabled
     }
 
     func setProviderEnabled(_ provider: UsageProvider, _ enabled: Bool) {
@@ -512,15 +430,7 @@ final class PromptJuiceViewModel: ObservableObject {
         actionMessage = "Refreshing \(sourceMode.title.lowercased())."
         refreshSnapshotsInBackground(
             completionMessage: "\(sourceMode.title) refreshed."
-        ) { [weak self] in
-            guard let self else {
-                return
-            }
-
-            if self.mode == .alert && !self.hasPendingAlert {
-                self.mode = .manual
-            }
-        }
+        )
     }
 
     func refreshUsageQuietly() {
@@ -552,22 +462,86 @@ final class PromptJuiceViewModel: ObservableObject {
         refreshClaudeAfterStatusCacheChange(reason: reason)
     }
 
-    func refreshUsageAlertInBackground(
-        completion: @escaping @MainActor @Sendable (Bool) -> Void
-    ) {
-        refreshClaudeBridgeState()
-        refreshSnapshotsInBackground { [weak self] in
-            guard let self else {
-                completion(false)
-                return
+    func setUsageSourceMode(_ mode: UsageSourceMode) {
+        setUsageSourceMode(mode, persist: true, announce: true)
+    }
+
+    func pendingUseSoonNotifications(now noticeDate: Date) -> [UseSoonNotice] {
+        guard useSoonNotificationsEnabled else {
+            return []
+        }
+
+        let notifiedWindowIDs = settingsStore.notifiedUseSoonWindowIDs
+
+        return visibleSnapshots
+            .filter { snapshot in
+                snapshot.isAvailable
+                    && snapshot.hasActiveResetWindow(at: noticeDate)
+                    && alertEngine.severity(for: snapshot, thresholds: thresholds, now: noticeDate) == .useSoon
+                    && notifiedWindowIDs[snapshot.provider.rawValue] != snapshot.resetWindowID
+            }
+            .sorted { first, second in
+                first.provider.sortIndex < second.provider.sortIndex
+            }
+            .map { snapshot in
+                UseSoonNotice(
+                    provider: snapshot.provider,
+                    providerDisplayName: snapshot.displayName,
+                    remainingPercent: Int(snapshot.sessionRemainingPercent.rounded()),
+                    resetText: resetText(for: snapshot),
+                    windowID: snapshot.resetWindowID
+                )
+            }
+    }
+
+    func markUseSoonNoticeDispatched(_ notice: UseSoonNotice) {
+        settingsStore.markUseSoonWindowNotified(
+            provider: notice.provider,
+            windowID: notice.windowID
+        )
+    }
+
+    func staleUseSoonNotificationWithdrawals(now withdrawalDate: Date) -> [UseSoonNotificationWithdrawal] {
+        let snapshotsByProvider = Dictionary(
+            uniqueKeysWithValues: visibleSnapshots.map { ($0.provider, $0) }
+        )
+
+        return settingsStore.notifiedUseSoonWindowIDs.compactMap { providerRawValue, windowID in
+            guard let provider = UsageProvider(rawValue: providerRawValue) else {
+                return nil
             }
 
-            completion(self.checkUsageAlert())
+            guard let storedResetAt = resetDate(fromWindowID: windowID) else {
+                return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+            }
+
+            if storedResetAt <= withdrawalDate {
+                return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+            }
+
+            guard let snapshot = snapshotsByProvider[provider],
+                  snapshot.hasActiveResetWindow(at: withdrawalDate),
+                  snapshot.resetWindowID != windowID,
+                  let currentResetAt = snapshot.rateWindow.resetAt,
+                  currentResetAt > storedResetAt else {
+                return nil
+            }
+
+            return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
         }
     }
 
-    func setUsageSourceMode(_ mode: UsageSourceMode) {
-        setUsageSourceMode(mode, persist: true, announce: true)
+    private func resetDate(fromWindowID windowID: String) -> Date? {
+        guard let resetMinuteText = windowID.split(separator: ":").last,
+              let resetMinute = TimeInterval(resetMinuteText) else {
+            return nil
+        }
+
+        return Date(timeIntervalSince1970: resetMinute * 60)
+    }
+
+    func clearUseSoonNotificationLatch(for withdrawal: UseSoonNotificationWithdrawal) {
+        settingsStore.clearUseSoonWindowNotification(provider: withdrawal.provider)
     }
 
     func tick() {
@@ -963,35 +937,8 @@ final class PromptJuiceViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
-    private var hasPendingAlert: Bool {
-        !alertingSnapshots.isEmpty
-    }
-
-    private var isCurrentWindowSnoozed: Bool {
-        settingsStore.snoozedUsageWindowID == currentWindowID
-    }
-
-    private var currentWindowID: String {
-        let windowParts = visibleSnapshots
-            .map(\.resetWindowID)
-            .joined(separator: "|")
-
-        return "\(sourceMode.rawValue)-\(windowParts)"
-    }
-
-    private func clearSnoozeForCurrentWindow() {
-        if isCurrentWindowSnoozed {
-            settingsStore.snoozedUsageWindowID = nil
-        }
-    }
-
     private func refreshModeForThresholds() {
         actionMessage = nil
-
-        if mode == .alert && !hasPendingAlert {
-            mode = .manual
-        }
-
         objectWillChange.send()
     }
 

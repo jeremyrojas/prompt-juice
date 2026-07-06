@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+enum SettingsWindowMetrics {
+    static let width: CGFloat = 430
+    static let height: CGFloat = 494
+}
+
 struct SettingsView: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
     @ObservedObject var state: SettingsWindowState
@@ -15,7 +20,7 @@ struct SettingsView: View {
                 firstRunView
             }
         }
-        .frame(width: 430, height: 400)
+        .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
         .sheet(isPresented: $state.isClaudeSetupPresented) {
             ClaudeSetupConsentView(
                 viewModel: viewModel,
@@ -27,7 +32,7 @@ struct SettingsView: View {
     private var settingsForm: some View {
         Form {
             providersSection
-            nudgeSection
+            useJuiceSection
         }
         .formStyle(.grouped)
     }
@@ -103,9 +108,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Providers")
-        } footer: {
-            Text("PromptJuice only watches providers that are on. Keep at least one on.")
-                .font(.footnote)
         }
     }
 
@@ -125,11 +127,36 @@ struct SettingsView: View {
         }
     }
 
-    private var nudgeSection: some View {
+    @ViewBuilder
+    private var useJuiceSection: some View {
         Section {
-            NudgeSettingsRow(viewModel: viewModel)
+            UseJuiceThresholdRows(viewModel: viewModel)
         } header: {
-            Text("Nudge")
+            Text("Use the juice")
+        } footer: {
+            Text("Turns your menu-bar droplet amber when a usage limit window is this close to resetting.")
+                .font(.footnote)
+        }
+
+        Section {
+            Toggle(isOn: useSoonNotificationsBinding) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Notify me")
+
+                    Text("Sends a macOS notification to use your juice")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+        }
+    }
+
+    private var useSoonNotificationsBinding: Binding<Bool> {
+        Binding {
+            viewModel.useSoonNotificationsEnabled
+        } set: { enabled in
+            viewModel.setUseSoonNotificationsEnabled(enabled)
         }
     }
 
@@ -390,31 +417,28 @@ private struct ClaudeMeasurementPopover: View {
     }
 }
 
-private struct NudgeSettingsRow: View {
+private struct UseJuiceThresholdRows: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                Text("Nudge me when reset is within")
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Text("When reset is within")
+                Spacer()
                 minutesPicker
+            }
+            .frame(minHeight: 38)
+
+            Divider()
+
+            HStack(spacing: 10) {
                 Text("and I still have at least")
+                Spacer()
                 percentPicker
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("Nudge me when reset is within")
-                    minutesPicker
-                }
-                HStack(spacing: 6) {
-                    Text("and I still have at least")
-                    percentPicker
-                }
-            }
+            .frame(minHeight: 38)
         }
         .font(.body)
-        .padding(.vertical, 2)
     }
 
     private var minutesSelection: Binding<Int> {

@@ -2,7 +2,7 @@
 
 PromptJuice is a small Mac utility for keeping Claude and Codex usage windows visible at the moment they matter.
 
-The app lives in the menu bar. When you open it, a compact Juicebar appears near the top of the current display with provider rows, reset countdowns, remaining capacity, source labels, and Snooze.
+The app lives in the menu bar. When you open it, a compact Juicebar appears near the top of the current display with provider rows, reset countdowns, remaining capacity, and source labels.
 
 ## Core Experience
 
@@ -14,7 +14,7 @@ PromptJuice focuses on a simple workflow:
 4. Show the current Claude and Codex windows in a native macOS panel.
 5. Nudge the user when meaningful capacity remains close to reset.
 
-The current app supports manual refresh, live provider reads, fixture-backed tests and previews, threshold controls, native notifications, and one-window Snooze behavior.
+The current app supports manual refresh, live provider reads, fixture-backed tests and previews, threshold controls, and one macOS use-soon notification per provider reset window.
 
 ## Usage Model
 
@@ -97,8 +97,8 @@ PromptJuice is local-first:
 - Uses live usage in production and fixture usage in tests/previews.
 - Lets users refresh usage from the menu.
 - Displays source and confidence in the detail line.
-- Uses native notifications for use-soon alerts.
-- Lets users Snooze the current alert window.
+- Uses native notifications for use-soon windows.
+- Opens the Juicebar from the menu-bar droplet or a notification tap.
 
 ## Development
 

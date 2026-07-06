@@ -53,7 +53,7 @@ PromptJuice is an early open-source prototype. It currently includes:
 - Live Codex rate-limit reads through the local Codex app-server.
 - Claude usage reads through a Claude Code statusline cache, with a local-log estimate fallback.
 - Source and confidence labels for exact, estimated, stale, and unavailable data.
-- Snooze, refresh, and threshold controls — set your sweet spot and get nudged when juice dips below it.
+- Refresh, threshold, and notification controls — set the use-soon window and get one macOS banner per provider reset window.
 
 ## Build And Run
 

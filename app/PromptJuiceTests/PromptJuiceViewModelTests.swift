@@ -5,106 +5,267 @@ import XCTest
 
 @MainActor
 final class PromptJuiceViewModelTests: XCTestCase {
-    func testFixtureAlertIsPending() {
+    func testUseSoonNotificationsArePendingForEachQualifyingProvider() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
             now: { Self.fixedNow }
         )
+        let notices = viewModel.pendingUseSoonNotifications(now: Self.fixedNow)
 
-        XCTAssertTrue(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .alert)
+        XCTAssertEqual(notices.map(\.provider), [.claude, .codex])
+        XCTAssertEqual(
+            notices.map(\.body),
+            [
+                "80% left · resets in 10m",
+                "78% left · resets in 12m"
+            ]
+        )
+        XCTAssertEqual(
+            notices.map(\.notificationIdentifier),
+            [
+                "promptjuice.use-soon.\(UsageProvider.claude.rawValue).\(notices[0].windowID)",
+                "promptjuice.use-soon.\(UsageProvider.codex.rawValue).\(notices[1].windowID)"
+            ]
+        )
     }
 
-    func testSnoozeSuppressesCurrentFixtureWindow() {
+    func testDispatchedUseSoonNotificationLatchesCurrentWindow() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
             now: { Self.fixedNow }
         )
 
-        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
-        viewModel.snooze()
+        let notices = viewModel.pendingUseSoonNotifications(now: Self.fixedNow)
+        notices.forEach(viewModel.markUseSoonNoticeDispatched)
 
-        XCTAssertFalse(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .manual)
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+
+        let relaunchedViewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        XCTAssertTrue(relaunchedViewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
     }
 
-    func testDismissDoesNotSuppressCurrentFixtureWindow() {
+    func testUseSoonNotificationReappearsForNewWindow() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            providerClient: StaticUsageProviderClient(snapshots: [Self.alertSnapshots[0]]),
             now: { Self.fixedNow }
         )
 
-        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
-        viewModel.dismissCurrentWindow()
+        let oldNotice = viewModel.pendingUseSoonNotifications(now: Self.fixedNow).first!
+        viewModel.markUseSoonNoticeDispatched(oldNotice)
 
-        XCTAssertTrue(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .alert)
+        let rotatedClaude = Self.claudeSnapshot(
+            usedPercent: 20,
+            resetMinutes: 45,
+            updatedAt: Self.fixedNow
+        )
+        let rotatedViewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [rotatedClaude]),
+            now: { Self.fixedNow }
+        )
+
+        let newNotices = rotatedViewModel.pendingUseSoonNotifications(now: Self.fixedNow)
+        XCTAssertEqual(newNotices.map(\.provider), [.claude])
+        XCTAssertNotEqual(newNotices.first?.windowID, oldNotice.windowID)
     }
 
-    func testManualCheckPreservesCurrentFixtureSnooze() {
+    func testUseSoonNotificationToggleSuppressesBannersOnly() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
             now: { Self.fixedNow }
         )
 
-        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
-        viewModel.snooze()
-        viewModel.showManualCheck()
+        viewModel.setUseSoonNotificationsEnabled(false)
 
-        XCTAssertEqual(viewModel.mode, .manual)
-        XCTAssertFalse(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .manual)
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(viewModel.aggregateSeverity, .useSoon)
+
+        let relaunchedViewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        XCTAssertFalse(relaunchedViewModel.useSoonNotificationsEnabled)
     }
 
-    func testThresholdsAffectFixtureAlert() {
+    func testUnavailableFreshLowEmptyAndHealthySnapshotsDoNotCreateUseSoonNotices() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
-        let viewModel = PromptJuiceViewModel(
-            settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
-            now: { Self.fixedNow }
-        )
+        fixture.store.enabledProviders = [.claude]
 
-        viewModel.setRemainingMinutesThreshold(30)
-        viewModel.setRemainingPercentThreshold(80)
+        let cases: [[ProviderSnapshot]] = [
+            [Self.claudeUnavailableCodexHealthySnapshots[0]],
+            [
+                ProviderSnapshot(
+                    identity: .claude,
+                    rateWindow: .unavailable,
+                    source: .claudeStatusline,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow,
+                    statusDetail: "Fresh window",
+                    isFreshSessionWindow: true
+                )
+            ],
+            [
+                Self.claudeSnapshot(
+                    usedPercent: 95,
+                    resetMinutes: 240,
+                    updatedAt: Self.fixedNow
+                )
+            ],
+            [
+                Self.claudeSnapshot(
+                    usedPercent: 100,
+                    resetMinutes: 10,
+                    updatedAt: Self.fixedNow
+                )
+            ],
+            [Self.healthySnapshots[0]]
+        ]
 
-        XCTAssertFalse(viewModel.checkUsageAlert())
-        XCTAssertEqual(viewModel.mode, .manual)
+        for snapshots in cases {
+            let viewModel = PromptJuiceViewModel(
+                settingsStore: fixture.store,
+                providerClient: StaticUsageProviderClient(snapshots: snapshots),
+                now: { Self.fixedNow },
+                isClaudeBridgeCurrent: { false }
+            )
+            XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        }
     }
 
-    func testAlertCopyUsesRemainingJuice() {
+    func testTransientUnavailableSnapshotPreservesUseSoonLatch() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.alertSnapshots[0]]),
+            now: { Self.fixedNow }
+        )
+        let notice = viewModel.pendingUseSoonNotifications(now: Self.fixedNow).first!
+        viewModel.markUseSoonNoticeDispatched(notice)
+
+        let unavailableViewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.genuineUnavailableSnapshots[0]]),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+
+        XCTAssertTrue(unavailableViewModel.staleUseSoonNotificationWithdrawals(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs[UsageProvider.claude.rawValue], notice.windowID)
+
+        let returnedViewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.alertSnapshots[0]]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertTrue(returnedViewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+    }
+
+    func testDisableThenReenableProviderPreservesUseSoonLatch() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUseSoonCodexHealthySnapshots),
             now: { Self.fixedNow }
         )
+        let notice = viewModel.pendingUseSoonNotifications(now: Self.fixedNow).first!
 
-        viewModel.setRemainingPercentThreshold(50)
-        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
+        viewModel.markUseSoonNoticeDispatched(notice)
+        viewModel.setProviderEnabled(.claude, false)
 
-        XCTAssertEqual(viewModel.headline, "Codex: 69% to use")
-        XCTAssertEqual(viewModel.detail, "resets in 52m")
-        XCTAssertFalse(viewModel.detail.contains("demo"))
-        XCTAssertFalse(viewModel.detail.contains("exact"))
-        XCTAssertFalse(viewModel.detail.contains("server"))
-        XCTAssertFalse(viewModel.detail.contains("logs"))
+        XCTAssertTrue(viewModel.staleUseSoonNotificationWithdrawals(now: Self.fixedNow).isEmpty)
 
-        let codex = viewModel.snapshots.first { $0.provider == .codex }!
-        XCTAssertEqual(viewModel.percentText(for: codex), "69% left")
+        viewModel.setProviderEnabled(.claude, true)
+
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs[UsageProvider.claude.rawValue], notice.windowID)
+    }
+
+    func testStaleUseSoonNotificationWithdrawsOnlyAfterWindowEnd() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.alertSnapshots[0]]),
+            now: { Self.fixedNow }
+        )
+        let notice = viewModel.pendingUseSoonNotifications(now: Self.fixedNow).first!
+        viewModel.markUseSoonNoticeDispatched(notice)
+
+        XCTAssertTrue(viewModel.staleUseSoonNotificationWithdrawals(now: Self.fixedNow).isEmpty)
+
+        let afterOldReset = Self.fixedNow.addingTimeInterval(11 * 60)
+        let rotatedClaude = Self.claudeSnapshot(
+            usedPercent: 20,
+            resetMinutes: 45,
+            updatedAt: Self.fixedNow
+        )
+        let rotatedViewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [rotatedClaude]),
+            now: { afterOldReset }
+        )
+        XCTAssertEqual(
+            rotatedViewModel.staleUseSoonNotificationWithdrawals(now: afterOldReset),
+            [UseSoonNotificationWithdrawal(provider: .claude, windowID: notice.windowID)]
+        )
+
+        rotatedViewModel.clearUseSoonNotificationLatch(
+            for: UseSoonNotificationWithdrawal(provider: .claude, windowID: notice.windowID)
+        )
+
+        XCTAssertTrue(fixture.store.notifiedUseSoonWindowIDs.isEmpty)
+        XCTAssertEqual(
+            rotatedViewModel.pendingUseSoonNotifications(now: afterOldReset).map(\.provider),
+            [.claude]
+        )
+    }
+
+    func testFailedPermissionCannotReemitDispatchedUseSoonNotice() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.alertSnapshots[0]]),
+            now: { Self.fixedNow }
+        )
+        let notice = viewModel.pendingUseSoonNotifications(now: Self.fixedNow).first!
+
+        viewModel.markUseSoonNoticeDispatched(notice)
+
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+
+        for _ in 0..<3 {
+            viewModel.tick()
+            XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        }
     }
 
     func testManualVerdictAndSubtitleUsesSoonestReset() {
@@ -593,7 +754,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.actionMessage, "Live Usage refreshed.")
     }
 
-    func testQuietRefreshRunsBackgroundFetchWithoutModeOrMessageSideEffects() async {
+    func testQuietRefreshRunsBackgroundFetchWithoutMessageSideEffects() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let provider = BlockingUsageProviderClient(
@@ -606,10 +767,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
             now: { Self.fixedNow }
         )
 
-        XCTAssertTrue(viewModel.checkUsageAlert(force: true))
         viewModel.refreshUsageQuietly()
 
-        XCTAssertEqual(viewModel.mode, .alert)
         XCTAssertNil(viewModel.actionMessage)
         XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
 
@@ -617,7 +776,6 @@ final class PromptJuiceViewModelTests: XCTestCase {
         await waitForSnapshots(Self.alertSnapshots, in: viewModel)
 
         XCTAssertEqual(provider.callCount, 2)
-        XCTAssertEqual(viewModel.mode, .alert)
         XCTAssertNil(viewModel.actionMessage)
     }
 
@@ -1164,7 +1322,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         controller.close()
     }
 
-    func testLaunchAlertDecisionUsesBackgroundRefreshResult() async {
+    func testUseSoonNoticeDecisionUsesBackgroundRefreshResult() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let provider = BlockingUsageProviderClient(
@@ -1176,20 +1334,16 @@ final class PromptJuiceViewModelTests: XCTestCase {
             providerClient: provider,
             now: { Self.fixedNow }
         )
-        let expectation = expectation(description: "refresh alert decision")
-        var shouldShow = false
 
-        viewModel.refreshUsageAlertInBackground { result in
-            shouldShow = result
-            expectation.fulfill()
-        }
+        viewModel.refreshUsageQuietly()
 
         provider.releaseRefresh()
-        await fulfillment(of: [expectation], timeout: 1)
+        await waitForSnapshots(Self.alertSnapshots, in: viewModel)
 
-        XCTAssertTrue(shouldShow)
-        XCTAssertEqual(viewModel.mode, .alert)
-        XCTAssertEqual(viewModel.snapshots, Self.alertSnapshots)
+        XCTAssertEqual(
+            viewModel.pendingUseSoonNotifications(now: Self.fixedNow).map(\.provider),
+            [.claude, .codex]
+        )
     }
 
     // MARK: - Dormant row selection

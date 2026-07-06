@@ -18,7 +18,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
         let initialHeight = PromptJuicePanelMetrics.height(
-            mode: .manual,
             rowCount: 2
         )
 
@@ -44,7 +43,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let bounds = NSRect(origin: .zero, size: selectedFrame.size)
         let rows = PanelClickRouter.rowRects(
             in: bounds,
-            mode: viewModel.mode,
             providers: providers
         )
 
@@ -57,7 +55,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
             PanelClickRouter.target(
                 at: rows[0].rect.center,
                 in: bounds,
-                mode: viewModel.mode,
                 providers: providers
             ),
             .provider(.claude)
@@ -66,7 +63,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
             PanelClickRouter.target(
                 at: rows[1].rect.center,
                 in: bounds,
-                mode: viewModel.mode,
                 providers: providers
             ),
             .provider(.codex)
@@ -128,7 +124,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
             onClaudeSettingsRequested: { settingsRequests.append($0) }
         )
         let expectedHeight = PromptJuicePanelMetrics.height(
-            mode: .manual,
             rowCount: 2
         )
 
@@ -189,7 +184,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let bounds = NSRect(origin: .zero, size: frame.size)
         let rows = PanelClickRouter.rowRects(
             in: bounds,
-            mode: viewModel.mode,
             providers: providers
         )
         let row = try XCTUnwrap(rows[safe: row], file: file, line: line)
@@ -197,7 +191,6 @@ final class JuicebarPanelControllerTests: XCTestCase {
             PanelClickRouter.target(
                 at: row.rect.center,
                 in: bounds,
-                mode: viewModel.mode,
                 providers: providers
             ),
             file: file,

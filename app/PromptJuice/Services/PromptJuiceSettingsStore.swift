@@ -8,7 +8,8 @@ final class PromptJuiceSettingsStore {
         static let enabledProviders = "enabledProviders"
         static let remainingMinutesThreshold = "remainingMinutesThreshold"
         static let remainingPercentThreshold = "remainingPercentThreshold"
-        static let snoozedUsageWindowID = "snoozedUsageWindowID"
+        static let notifiedUseSoonWindowIDs = "notifiedUseSoonWindowIDs"
+        static let useSoonNotificationsEnabled = "useSoonNotificationsEnabled"
         static let usageSourceMode = "usageSourceMode"
     }
 
@@ -51,13 +52,38 @@ final class PromptJuiceSettingsStore {
         defaults.object(forKey: Key.enabledProviders) == nil
     }
 
-    var snoozedUsageWindowID: String? {
+    var useSoonNotificationsEnabled: Bool {
         get {
-            defaults.string(forKey: Key.snoozedUsageWindowID)
+            guard defaults.object(forKey: Key.useSoonNotificationsEnabled) != nil else {
+                return true
+            }
+
+            return defaults.bool(forKey: Key.useSoonNotificationsEnabled)
         }
         set {
-            defaults.set(newValue, forKey: Key.snoozedUsageWindowID)
+            defaults.set(newValue, forKey: Key.useSoonNotificationsEnabled)
         }
+    }
+
+    var notifiedUseSoonWindowIDs: [String: String] {
+        get {
+            defaults.dictionary(forKey: Key.notifiedUseSoonWindowIDs) as? [String: String] ?? [:]
+        }
+        set {
+            defaults.set(newValue, forKey: Key.notifiedUseSoonWindowIDs)
+        }
+    }
+
+    func markUseSoonWindowNotified(provider: UsageProvider, windowID: String) {
+        var next = notifiedUseSoonWindowIDs
+        next[provider.rawValue] = windowID
+        notifiedUseSoonWindowIDs = next
+    }
+
+    func clearUseSoonWindowNotification(provider: UsageProvider) {
+        var next = notifiedUseSoonWindowIDs
+        next.removeValue(forKey: provider.rawValue)
+        notifiedUseSoonWindowIDs = next
     }
 
     var usageSourceMode: UsageSourceMode {

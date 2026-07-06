@@ -84,7 +84,12 @@ final class SettingsWindowController: NSWindowController {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 430, height: 400),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: SettingsWindowMetrics.width,
+                height: SettingsWindowMetrics.height
+            ),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -92,8 +97,12 @@ final class SettingsWindowController: NSWindowController {
         window.title = "PromptJuice Settings"
         window.isReleasedWhenClosed = false
         window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
-        window.contentMinSize = NSSize(width: 430, height: 400)
-        window.contentMaxSize = NSSize(width: 430, height: 400)
+        let contentSize = NSSize(
+            width: SettingsWindowMetrics.width,
+            height: SettingsWindowMetrics.height
+        )
+        window.contentMinSize = contentSize
+        window.contentMaxSize = contentSize
         window.setAccessibilityElement(true)
         window.setAccessibilityRole(.window)
         window.setAccessibilityLabel("PromptJuice Settings")

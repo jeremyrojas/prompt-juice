@@ -184,14 +184,12 @@ just reports numbers. Touch points:
 [`PromptJuiceViewModel`](../app/PromptJuice/Services/PromptJuiceViewModel.swift),
 [`AlertEngine`](../app/PromptJuice/Services/AlertEngine.swift).
 
-### 3.1 Title = the verdict (not the mechanism)
+### 3.1 Title = the verdict
 
-- Manual mode currently shows the static "Prompt juice check"
-  (`headline`, manual case). Alert mode already computes a verdict
-  ("Plenty of prompt juice left" / "Use prompt juice soon"). **Extend the
-  verdict to manual mode** so the headline is always the answer.
-- Subtitle (`detail`, manual case) currently reads "Live Claude and Codex
-  usage." — replace with the next visible reset, e.g. "Resets in 4h 5m".
+- The panel uses one user-summoned surface. The header headline is the verdict
+  ("Plenty of prompt juice left" / "Use prompt juice soon").
+- Subtitle (`detail`) names the visible provider or providers driving the reset,
+  e.g. "Claude and Codex reset in 4h 5m".
 
 ### 3.2 Label the countdown
 
@@ -239,14 +237,13 @@ just reports numbers. Touch points:
   `NSVisualEffectView` (popover/HUD material) or SwiftUI `.glassEffect()` on
   macOS 26 for real vibrancy, free light-mode support, and the first-party feel.
   Retire the bespoke gradient stacks where the native material matches.
-- The `✕` close button: click-outside already dismisses (the controller installs
-  local/global click monitors), so `✕` is the nudge/alert affordance. Keep it for
-  the alert variant; it's redundant-but-harmless in manual. The `Snooze` button
-  already implies the nudge.
+- The `✕` close button and click-outside dismissal close the user-summoned
+  panel. Use-soon interruptions arrive as macOS notifications, with the Juicebar
+  opened from the banner tap or the menu-bar droplet.
 
 ### Checklist
 
-- [ ] Verdict headline + aggregate subtitle in manual mode.
+- [ ] Verdict headline + provider-named reset subtitle.
 - [ ] Labeled reset countdown in rows.
 - [ ] Gate the status chip; hide in healthy state; drop redundant "left".
 - [ ] Gauge-droplet header icon, judgment-tinted.
