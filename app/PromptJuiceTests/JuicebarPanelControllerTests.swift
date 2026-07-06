@@ -186,6 +186,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         controller.clickTargetForTesting(target)
 
         XCTAssertEqual(settingsOpenCount, 1)
+        XCTAssertTrue(controller.panelIsVisibleForTesting)
         XCTAssertNil(viewModel.selectedProvider)
     }
 

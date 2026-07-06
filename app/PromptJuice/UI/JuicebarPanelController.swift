@@ -33,7 +33,7 @@ enum PanelClickTarget: Equatable {
 
 enum PanelClickRouter {
     private static let horizontalInset: CGFloat = 12
-    private static let manualRowsBottomInset: CGFloat = 20
+    private static let manualRowsBottomInset: CGFloat = 14 + PromptJuicePanelMetrics.settingsHeightIncrement
     private static let closeTopInset: CGFloat = 10
     private static let closeTrailingInset: CGFloat = 10
     private static let closeSize: CGFloat = 44
@@ -436,6 +436,10 @@ final class JuicebarPanelController {
         panel?.frame
     }
 
+    var panelIsVisibleForTesting: Bool {
+        panel?.isVisible == true
+    }
+
     func clickTargetForTesting(_ target: PanelClickTarget) {
         handleClick(target)
     }
@@ -560,7 +564,8 @@ final class JuicebarPanelController {
         case .close:
             dismissSurface()
         case .settings:
-            dismissSurface()
+            (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
+            viewModel.setHoveredPanelTarget(nil)
             onSettingsRequested()
         case .provider(let provider):
             if provider == .claude, viewModel.claudeRowOffersSetup {

@@ -41,6 +41,10 @@ final class PanelClickRouterTests: XCTestCase {
 
         XCTAssertEqual(rows[0].rect.height, PromptJuicePanelMetrics.plainRowHeight)
         XCTAssertEqual(rows[1].rect.height, PromptJuicePanelMetrics.plainRowHeight)
+        XCTAssertGreaterThan(
+            PanelClickRouter.settingsRect(in: bounds).minY,
+            rows[1].rect.maxY
+        )
         XCTAssertEqual(
             bounds.height,
             63

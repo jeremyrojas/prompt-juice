@@ -5,9 +5,9 @@ enum PromptJuicePanelMetrics {
     static let plainRowHeight: CGFloat = 48
     static let rowSpacing: CGFloat = 7
     static let settingsHitSize: CGFloat = 22
-    static let settingsHeightIncrement: CGFloat = 6
-    static let settingsBottomInset: CGFloat = 0
-    static let settingsTrailingInset: CGFloat = 14
+    static let settingsHeightIncrement: CGFloat = 18
+    static let settingsBottomInset: CGFloat = 7
+    static let settingsTrailingInset: CGFloat = 12
 
     static func height(rowCount: Int) -> CGFloat {
         let rows = max(rowCount, 1)
