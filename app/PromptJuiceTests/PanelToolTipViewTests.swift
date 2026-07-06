@@ -41,6 +41,16 @@ final class PanelToolTipViewTests: XCTestCase {
         XCTAssertGreaterThan(view.fittingSize.height, 26)
     }
 
+    func testTooltipFittingSizeDoesNotFollowFrameMutations() {
+        let view = PanelToolTipView(text: "Settings")
+        let measuredSize = view.fittingSize
+
+        view.setFrameSize(NSSize(width: measuredSize.width + 40, height: measuredSize.height + 20))
+
+        XCTAssertEqual(view.fittingSize, measuredSize)
+        XCTAssertEqual(view.intrinsicContentSize, measuredSize)
+    }
+
     private func render(_ view: NSView) throws -> NSBitmapImageRep {
         let bounds = view.bounds
         let image = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: bounds))

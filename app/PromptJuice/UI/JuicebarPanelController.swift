@@ -236,6 +236,10 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         pendingToolTipTask?.cancel()
         pendingToolTipTask = nil
         pendingToolTipText = nil
+        hideVisiblePanelToolTip()
+    }
+
+    private func hideVisiblePanelToolTip() {
         visibleToolTipText = nil
         visibleToolTipWindow?.orderOut(nil)
         visibleToolTipWindow = nil
@@ -285,6 +289,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             return
         }
 
+        hideVisiblePanelToolTip()
         pendingToolTipTask?.cancel()
         pendingToolTipText = text
         pendingToolTipTask = Task { @MainActor [weak self] in
@@ -322,6 +327,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         tooltipWindow.ignoresMouseEvents = true
         tooltipWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         tooltipWindow.contentView = tooltipView
+        tooltipWindow.setContentSize(fittingSize)
         tooltipWindow.orderFront(nil)
 
         visibleToolTipText = text
@@ -333,6 +339,7 @@ final class PanelToolTipView: NSView {
     private let text: String
     private let font = NSFont.systemFont(ofSize: 12)
     private let contentInsets = NSEdgeInsets(top: 6, left: 9, bottom: 6, right: 9)
+    private let measuredSize: NSSize
     private static let maxTextWidth: CGFloat = 280
 
     override var isFlipped: Bool {
@@ -340,18 +347,22 @@ final class PanelToolTipView: NSView {
     }
 
     override var fittingSize: NSSize {
-        frame.size
+        measuredSize
+    }
+
+    override var intrinsicContentSize: NSSize {
+        measuredSize
     }
 
     init(text: String) {
         self.text = text
         let textSize = Self.textSize(for: text, font: font)
-        let size = NSSize(
+        self.measuredSize = NSSize(
             width: textSize.width + contentInsets.left + contentInsets.right,
             height: textSize.height + contentInsets.top + contentInsets.bottom
         )
 
-        super.init(frame: NSRect(origin: .zero, size: size))
+        super.init(frame: NSRect(origin: .zero, size: measuredSize))
         wantsLayer = true
         layer?.cornerRadius = 6
         layer?.masksToBounds = true
