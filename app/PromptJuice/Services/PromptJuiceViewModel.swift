@@ -232,7 +232,7 @@ final class PromptJuiceViewModel: ObservableObject {
         visibleSnapshots.filter { severity(for: $0) == .empty }
     }
 
-    /// Manual-mode subtitle — the next visible reset.
+    /// Manual-mode subtitle — the next visible reset, with provider context.
     private var manualSubtitle: String {
         if isCheckingUsage {
             return "Just a moment…"
@@ -242,11 +242,43 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Usage unavailable"
         }
 
+        let refreshDate = now()
+        let resetSnapshots = visibleSnapshots
+            .filter { $0.isAvailable && $0.hasActiveResetWindow(at: refreshDate) }
+            .sorted { first, second in
+                first.provider.sortIndex < second.provider.sortIndex
+            }
+
+        guard !resetSnapshots.isEmpty else {
+            return "Fresh window"
+        }
+
+        let resetTexts = resetSnapshots.map { resetText(for: $0) }
+        if let sharedText = resetTexts.first,
+           resetTexts.allSatisfy({ $0 == sharedText }) {
+            let verb = resetSnapshots.count == 1 ? "resets" : "reset"
+            return "\(providerNameList(resetSnapshots)) \(verb) in \(sharedText)"
+        }
+
         if let soonest = primarySnapshot {
-            return "Resets in \(resetText(for: soonest))"
+            return "\(soonest.displayName) resets in \(resetText(for: soonest))"
         }
 
         return "Fresh window"
+    }
+
+    private func providerNameList(_ snapshots: [UsageSnapshot]) -> String {
+        let names = snapshots
+            .sorted { first, second in
+                first.provider.sortIndex < second.provider.sortIndex
+            }
+            .map(\.displayName)
+
+        if names.count == 2 {
+            return "\(names[0]) and \(names[1])"
+        }
+
+        return names.joined(separator: ", ")
     }
 
     private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {

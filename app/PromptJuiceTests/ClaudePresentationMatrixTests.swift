@@ -22,7 +22,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 tooltip: "Read from Claude Code",
                 popover: "Right now it's exact, current as of your last terminal session.",
                 displayPercent: "42%",
-                headerDetailIncludes: ["Resets in 2h 30m"],
+                headerDetailIncludes: ["Claude resets in 2h 30m"],
                 headerDetailExcludes: ["Claude 42%", "Codex 80%", "Claude ~42%"],
                 claudeSeverity: .healthy,
                 aggregateSeverity: .healthy,
@@ -42,7 +42,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 tooltip: "Estimated from local Claude Code activity · open Settings to set up live",
                 popover: "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers.",
                 displayPercent: "~42%",
-                headerDetailIncludes: ["Resets in 2h 30m"],
+                headerDetailIncludes: ["Claude resets in 2h 30m"],
                 headerDetailExcludes: ["Claude ~42%", "Codex 80%", "Claude 42%"],
                 claudeSeverity: .healthy,
                 aggregateSeverity: .healthy,
@@ -62,7 +62,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 tooltip: "Estimated from local Claude Code activity",
                 popover: "Showing a local Claude Code estimate. Exact usage replaces it when Claude Code sends a current rate-limit window.",
                 displayPercent: "~42%",
-                headerDetailIncludes: ["Resets in 2h 30m"],
+                headerDetailIncludes: ["Claude resets in 2h 30m"],
                 headerDetailExcludes: ["Claude ~42%", "Codex 80%", "Claude 42%"],
                 claudeSeverity: .healthy,
                 aggregateSeverity: .healthy,
@@ -83,7 +83,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 tooltip: "Read from Claude Code · \(staleTime)",
                 popover: "Right now it's showing your last exact reading from \(staleTime). Claude Code will replace it when the statusline sends a current window.",
                 displayPercent: "42%",
-                headerDetailIncludes: ["Resets in 2h 30m"],
+                headerDetailIncludes: ["Claude resets in 2h 30m"],
                 headerDetailExcludes: ["Claude 42%", "Codex 80%", "Claude ~42%"],
                 claudeSeverity: .healthy,
                 aggregateSeverity: .healthy,
@@ -100,7 +100,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 tooltip: "Claude statusline and local usage unavailable",
                 popover: "It's not set up yet. Set it up, then use Claude Code in the terminal for exact numbers.",
                 displayPercent: "n/a",
-                headerDetailIncludes: ["Resets in 3h 0m"],
+                headerDetailIncludes: ["Codex resets in 3h 0m"],
                 headerDetailExcludes: ["Claude not set up", "Codex 80%", "Claude ~", "Claude 0%"],
                 claudeSeverity: .unavailable,
                 aggregateSeverity: .healthy,
@@ -117,7 +117,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 tooltip: "You're set up · waiting for Claude Code usage",
                 popover: "You're set up. PromptJuice is waiting for Claude Code's next statusline window.",
                 displayPercent: "n/a",
-                headerDetailIncludes: ["Resets in 3h 0m"],
+                headerDetailIncludes: ["Codex resets in 3h 0m"],
                 headerDetailExcludes: ["Claude waiting for terminal", "Codex 80%", "Claude not set up", "Claude ~", "Claude 0%"],
                 claudeSeverity: .unavailable,
                 aggregateSeverity: .healthy,
@@ -184,7 +184,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         XCTAssertEqual(viewModel.headerRemainingPercent, 69, accuracy: 0.001)
         XCTAssertEqual(viewModel.menuBarRemainingPercent, 69, accuracy: 0.001)
         XCTAssertEqual(viewModel.headline, "Use prompt juice soon")
-        XCTAssertEqual(viewModel.detail, "Resets in 42m")
+        XCTAssertEqual(viewModel.detail, "Claude resets in 42m")
     }
 
     func testFreshSessionWithWeeklyCarryForwardPresentation() {
@@ -223,7 +223,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
             viewModel.weeklyText(for: claude),
             "Week: 70% left · resets in 4d · as of \(clockTime(weeklyUpdatedAt))"
         )
-        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
+        XCTAssertEqual(viewModel.detail, "Codex resets in 3h 0m")
     }
 
     func testFreshWeeklyPresentation() {
