@@ -121,7 +121,7 @@ Notes:
 
 Source: [`PromptJuiceNotificationService.swift`](../../app/PromptJuice/Services/PromptJuiceNotificationService.swift) · [`PromptJuiceViewModel.pendingUseSoonNotifications`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
-When **Notify me** is on, each visible available provider at `useSoon` severity can deliver one macOS banner per active reset window. The latch key is provider raw value plus the provider's current reset-window id. Rotated or expired window ids withdraw stale delivered banners and clear their latch.
+When **Notify me** is on, each visible available provider at `useSoon` severity can deliver one macOS banner per active reset window. The latch key is provider raw value plus the provider's current reset-window id, and it is recorded when the banner is dispatched. A window is withdrawn only after its encoded reset time has passed, or when the provider reports a valid newer reset window.
 
 The Juicebar panel stays user-summoned from the menu-bar droplet. Tapping a use-soon notification opens the Juicebar.
 

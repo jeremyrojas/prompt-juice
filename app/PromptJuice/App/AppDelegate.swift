@@ -24,7 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var ticker: Timer?
     private var lastGlyphKey: String?
     private var lastLifecycleRefreshAt: Date?
-    private var pendingUseSoonNotificationIDs = Set<String>()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -268,25 +267,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for withdrawal in viewModel.staleUseSoonNotificationWithdrawals(now: notificationDate) {
             notificationService.removeUseSoonNotifications(identifiers: [withdrawal.notificationIdentifier])
-            pendingUseSoonNotificationIDs.remove(withdrawal.notificationIdentifier)
             viewModel.clearUseSoonNotificationLatch(for: withdrawal)
         }
 
         for notice in viewModel.pendingUseSoonNotifications(now: notificationDate) {
-            guard pendingUseSoonNotificationIDs.insert(notice.notificationIdentifier).inserted else {
-                continue
-            }
-
-            notificationService.sendUseSoonNotification(notice) { [weak self] delivered in
-                guard let self else {
-                    return
-                }
-
-                self.pendingUseSoonNotificationIDs.remove(notice.notificationIdentifier)
-                if delivered {
-                    self.viewModel.markUseSoonNoticeDelivered(notice)
-                }
-            }
+            viewModel.markUseSoonNoticeDispatched(notice)
+            notificationService.sendUseSoonNotification(notice)
         }
     }
 }

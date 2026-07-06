@@ -315,19 +315,6 @@ final class PromptJuiceViewModel: ObservableObject {
         return names.joined(separator: ", ")
     }
 
-    private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.provider == .claude else {
-            return "\(snapshot.displayName) not detected"
-        }
-
-        return switch claudeLiveUpgrade {
-        case .awaitingSession:
-            "\(snapshot.displayName) waiting for terminal"
-        case .live, .setupAvailable:
-            "\(snapshot.displayName) not set up"
-        }
-    }
-
     var headline: String {
         manualVerdict
     }
@@ -337,19 +324,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     // MARK: - Selection
-
-    /// The tapped provider's snapshot, but only while it has a usable reading.
-    /// Scoping the header to a "not measured yet" provider says nothing, so it
-    /// falls back to the overview.
-    private var selectedSnapshot: UsageSnapshot? {
-        guard let selectedProvider,
-              let snapshot = visibleSnapshots.first(where: { $0.provider == selectedProvider }),
-              snapshot.isAvailable else {
-            return nil
-        }
-
-        return snapshot
-    }
 
     /// True only when the Claude row is showing its "Set up" cue.
     var claudeRowOffersSetup: Bool {
@@ -370,32 +344,6 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func clearSelection() {
         selectedProvider = nil
-    }
-
-    private func scopedHeadline(for snapshot: UsageSnapshot) -> String {
-        switch severity(for: snapshot) {
-        case .healthy:
-            return "\(snapshot.displayName) has plenty of juice"
-        case .useSoon:
-            return "Use \(snapshot.displayName) before it resets"
-        case .low:
-            return "\(snapshot.displayName) is running low"
-        case .empty:
-            return "\(snapshot.displayName) is out"
-        case .unavailable:
-            return unavailableHeaderSubtitle(for: snapshot)
-        }
-    }
-
-    private func scopedDetail(for snapshot: UsageSnapshot) -> String {
-        if snapshot.isFreshSessionWindow {
-            return "Fresh window · starts with your next Claude Code message"
-        }
-
-        return [
-            sessionRemainingPercentDisplayValueText(for: snapshot),
-            fullResetText(for: snapshot)
-        ].joined(separator: " · ")
     }
 
     private var alertSnapshot: UsageSnapshot? {
@@ -546,7 +494,7 @@ final class PromptJuiceViewModel: ObservableObject {
             }
     }
 
-    func markUseSoonNoticeDelivered(_ notice: UseSoonNotice) {
+    func markUseSoonNoticeDispatched(_ notice: UseSoonNotice) {
         settingsStore.markUseSoonWindowNotified(
             provider: notice.provider,
             windowID: notice.windowID
@@ -563,14 +511,33 @@ final class PromptJuiceViewModel: ObservableObject {
                 return nil
             }
 
-            guard let snapshot = snapshotsByProvider[provider],
-                  snapshot.resetWindowID == windowID,
-                  !snapshot.isExpired(at: withdrawalDate) else {
+            guard let storedResetAt = resetDate(fromWindowID: windowID) else {
                 return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
             }
 
+            if storedResetAt <= withdrawalDate {
+                return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+            }
+
+            guard let snapshot = snapshotsByProvider[provider],
+                  snapshot.hasActiveResetWindow(at: withdrawalDate),
+                  snapshot.resetWindowID != windowID,
+                  let currentResetAt = snapshot.rateWindow.resetAt,
+                  currentResetAt > storedResetAt else {
+                return nil
+            }
+
+            return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+        }
+    }
+
+    private func resetDate(fromWindowID windowID: String) -> Date? {
+        guard let resetMinuteText = windowID.split(separator: ":").last,
+              let resetMinute = TimeInterval(resetMinuteText) else {
             return nil
         }
+
+        return Date(timeIntervalSince1970: resetMinute * 60)
     }
 
     func clearUseSoonNotificationLatch(for withdrawal: UseSoonNotificationWithdrawal) {
