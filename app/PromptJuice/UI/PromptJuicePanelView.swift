@@ -104,20 +104,23 @@ struct PromptJuicePanelView: View {
     private var settingsGear: some View {
         let isHovered = viewModel.hoveredPanelTarget == .settings
 
-        return Image(systemName: "gearshape")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.40))
+        return ZStack {
+            Circle()
+                .fill(.ultraThinMaterial)
+                .opacity(isHovered ? 1 : 0)
+                .overlay(Circle().fill(Color.white.opacity(isHovered ? 0.065 : 0)))
+
+            Image(systemName: "gearshape")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 13, height: 13)
+                .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.40))
+        }
             .frame(
                 width: PromptJuicePanelMetrics.settingsHitSize,
                 height: PromptJuicePanelMetrics.settingsHitSize
             )
-            .background {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .opacity(isHovered ? 1 : 0)
-                    .overlay(Circle().fill(Color.white.opacity(isHovered ? 0.065 : 0)))
-            }
-            .overlay(Circle().stroke(Color.white.opacity(isHovered ? 0.12 : 0), lineWidth: 1))
+            .overlay(Circle().strokeBorder(Color.white.opacity(isHovered ? 0.12 : 0), lineWidth: 1))
             .contentShape(Circle())
             .accessibilityLabel("Settings")
     }

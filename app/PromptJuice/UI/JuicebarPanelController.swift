@@ -332,7 +332,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 final class PanelToolTipView: NSView {
     private let text: String
     private let font = NSFont.systemFont(ofSize: 12)
-    private let contentInsets = NSEdgeInsets(top: 5, left: 8, bottom: 6, right: 8)
+    private let contentInsets = NSEdgeInsets(top: 6, left: 9, bottom: 6, right: 9)
     private static let maxTextWidth: CGFloat = 280
 
     override var isFlipped: Bool {
@@ -354,6 +354,7 @@ final class PanelToolTipView: NSView {
         super.init(frame: NSRect(origin: .zero, size: size))
         wantsLayer = true
         layer?.cornerRadius = 6
+        layer?.masksToBounds = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
         layer?.borderColor = NSColor.separatorColor.cgColor
         layer?.borderWidth = 0.5
