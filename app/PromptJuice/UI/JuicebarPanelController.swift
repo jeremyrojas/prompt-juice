@@ -33,7 +33,7 @@ enum PanelClickTarget: Equatable {
 
 enum PanelClickRouter {
     private static let horizontalInset: CGFloat = 12
-    private static let manualRowsBottomInset: CGFloat = 14 + PromptJuicePanelMetrics.settingsHeightIncrement
+    private static let manualRowsTopInset: CGFloat = 54
     private static let closeTopInset: CGFloat = 10
     private static let closeTrailingInset: CGFloat = 10
     private static let closeSize: CGFloat = 44
@@ -44,10 +44,7 @@ enum PanelClickRouter {
     ) -> [(provider: UsageProvider, rect: NSRect)] {
         let rowSpacing = PromptJuicePanelMetrics.rowSpacing
         let rowHeight = PromptJuicePanelMetrics.plainRowHeight
-        let rowsHeight = CGFloat(providers.count) * rowHeight
-            + CGFloat(max(providers.count - 1, 0)) * rowSpacing
-        let firstRowTopY = bounds.height - manualRowsBottomInset - rowsHeight
-        var rowY = firstRowTopY
+        var rowY = manualRowsTopInset
 
         return providers.indices.map { index in
             let rowRect = NSRect(

@@ -5,9 +5,9 @@ enum PromptJuicePanelMetrics {
     static let plainRowHeight: CGFloat = 48
     static let rowSpacing: CGFloat = 7
     static let settingsHitSize: CGFloat = 22
-    static let settingsHeightIncrement: CGFloat = 18
-    static let settingsBottomInset: CGFloat = 7
-    static let settingsTrailingInset: CGFloat = 12
+    static let settingsHeightIncrement: CGFloat = 30
+    static let settingsBottomInset: CGFloat = 8
+    static let settingsTrailingInset: CGFloat = 14
 
     static func height(rowCount: Int) -> CGFloat {
         let rows = max(rowCount, 1)
@@ -34,7 +34,7 @@ struct PromptJuicePanelView: View {
             usageRows
         }
         .padding(14)
-        .frame(width: PromptJuicePanelMetrics.width, height: panelHeight)
+        .frame(width: PromptJuicePanelMetrics.width, height: panelHeight, alignment: .top)
         .glassPanel(cornerRadius: panelCornerRadius)
         .overlay(alignment: .bottomTrailing) {
             settingsGear
