@@ -5,23 +5,20 @@ enum PromptJuicePanelMetrics {
     static let plainRowHeight: CGFloat = 48
     static let rowSpacing: CGFloat = 7
 
-    static func height(mode: PanelMode, rowCount: Int) -> CGFloat {
+    static func height(rowCount: Int) -> CGFloat {
         let rows = max(rowCount, 1)
         let rowBlockHeight = CGFloat(rows) * plainRowHeight
             + CGFloat(max(rows - 1, 0)) * rowSpacing
-        let chromeHeight: CGFloat = mode == .alert ? 95 : 63
-        return chromeHeight + rowBlockHeight
+        return 63 + rowBlockHeight
     }
 }
 
 struct PromptJuicePanelView: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
     let onClose: () -> Void
-    let onSnooze: () -> Void
 
     private var panelHeight: CGFloat {
         PromptJuicePanelMetrics.height(
-            mode: viewModel.mode,
             rowCount: viewModel.visibleSnapshots.count
         )
     }
@@ -31,10 +28,6 @@ struct PromptJuicePanelView: View {
         VStack(spacing: 10) {
             header
             usageRows
-
-            if viewModel.mode == .alert {
-                actions
-            }
         }
         .padding(14)
         .frame(width: PromptJuicePanelMetrics.width, height: panelHeight)
@@ -99,65 +92,17 @@ struct PromptJuicePanelView: View {
         }
     }
 
-    private var actions: some View {
-        ActionButton(title: "Snooze", isPrimary: true) {
-            onSnooze()
-        }
-        .accessibilityLabel("Snooze this usage window")
-        .accessibilityHint("Keeps PromptJuice quiet for the current reset window.")
-    }
-
     private var headerTint: Color {
-        if viewModel.mode == .snoozed {
-            return .indigo
-        }
-
         return viewModel.headerSeverity.tint
     }
 
-    @ViewBuilder
     private var headerGlyph: some View {
-        if viewModel.mode == .snoozed {
-            Image(systemName: "moon.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(headerTint)
-        } else {
-            DropletGauge(
-                remaining: viewModel.headerRemainingPercent / 100,
-                tint: headerTint,
-                lineWidth: 1.6
-            )
-            .frame(width: 17, height: 19)
-        }
-    }
-}
-
-private struct ActionButton: View {
-    let title: String
-    var isPrimary = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isPrimary ? Color.black.opacity(0.9) : Color.white.opacity(0.82))
-                .frame(maxWidth: .infinity)
-                .frame(height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(isPrimary ? Color.white.opacity(0.92) : Color.white.opacity(0.045))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(isPrimary ? 0 : 0.12), lineWidth: 1)
-                )
-                .overlay(alignment: .top) {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(isPrimary ? 0 : 0.10), lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
+        DropletGauge(
+            remaining: viewModel.headerRemainingPercent / 100,
+            tint: headerTint,
+            lineWidth: 1.6
+        )
+        .frame(width: 17, height: 19)
     }
 }
 

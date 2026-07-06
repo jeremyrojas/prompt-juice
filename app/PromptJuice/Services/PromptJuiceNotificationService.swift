@@ -4,6 +4,7 @@ import UserNotifications
 @MainActor
 final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
+    var onUseSoonNotificationActivated: (() -> Void)?
 
     override init() {
         super.init()
@@ -17,29 +18,45 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
         }
     }
 
-    func sendUseSoonNotification(title: String, body: String) {
+    func sendUseSoonNotification(
+        _ notice: UseSoonNotice,
+        completion: (@MainActor @Sendable (Bool) -> Void)? = nil
+    ) {
         requestAuthorization { [weak self] granted in
             guard granted else {
+                completion?(false)
                 return
             }
 
-            self?.deliverUseSoonNotification(title: title, body: body)
+            self?.deliverUseSoonNotification(notice, completion: completion)
         }
     }
 
-    private func deliverUseSoonNotification(title: String, body: String) {
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            content.sound = .default
+    func removeUseSoonNotifications(identifiers: [String]) {
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
 
-            let request = UNNotificationRequest(
-                identifier: "promptjuice.use-soon.\(UUID().uuidString)",
-                content: content,
-                trigger: nil
-            )
+    private func deliverUseSoonNotification(
+        _ notice: UseSoonNotice,
+        completion: (@MainActor @Sendable (Bool) -> Void)?
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = notice.title
+        content.body = notice.body
+        content.sound = .default
 
-            center.add(request)
+        let request = UNNotificationRequest(
+            identifier: notice.notificationIdentifier,
+            content: content,
+            trigger: nil
+        )
+
+        center.add(request) { error in
+            Task { @MainActor in
+                completion?(error == nil)
+            }
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -48,5 +65,21 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let identifier = response.notification.request.identifier
+
+        if identifier.hasPrefix("promptjuice.use-soon.") {
+            Task { @MainActor [weak self] in
+                self?.onUseSoonNotificationActivated?()
+            }
+        }
+
+        completionHandler()
     }
 }

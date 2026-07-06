@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = PromptJuiceViewModel()
     private let claudeBridgeInstaller = ClaudeBridgeInstaller()
     private let claudeStatusCachePoller = ClaudeStatusCachePoller()
+    private let notificationService = PromptJuiceNotificationService()
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: viewModel,
         onFirstRunFinished: { [weak self] in
@@ -23,11 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var ticker: Timer?
     private var lastGlyphKey: String?
     private var lastLifecycleRefreshAt: Date?
+    private var pendingUseSoonNotificationIDs = Set<String>()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.applicationIconImage = PromptJuiceIcon.appIconImage()
         configureStatusItem()
+        configureNotifications()
         observeViewModel()
         observeHostLifecycle()
         syncClaudeBridgeScript(reason: "launch")
@@ -38,10 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if viewModel.isFirstRun {
             DispatchQueue.main.async { [weak self] in
                 self?.settingsWindowController.showFirstRun()
-            }
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-                self?.showLaunchAlertIfNeeded()
             }
         }
     }
@@ -76,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 self?.viewModel.tick()
                 self?.updateStatusItemGlyph()
+                self?.processUseSoonNotifications()
             }
         }
     }
@@ -100,8 +100,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateStatusItemGlyph()
+                self?.processUseSoonNotifications()
             }
             .store(in: &cancellables)
+    }
+
+    private func configureNotifications() {
+        notificationService.onUseSoonNotificationActivated = { [weak self] in
+            guard let self else {
+                return
+            }
+
+            self.viewModel.showManualCheck()
+            self.panelController.show()
+        }
     }
 
     private func observeHostLifecycle() {
@@ -137,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.refreshClaudeStatusCacheNow(reason: "host lifecycle")
         viewModel.refreshUsageQuietly()
         updateStatusItemGlyph(force: true)
+        processUseSoonNotifications()
     }
 
     private func syncClaudeBridgeScript(reason: String) {
@@ -237,14 +250,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.show()
     }
 
-    private func showLaunchAlertIfNeeded() {
-        viewModel.refreshUsageAlertInBackground { [weak self] shouldShow in
-            if shouldShow {
-                self?.panelController.show()
-            }
-        }
-    }
-
     @objc private func showSettings() {
         settingsWindowController.show()
     }
@@ -256,5 +261,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private func processUseSoonNotifications() {
+        let notificationDate = Date()
+
+        for withdrawal in viewModel.staleUseSoonNotificationWithdrawals(now: notificationDate) {
+            notificationService.removeUseSoonNotifications(identifiers: [withdrawal.notificationIdentifier])
+            pendingUseSoonNotificationIDs.remove(withdrawal.notificationIdentifier)
+            viewModel.clearUseSoonNotificationLatch(for: withdrawal)
+        }
+
+        for notice in viewModel.pendingUseSoonNotifications(now: notificationDate) {
+            guard pendingUseSoonNotificationIDs.insert(notice.notificationIdentifier).inserted else {
+                continue
+            }
+
+            notificationService.sendUseSoonNotification(notice) { [weak self] delivered in
+                guard let self else {
+                    return
+                }
+
+                self.pendingUseSoonNotificationIDs.remove(notice.notificationIdentifier)
+                if delivered {
+                    self.viewModel.markUseSoonNoticeDelivered(notice)
+                }
+            }
+        }
     }
 }

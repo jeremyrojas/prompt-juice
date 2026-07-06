@@ -44,7 +44,7 @@ for future weekly UI.
 `session reset` = minutes until the current session window resets. Thresholds
 default **60 min / 40%** (see §3).
 
-| Severity | Trigger | Panel tint | Hex | Chip | Raises alert? | Menu-bar tint | Rank |
+| Severity | Trigger | Panel tint | Hex | Chip | Notification candidate? | Menu-bar tint | Rank |
 |---|---|---|---|---|---|---|---|
 | `empty` | `session remaining ≤ 0` | muted | `#969CA6` | — | no | plain | 3 |
 | `useSoon` | `session reset ≤ TimeThreshold` **and** `session remaining ≥ JuiceThreshold` | amber | `#F0A32A` | **Use soon** | **yes** | amber | 4 |
@@ -53,7 +53,7 @@ default **60 min / 40%** (see §3).
 | `unavailable` | no usable reading | muted | `#969CA6` | — | no | plain | 1 |
 
 Notes:
-- **Only `useSoon` gets a chip and counts as alerting.** `low`/`empty` are calm — the short bar communicates "low" without an alarm.
+- **Only `useSoon` gets a chip and can create a macOS notification.** `low`/`empty` are calm — the short bar communicates "low" without an alarm.
 - **Rank** is the worst-wins order for the aggregate; `useSoon` (4) outranks everything so the nudge always wins the header/glyph over a calm low.
 - **Menu-bar tint** is `nil` ("plain template") for everything except `useSoon` — the glyph only lights up (amber) when there's something to do.
 
@@ -68,8 +68,10 @@ Source: [`AlertThresholds.swift`](../../app/PromptJuice/Models/AlertThresholds.s
 | Time (reset is within) | 60 min | 30 / 45 / 60 / 90 | the `≤ TimeThreshold` half of `useSoon` |
 | Juice (still have at least) | 40% | 25 / 40 / 50 / 60 | the `≥ JuiceThreshold` half of `useSoon` |
 
-Read as one sentence: *"Nudge me when reset is within [60 min] and I still have at least [40%]."*
+Read as one sentence: *"When reset is within [60 min] and I still have at least [40%]."*
 The `low` boundary (`< 15%`) is a fixed constant (`UsageSeverity.lowRemainingFloor`), not a user threshold — it only controls the calm "running low" look, not an alert.
+
+The **Notify me** toggle gates macOS banners. The amber droplet, row chip, and panel color still follow `useSoon` when notifications are off.
 
 ---
 
@@ -80,8 +82,9 @@ Source: [`SnapshotConfidence.swift`](../../app/PromptJuice/Models/SnapshotConfid
 Rows are 48 pt single-line session rows. Each row shows the session remaining
 number, session bar, and a grouped trailing cluster such as
 `85% · resets in 4h 33m`. Provider rows are display-only. The manual header
-keeps the verdict headline and shows the soonest visible reset as
-`Resets in 4h 33m`.
+keeps the verdict headline and names the visible provider or providers driving
+the reset, such as `Claude and Codex reset in 4h 33m` or
+`Claude resets in 42m`.
 
 Codex is normally exact/Live; it can be stale or unavailable, but never estimated.
 The fetch/trust matrix below is Claude-specific.
@@ -114,9 +117,17 @@ Notes:
 - Last-good provider cache is used only while the cached session or weekly reset is still ahead. After both pass reset, the provider returns to the waiting/setup path.
 - Rows, header/menu-bar fill, and low/empty severity use session remaining. The amber use-soon nudge uses session reset timing.
 
+## 5. Use-soon notifications
+
+Source: [`PromptJuiceNotificationService.swift`](../../app/PromptJuice/Services/PromptJuiceNotificationService.swift) · [`PromptJuiceViewModel.pendingUseSoonNotifications`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
+
+When **Notify me** is on, each visible available provider at `useSoon` severity can deliver one macOS banner per active reset window. The latch key is provider raw value plus the provider's current reset-window id. Rotated or expired window ids withdraw stale delivered banners and clear their latch.
+
+The Juicebar panel stays user-summoned from the menu-bar droplet. Tapping a use-soon notification opens the Juicebar.
+
 ---
 
-## 5. Menu-bar glyph
+## 6. Menu-bar glyph
 
 Source: [`AppDelegate.updateStatusItemGlyph`](../../app/PromptJuice/App/AppDelegate.swift) · [`PromptJuiceViewModel.menuBar*`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
@@ -128,12 +139,12 @@ Source: [`AppDelegate.updateStatusItemGlyph`](../../app/PromptJuice/App/AppDeleg
 
 ---
 
-## 6. Enabled providers
+## 7. Enabled providers
 
 Source: [`PromptJuiceSettingsStore.swift`](../../app/PromptJuice/Services/PromptJuiceSettingsStore.swift) · [`PromptJuiceViewModel.visibleSnapshots`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
 The enabled provider set is the boundary for downstream state. Rows, header verdict,
-aggregate severity, menu-bar glyph, snooze identity, and click routing all use enabled
+aggregate severity, menu-bar glyph, notification latch, and click routing all use enabled
 providers only.
 
 Rules:
@@ -144,7 +155,7 @@ Rules:
 - At least one provider is always enabled. The store clamps empty writes, so zero-provider
   panel and glyph states are unrepresentable.
 
-## 7. Aggregate / multi-provider (header verdict + droplet)
+## 8. Aggregate / multi-provider (header verdict + droplet)
 
 Rows are always independent; clashes only affect the **header** and the **menu-bar glyph**.
 Symmetric — swap the two providers and it holds.

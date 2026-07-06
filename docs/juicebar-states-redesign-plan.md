@@ -42,7 +42,7 @@ Files: `Models/UsageSeverity.swift`, `UI/SeverityAppearance.swift`, `Services/Al
 
 ### Slice 2 — Relabel the threshold menus  [self-contained]
 File: `App/AppDelegate.swift` (`addThresholdMenus`)
-- Reframe the two submenus as one nudge sentence ("Nudge me when reset is within [60m] and I still have at least [40%]"). Logic is already correct (`shouldUseSoon`); only labels change. Keep defaults 60m / 40%.
+- Reframe the two controls as one use-juice sentence ("When reset is within [60m] and I still have at least [40%]"). Logic is already correct (`shouldUseSoon`); only labels change. Keep defaults 60m / 40%.
 - Accept: the menu reads as nudge configuration, not a low-alarm.
 
 ### Slice 3 — Cleanups  [self-contained]
