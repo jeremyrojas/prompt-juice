@@ -222,7 +222,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         XCTAssertEqual(viewModel.menuBarRemainingPercent, 70, accuracy: 0.001)
         XCTAssertEqual(
             viewModel.weeklyText(for: claude),
-            "Week: 70% left · resets 4d · as of \(clockTime(weeklyUpdatedAt))"
+            "Week: 70% left · resets in 4d · as of \(clockTime(weeklyUpdatedAt))"
         )
         XCTAssertTrue(viewModel.detail.contains("Claude Fresh window"))
     }

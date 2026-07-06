@@ -1176,12 +1176,12 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedProvider, .claude)
         XCTAssertEqual(
             viewModel.detail,
-            "80% · resets in 4h 0m · Week: 65% left · resets 3d 4h"
+            "Week: 65% left · resets in 3d 4h"
         )
         XCTAssertEqual(viewModel.headerRemainingPercent, 65)
         XCTAssertEqual(
             viewModel.weeklyText(for: claude),
-            "Week: 65% left · resets 3d 4h"
+            "Week: 65% left · resets in 3d 4h"
         )
 
         viewModel.toggleSelection(.codex)
@@ -1189,12 +1189,12 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedProvider, .codex)
         XCTAssertEqual(
             viewModel.detail,
-            "88% · resets in 4h 10m · Week: 70% left · resets 4d"
+            "Week: 70% left · resets in 4d"
         )
         XCTAssertEqual(viewModel.headerRemainingPercent, 70)
         XCTAssertEqual(
             viewModel.weeklyText(for: viewModel.visibleSnapshots.first { $0.provider == .codex }!),
-            "Week: 70% left · resets 4d"
+            "Week: 70% left · resets in 4d"
         )
 
         viewModel.toggleSelection(.codex)
@@ -1279,7 +1279,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.toggleSelection(.codex)
         XCTAssertEqual(viewModel.selectedProvider, .codex)
-        XCTAssertEqual(viewModel.detail, "88% · resets in 4h 10m · Week: 70% left · resets 4d")
+        XCTAssertEqual(viewModel.detail, "Week: 70% left · resets in 4d")
 
         viewModel.dismissCurrentWindow()
 

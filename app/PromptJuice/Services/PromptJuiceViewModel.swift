@@ -396,22 +396,18 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func scopedDetail(for snapshot: UsageSnapshot) -> String {
-        var parts: [String]
+        if let weeklyText = weeklyText(for: snapshot) {
+            return weeklyText
+        }
 
         if snapshot.isFreshSessionWindow {
-            parts = ["Fresh window", "starts with your next Claude Code message"]
-        } else {
-            parts = [
-                sessionRemainingPercentDisplayValueText(for: snapshot),
-                fullResetText(for: snapshot)
-            ]
+            return "Fresh window · starts with your next Claude Code message"
         }
 
-        if let weeklyText = weeklyText(for: snapshot) {
-            parts.append(weeklyText)
-        }
-
-        return parts.joined(separator: " · ")
+        return [
+            sessionRemainingPercentDisplayValueText(for: snapshot),
+            fullResetText(for: snapshot)
+        ].joined(separator: " · ")
     }
 
     private var alertSnapshot: UsageSnapshot? {
@@ -795,7 +791,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return nil
         }
 
-        var text = "Week: \(Int(remaining.rounded()))% left · resets \(weeklyResetText(for: weeklyWindow))"
+        var text = "Week: \(Int(remaining.rounded()))% left · resets in \(weeklyResetText(for: weeklyWindow))"
 
         if let weeklyUpdatedAt = snapshot.weeklyUpdatedAt,
            now().timeIntervalSince(weeklyUpdatedAt) > 30 * 60 {
@@ -810,11 +806,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return "n/a"
         }
 
-        if minutes < 60 {
-            return "\(minutes)m"
-        }
-
-        let hours = minutes / 60
+        let hours = max(1, minutes / 60)
         if hours < 24 {
             return "\(hours)h"
         }

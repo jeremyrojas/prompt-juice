@@ -300,15 +300,11 @@ private struct ProviderUsageRow: View {
 
     @ViewBuilder
     private var resetLabel: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: 8, weight: .bold))
-            Text(viewModel.resetText(for: snapshot))
-                .font(.system(size: 11, weight: .semibold))
-                .monospacedDigit()
-        }
+        Text(viewModel.fullResetText(for: snapshot))
+            .font(.system(size: 11, weight: .semibold))
+            .monospacedDigit()
         .foregroundStyle(resetColor)
-        .frame(width: 62, alignment: .trailing)
+        .frame(width: 104, alignment: .trailing)
     }
 
     /// One-alert model: only the amber use-soon nudge gets a chip.

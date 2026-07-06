@@ -93,8 +93,8 @@ script, that file exists, and `statusLine.refreshInterval` is `10`.
 | 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | scope header |
 | 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | scope header |
 | 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining; no reset countdown | Fresh window · starts with your next Claude Code message | scope header |
-| 6 | selected provider has a valid weekly window | same as session state | same as session state | scoped header: `80% · resets in 3h 0m · Week: N% left · resets 4d`; `as of 9:46` when older than 30 min | session tooltip | clear scope |
-| 7 | selected provider has a fresh weekly window | same as session state | same as session state | scoped header: `80% · resets in 3h 0m · Week: 100% left · fresh week` | session tooltip | clear scope |
+| 6 | selected provider has a valid weekly window | same as session state | same as session state | scoped header: `Week: N% left · resets in 4d`; `as of 9:46` when older than 30 min; rows keep plain hourly text such as `resets in 3h 0m` | session tooltip | clear scope |
+| 7 | selected provider has a fresh weekly window | same as session state | same as session state | scoped header: `Week: 100% left · fresh week`; rows keep plain hourly text such as `resets in 3h 0m` | session tooltip | clear scope |
 | 8 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
 | 9 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | no action |
 | 10 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |

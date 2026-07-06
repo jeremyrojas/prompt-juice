@@ -42,7 +42,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertEqual(selectedFrame.height, initialFrame.height)
         XCTAssertEqual(
             viewModel.detail,
-            "80% · resets in 3h 0m · Week: 95% left · resets 5d"
+            "Week: 95% left · resets in 5d"
         )
 
         let providers = viewModel.visibleSnapshots.map(\.provider)

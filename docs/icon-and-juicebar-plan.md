@@ -199,10 +199,8 @@ just reports numbers. Touch points:
 
 ### 3.2 Label the countdown
 
-- The row shows a bare "4h 5m" (`resetText(for:)`) — ambiguous (until reset, or
-  until I run dry?). Add a tiny `↻` (or `arrow.clockwise`) prefix in the row.
-  The header already uses `fullResetText` ("resets in …"); make the row agree
-  for the cost of one glyph.
+- Rows use `fullResetText` as plain trailing text, e.g. "resets in 4h 5m".
+  The header and row countdowns now share the same phrase.
 
 ### 3.3 Quiet chips in the healthy state
 
