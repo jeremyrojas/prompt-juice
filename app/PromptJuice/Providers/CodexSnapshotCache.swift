@@ -7,59 +7,28 @@ final class CodexSnapshotCache: @unchecked Sendable {
         static let lastGoodCodexSnapshot = "lastGoodCodexSnapshot"
     }
 
-    private let defaults: UserDefaults
+    private let storage: ProviderWindowSnapshotCache
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+        storage = ProviderWindowSnapshotCache(
+            defaults: defaults,
+            key: Key.lastGoodCodexSnapshot,
+            identity: .codex,
+            cacheSource: .codexCache
+        )
     }
 
     func save(_ snapshot: ProviderSnapshot) {
         guard snapshot.identity == .codex,
               snapshot.source == .codexAppServer,
-              snapshot.confidence == .exact,
-              let usedPercent = snapshot.rateWindow.usedPercent,
-              let resetAt = snapshot.rateWindow.resetAt,
-              let durationMinutes = snapshot.rateWindow.durationMinutes else {
+              snapshot.confidence == .exact else {
             return
         }
 
-        let cached = CachedCodexSnapshot(
-            usedPercent: usedPercent,
-            resetAt: resetAt,
-            durationMinutes: durationMinutes,
-            updatedAt: snapshot.updatedAt
-        )
-
-        if let data = try? JSONEncoder().encode(cached) {
-            defaults.set(data, forKey: Key.lastGoodCodexSnapshot)
-        }
+        storage.save(snapshot)
     }
 
     func snapshot(now: Date, failureDetail: String?) -> ProviderSnapshot? {
-        guard let data = defaults.data(forKey: Key.lastGoodCodexSnapshot),
-              let cached = try? JSONDecoder().decode(CachedCodexSnapshot.self, from: data),
-              cached.resetAt > now else {
-            return nil
-        }
-
-        return ProviderSnapshot(
-            identity: .codex,
-            rateWindow: .available(
-                usedPercent: cached.usedPercent,
-                resetAt: cached.resetAt,
-                durationMinutes: cached.durationMinutes
-            ),
-            source: .codexCache,
-            confidence: .stale,
-            updatedAt: cached.updatedAt,
-            statusDetail: failureDetail
-        )
+        storage.snapshot(now: now, failureDetail: failureDetail)
     }
-}
-
-private struct CachedCodexSnapshot: Codable {
-    let usedPercent: Double
-    let resetAt: Date
-    let durationMinutes: Int
-    let updatedAt: Date
 }

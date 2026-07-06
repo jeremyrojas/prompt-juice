@@ -4,10 +4,10 @@ import Foundation
 /// row/bar color, the header droplet tint, and the menu-bar glyph tint so all
 /// surfaces agree.
 ///
-/// Two failure modes get two different colors:
+/// Two display modes stay calm while the session-reset nudge draws attention:
 /// - `useSoon` (amber): plenty left, but the window resets soon — use it or
 ///   lose it.
-/// - `low` / `empty` (red): nearly out, about to be blocked.
+/// - `low` / `empty` (muted): nearly out; the short fill communicates level.
 ///
 /// `healthy` is deliberately quiet (no chip) so the alerting states read loud.
 enum UsageSeverity: Equatable {

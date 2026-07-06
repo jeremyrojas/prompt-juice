@@ -15,6 +15,33 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshots[1].rateWindow.minutesUntilReset(now: now), 52)
     }
 
+    func testEffectiveRemainingPercentUsesWeeklyMinimumForBothProviders() {
+        let snapshots = [ProviderIdentity.claude, .codex].map { identity in
+            ProviderSnapshot(
+                identity: identity,
+                rateWindow: .available(
+                    usedPercent: 20,
+                    resetAt: now.addingTimeInterval(3 * 60 * 60),
+                    durationMinutes: 300
+                ),
+                weeklyWindow: .available(
+                    usedPercent: 88,
+                    resetAt: now.addingTimeInterval(3 * 24 * 60 * 60),
+                    durationMinutes: 10_080
+                ),
+                source: .fixture,
+                confidence: .exact,
+                updatedAt: now,
+                weeklyUpdatedAt: now
+            )
+        }
+
+        XCTAssertEqual(snapshots.map(\.sessionRemainingPercent), [80, 80])
+        XCTAssertEqual(snapshots.map(\.weeklyRemainingPercent), [12, 12])
+        XCTAssertEqual(snapshots.map(\.remainingPercent), [80, 80])
+        XCTAssertEqual(snapshots.map(\.effectiveRemainingPercent), [12, 12])
+    }
+
     func testCodexStubProviderReturnsUnavailableSnapshot() {
         let snapshots = CodexStubProviderClient().snapshots(now: now)
 
@@ -41,6 +68,10 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 6)
         XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
         XCTAssertEqual(snapshot.rateWindow.resetAt, Date(timeIntervalSince1970: 1_800_005_173))
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 12)
+        XCTAssertEqual(snapshot.weeklyWindow?.durationMinutes, 10_080)
+        XCTAssertEqual(snapshot.weeklyWindow?.resetAt, Date(timeIntervalSince1970: 1_800_345_600))
+        XCTAssertEqual(snapshot.weeklyUpdatedAt, now)
     }
 
     func testCodexProviderReturnsUnavailableWhenAppServerFails() {
@@ -89,6 +120,178 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.confidence, .stale)
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 6)
         XCTAssertEqual(snapshot.statusDetail, "Codex app-server timed out")
+    }
+
+    func testCodexSnapshotCacheDecodesLegacySessionBlob() throws {
+        let suiteName = "PromptJuiceCodexLegacyCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let resetAt = now.addingTimeInterval(3 * 60 * 60)
+        let updatedAt = now.addingTimeInterval(-10 * 60)
+        let legacy = LegacyProviderCacheBlob(
+            usedPercent: 41,
+            resetAt: resetAt,
+            durationMinutes: 300,
+            updatedAt: updatedAt
+        )
+        defaults.set(
+            try JSONEncoder().encode(legacy),
+            forKey: "lastGoodCodexSnapshot"
+        )
+
+        let snapshot = try XCTUnwrap(
+            CodexSnapshotCache(defaults: defaults).snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Codex app-server timed out"
+            )
+        )
+
+        XCTAssertEqual(snapshot.source, .codexCache)
+        XCTAssertEqual(snapshot.confidence, .stale)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 41)
+        XCTAssertEqual(snapshot.rateWindow.resetAt, resetAt)
+        XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+        XCTAssertEqual(snapshot.updatedAt, updatedAt)
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
+        XCTAssertNil(snapshot.weeklyWindow)
+        XCTAssertEqual(snapshot.statusDetail, "Codex app-server timed out")
+    }
+
+    func testCodexSnapshotCacheOnlySavesExactAppServerSnapshots() {
+        let suiteName = "PromptJuiceCodexSaveEligibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = CodexSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 50,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .codexAppServer,
+            confidence: .stale,
+            updatedAt: now
+        ))
+        cache.save(ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 51,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        ))
+
+        XCTAssertNil(
+            cache.snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Codex app-server timed out"
+            )
+        )
+    }
+
+    func testCodexSnapshotCachePreservesWeeklyAcrossSessionOnlySave() throws {
+        let suiteName = "PromptJuiceCodexWeeklyCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = CodexSnapshotCache(defaults: defaults)
+        let firstSnapshot = ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: now.addingTimeInterval(3 * 60 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 44,
+                resetAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .codexAppServer,
+            confidence: .exact,
+            updatedAt: now,
+            weeklyUpdatedAt: now
+        )
+        let sessionOnlySnapshot = ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 30,
+                resetAt: now.addingTimeInterval(4 * 60 * 60),
+                durationMinutes: 300
+            ),
+            source: .codexAppServer,
+            confidence: .exact,
+            updatedAt: now.addingTimeInterval(60)
+        )
+
+        cache.save(firstSnapshot)
+        cache.save(sessionOnlySnapshot)
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(120),
+                failureDetail: "Codex app-server timed out"
+            )
+        )
+
+        XCTAssertEqual(snapshot.source, .codexCache)
+        XCTAssertEqual(snapshot.confidence, .stale)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 30)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 44)
+        XCTAssertEqual(snapshot.remainingPercent, 70)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 56)
+        XCTAssertEqual(snapshot.statusDetail, "Codex app-server timed out")
+    }
+
+    func testCodexSnapshotCacheCarriesValidWeeklyAsFreshSession() throws {
+        let suiteName = "PromptJuiceCodexFreshCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = CodexSnapshotCache(defaults: defaults)
+        cache.save(
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .available(
+                    usedPercent: 20,
+                    resetAt: now.addingTimeInterval(30 * 60),
+                    durationMinutes: 300
+                ),
+                weeklyWindow: .available(
+                    usedPercent: 35,
+                    resetAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+                    durationMinutes: 10_080
+                ),
+                source: .codexAppServer,
+                confidence: .exact,
+                updatedAt: now,
+                weeklyUpdatedAt: now
+            )
+        )
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(60 * 60),
+                failureDetail: "Codex app-server timed out"
+            )
+        )
+
+        XCTAssertTrue(snapshot.isFreshSessionWindow)
+        XCTAssertEqual(snapshot.rateWindow, .unavailable)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 65)
+        XCTAssertEqual(snapshot.weeklyUpdatedAt, now)
     }
 
     func testClaudeStatuslineReaderReturnsExactSnapshot() throws {
@@ -314,7 +517,8 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 22)
         XCTAssertEqual(snapshot.weeklyUpdatedAt, oldUpdate)
-        XCTAssertEqual(snapshot.remainingPercent, 78)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 78)
     }
 
     func testClaudeStatuslineReaderShowsFreshWeekWhenWeeklyResetPassed() throws {
@@ -543,6 +747,54 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.statusDetail, "Claude statusline cache unavailable")
     }
 
+    func testClaudeSnapshotCacheSavesStatuslineSnapshotsUnlessUnavailable() throws {
+        let suiteName = "PromptJuiceClaudeSaveEligibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cache = ClaudeSnapshotCache(defaults: defaults)
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 52,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: now
+        ))
+
+        XCTAssertNil(
+            cache.snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+
+        cache.save(ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 22,
+                resetAt: now.addingTimeInterval(900),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .stale,
+            updatedAt: now
+        ))
+
+        let snapshot = try XCTUnwrap(
+            cache.snapshot(
+                now: now.addingTimeInterval(60),
+                failureDetail: "Claude statusline cache unavailable"
+            )
+        )
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 22)
+        XCTAssertEqual(snapshot.source, .claudeCache)
+    }
+
     func testClaudeSnapshotCacheReturnsNilWhenAllWindowsExpired() {
         let suiteName = "PromptJuiceClaudeExpiredCacheTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -621,7 +873,8 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 11)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 44)
-        XCTAssertEqual(snapshot.remainingPercent, 56)
+        XCTAssertEqual(snapshot.remainingPercent, 89)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 56)
     }
 
     func testClaudeSnapshotCacheCarriesValidWeeklyAsFreshSession() throws {
@@ -659,7 +912,8 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertTrue(snapshot.isFreshSessionWindow)
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
-        XCTAssertEqual(snapshot.remainingPercent, 65)
+        XCTAssertEqual(snapshot.remainingPercent, 100)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 65)
     }
 
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsUnavailableByDefault() {
@@ -1515,6 +1769,8 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 6)
         XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+        XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 12)
+        XCTAssertEqual(snapshot.weeklyWindow?.durationMinutes, 10_080)
     }
 
     func testRateLimitParserSupportsSingleBucketResponse() throws {
@@ -1523,6 +1779,7 @@ final class ProviderClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.rateWindow.usedPercent, 17)
         XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+        XCTAssertNil(snapshot.weeklyWindow)
     }
 
     func testRateLimitParserRejectsExpiredCodexBucket() throws {
@@ -1800,6 +2057,13 @@ final class ProviderClientTests: XCTestCase {
         value.replacingOccurrences(of: "'", with: "'\\''")
     }
 
+    private struct LegacyProviderCacheBlob: Encodable {
+        let usedPercent: Double
+        let resetAt: Date
+        let durationMinutes: Int
+        let updatedAt: Date
+    }
+
     private let multiBucketFixture = """
     {
       "rateLimits": {
@@ -1810,7 +2074,11 @@ final class ProviderClientTests: XCTestCase {
           "windowDurationMins": 300,
           "resetsAt": 1800005173
         },
-        "secondary": null,
+        "secondary": {
+          "usedPercent": 12,
+          "windowDurationMins": 10080,
+          "resetsAt": 1800345600
+        },
         "planType": "pro",
         "rateLimitReachedType": null
       },
@@ -1823,7 +2091,11 @@ final class ProviderClientTests: XCTestCase {
             "windowDurationMins": 300,
             "resetsAt": 1800005173
           },
-          "secondary": null,
+          "secondary": {
+            "usedPercent": 12,
+            "windowDurationMins": 10080,
+            "resetsAt": 1800345600
+          },
           "planType": "pro",
           "rateLimitReachedType": null
         },

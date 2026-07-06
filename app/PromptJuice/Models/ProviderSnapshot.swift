@@ -3,13 +3,16 @@ import Foundation
 struct ProviderSnapshot: Identifiable, Equatable {
     let identity: ProviderIdentity
     let rateWindow: RateWindow
+    // retained for future weekly UI; not currently displayed
     let weeklyWindow: RateWindow?
     let source: SnapshotSource
     let confidence: SnapshotConfidence
     let updatedAt: Date
+    // retained for future weekly UI; not currently displayed
     let weeklyUpdatedAt: Date?
     let statusDetail: String?
     let isFreshSessionWindow: Bool
+    // retained for future weekly UI; not currently displayed
     let isFreshWeeklyWindow: Bool
 
     init(
@@ -99,10 +102,11 @@ struct ProviderSnapshot: Identifiable, Equatable {
     }
 
     var remainingPercent: Double {
-        guard identity == .claude else {
-            return sessionRemainingPercent
-        }
+        sessionRemainingPercent
+    }
 
+    // retained for future weekly UI; not currently displayed
+    var effectiveRemainingPercent: Double {
         return min(sessionRemainingPercent, weeklyRemainingPercent ?? 100)
     }
 

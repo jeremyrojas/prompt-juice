@@ -208,6 +208,71 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testWeeklyMinimumIsDormantForSeverity() {
+        let snapshot = makeSnapshot(
+            identity: .codex,
+            usedPercent: 20,
+            resetMinutesFromNow: 240,
+            weeklyUsedPercent: 95,
+            weeklyResetMinutesFromNow: 4 * 24 * 60,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(snapshot.sessionRemainingPercent, 80)
+        XCTAssertEqual(snapshot.remainingPercent, 80)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 5)
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .healthy
+        )
+        XCTAssertEqual(
+            engine.statusText(for: snapshot, thresholds: thresholds, now: now),
+            "Some left"
+        )
+    }
+
+    func testWeeklyEmptyIsDormantForSeverity() {
+        let snapshot = makeSnapshot(
+            identity: .claude,
+            usedPercent: 20,
+            resetMinutesFromNow: 240,
+            weeklyUsedPercent: 100,
+            weeklyResetMinutesFromNow: 4 * 24 * 60,
+            confidence: .exact
+        )
+
+        XCTAssertEqual(snapshot.sessionRemainingPercent, 80)
+        XCTAssertEqual(snapshot.remainingPercent, 80)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 0)
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .healthy
+        )
+    }
+
+    func testWeeklyResetTimingDoesNotTriggerUseSoon() {
+        let snapshot = makeSnapshot(
+            identity: .codex,
+            usedPercent: 20,
+            resetMinutesFromNow: 240,
+            weeklyUsedPercent: 20,
+            weeklyResetMinutesFromNow: 20,
+            confidence: .exact
+        )
+
+        XCTAssertFalse(
+            engine.shouldUseSoon(
+                for: snapshot,
+                thresholds: thresholds,
+                now: now
+            )
+        )
+        XCTAssertEqual(
+            engine.severity(for: snapshot, thresholds: thresholds, now: now),
+            .healthy
+        )
+    }
+
     func testSeverityUnavailableSnapshot() {
         let snapshot = ProviderSnapshot(
             identity: .codex,
@@ -302,18 +367,33 @@ final class AlertEngineTests: XCTestCase {
         identity: ProviderIdentity = .codex,
         usedPercent: Double,
         resetMinutesFromNow: Int,
+        weeklyUsedPercent: Double? = nil,
+        weeklyResetMinutesFromNow: Int? = nil,
         confidence: SnapshotConfidence
     ) -> ProviderSnapshot {
-        ProviderSnapshot(
+        let weeklyWindow: RateWindow? = if let weeklyUsedPercent,
+                                           let weeklyResetMinutesFromNow {
+            .available(
+                usedPercent: weeklyUsedPercent,
+                resetAt: now.addingTimeInterval(TimeInterval(weeklyResetMinutesFromNow * 60)),
+                durationMinutes: 10_080
+            )
+        } else {
+            nil
+        }
+
+        return ProviderSnapshot(
             identity: identity,
             rateWindow: .available(
                 usedPercent: usedPercent,
                 resetAt: now.addingTimeInterval(TimeInterval(resetMinutesFromNow * 60)),
                 durationMinutes: 300
             ),
+            weeklyWindow: weeklyWindow,
             source: .fixture,
             confidence: confidence,
-            updatedAt: now
+            updatedAt: now,
+            weeklyUpdatedAt: weeklyWindow == nil ? nil : now
         )
     }
 }

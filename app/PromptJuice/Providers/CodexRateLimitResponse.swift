@@ -14,28 +14,25 @@ struct CodexRateLimitReadResult: Decodable, Equatable {
         }
 
         guard let primary = bucket.primary,
-              primary.usedPercent.isFinite,
-              primary.windowDurationMins > 0,
-              primary.resetsAt > 0 else {
+              let primaryWindow = primary.rateWindow() else {
             throw CodexRateLimitMappingError.missingPrimaryWindow
         }
 
-        let resetAt = Date(timeIntervalSince1970: primary.resetsAt)
-
-        guard resetAt > now else {
+        guard let resetAt = primaryWindow.resetAt,
+              resetAt > now else {
             throw CodexRateLimitMappingError.expiredPrimaryWindow
         }
 
+        let weeklyWindow = bucket.secondary?.rateWindowIfUnexpired(now: now)
+
         return ProviderSnapshot(
             identity: .codex,
-            rateWindow: .available(
-                usedPercent: primary.usedPercent,
-                resetAt: resetAt,
-                durationMinutes: primary.windowDurationMins
-            ),
+            rateWindow: primaryWindow,
+            weeklyWindow: weeklyWindow,
             source: .codexAppServer,
             confidence: .exact,
             updatedAt: now,
+            weeklyUpdatedAt: weeklyWindow == nil ? nil : now,
             statusDetail: bucket.rateLimitReachedType
         )
     }
@@ -54,6 +51,30 @@ struct CodexRateLimitWindow: Decodable, Equatable {
     let usedPercent: Double
     let windowDurationMins: Int
     let resetsAt: TimeInterval
+
+    func rateWindow() -> RateWindow? {
+        guard usedPercent.isFinite,
+              windowDurationMins > 0,
+              resetsAt > 0 else {
+            return nil
+        }
+
+        return .available(
+            usedPercent: usedPercent,
+            resetAt: Date(timeIntervalSince1970: resetsAt),
+            durationMinutes: windowDurationMins
+        )
+    }
+
+    func rateWindowIfUnexpired(now: Date) -> RateWindow? {
+        guard let window = rateWindow(),
+              let resetAt = window.resetAt,
+              resetAt > now else {
+            return nil
+        }
+
+        return window
+    }
 }
 
 enum CodexRateLimitMappingError: Error, LocalizedError, Equatable {

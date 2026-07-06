@@ -13,8 +13,8 @@ private typealias RefreshCompletion = @MainActor @Sendable () -> Void
 final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var snapshots: [UsageSnapshot]
     @Published private(set) var mode: PanelMode = .manual
-    /// Row the user tapped to scope the header summary to a single provider.
-    /// `nil` shows the combined overview. Cleared when the panel is dismissed.
+    /// Dormant row selection state retained for future scoped provider UI.
+    /// Provider row clicks currently leave this unchanged.
     @Published private(set) var selectedProvider: UsageProvider?
     @Published private(set) var actionMessage: String?
     @Published private(set) var thresholds: AlertThresholds
@@ -93,15 +93,6 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
 
-    var visibleWeeklyRowCount: Int {
-        visibleSnapshots.filter { showsWeeklyLine(for: $0) }.count
-    }
-
-    func showsWeeklyLine(for snapshot: UsageSnapshot) -> Bool {
-        weeklyText(for: snapshot) != nil
-            && weeklyBarRemainingPercent(for: snapshot) != nil
-    }
-
     var isCheckingUsage: Bool {
         let visible = visibleSnapshots
         guard !visible.isEmpty else {
@@ -162,22 +153,13 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
-    /// Header droplet tint — the selected provider's judgment when a row is
-    /// picked, otherwise the aggregate across providers.
+    /// Header droplet tint follows the aggregate across visible providers.
     var headerSeverity: UsageSeverity {
-        if let snapshot = selectedSnapshot {
-            return severity(for: snapshot)
-        }
-
         return aggregateSeverity
     }
 
-    /// Fill level for the header droplet (0...100), matching `headerSeverity`.
+    /// Fill level for the header droplet (0...100), matching the visible rows.
     var headerRemainingPercent: Double {
-        if let snapshot = selectedSnapshot {
-            return snapshot.remainingPercent
-        }
-
         return menuBarRemainingPercent
     }
 
@@ -190,8 +172,7 @@ final class PromptJuiceViewModel: ObservableObject {
     /// among available providers). 100 when nothing is available yet.
     var menuBarRemainingPercent: Double {
         // Clash rule: when a use-soon nudge is active, the fill follows the nudged
-        // provider (the actionable one), not the lowest — so an amber droplet
-        // matches its "use it" headline instead of showing the other provider's low %.
+        // provider's session remaining so the amber droplet matches its headline.
         if aggregateSeverity == .useSoon, let alertSnapshot {
             return alertSnapshot.remainingPercent
         }
@@ -251,7 +232,7 @@ final class PromptJuiceViewModel: ObservableObject {
         visibleSnapshots.filter { severity(for: $0) == .empty }
     }
 
-    /// Manual-mode subtitle — the live aggregate the static label used to hide.
+    /// Manual-mode subtitle — the next visible reset.
     private var manualSubtitle: String {
         if isCheckingUsage {
             return "Just a moment…"
@@ -261,21 +242,11 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Usage unavailable"
         }
 
-        var parts = visibleSnapshots.map { snapshot -> String in
-            if snapshot.isFreshSessionWindow {
-                return "\(snapshot.displayName) Fresh window"
-            }
-
-            return snapshot.isAvailable
-                ? "\(snapshot.displayName) \(remainingPercentDisplayValueText(for: snapshot))"
-                : unavailableHeaderSubtitle(for: snapshot)
-        }
-
         if let soonest = primarySnapshot {
-            parts.append(fullResetText(for: soonest))
+            return "Resets in \(resetText(for: soonest))"
         }
 
-        return parts.joined(separator: " · ")
+        return "Fresh window"
     }
 
     private func unavailableHeaderSubtitle(for snapshot: UsageSnapshot) -> String {
@@ -292,10 +263,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var headline: String {
-        if mode != .snoozed, let snapshot = selectedSnapshot {
-            return scopedHeadline(for: snapshot)
-        }
-
         switch mode {
         case .manual:
             return manualVerdict
@@ -321,10 +288,6 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var detail: String {
-        if mode != .snoozed, let snapshot = selectedSnapshot {
-            return scopedDetail(for: snapshot)
-        }
-
         switch mode {
         case .manual:
             return manualSubtitle
@@ -366,17 +329,14 @@ final class PromptJuiceViewModel: ObservableObject {
         return snapshot
     }
 
-    /// True only when the Claude row is showing its "Set up" cue — the one state
-    /// where tapping the row opens Settings instead of selecting it. Keeps the
-    /// visible button and the click behavior in lockstep.
+    /// True only when the Claude row is showing its "Set up" cue.
     var claudeRowOffersSetup: Bool {
         isUnavailable(.claude)
             && !isRefreshing(.claude)
             && claudeLiveUpgrade == .setupAvailable
     }
 
-    /// Toggle the scoped summary for a provider. Only providers with a reading can
-    /// be selected; tapping the selected one again returns to the overview.
+    /// Toggle dormant scoped-provider state. The panel does not currently call this.
     func toggleSelection(_ provider: UsageProvider) {
         guard let snapshot = visibleSnapshots.first(where: { $0.provider == provider }),
               snapshot.isAvailable else {
@@ -410,7 +370,10 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Fresh window · starts with your next Claude Code message"
         }
 
-        return "\(remainingPercentDisplayValueText(for: snapshot)) · \(fullResetText(for: snapshot))"
+        return [
+            sessionRemainingPercentDisplayValueText(for: snapshot),
+            fullResetText(for: snapshot)
+        ].joined(separator: " · ")
     }
 
     private var alertSnapshot: UsageSnapshot? {
@@ -647,32 +610,81 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func percentText(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.isAvailable else {
-            return "Unavailable"
-        }
-
-        return remainingPercentText(for: snapshot)
+        remainingPercentText(for: snapshot, basis: .display, unavailableText: "Unavailable")
     }
 
     func remainingPercentText(for snapshot: UsageSnapshot) -> String {
-        guard snapshot.isAvailable else {
-            return "unavailable"
-        }
-
-        return "\(Int(snapshot.remainingPercent.rounded()))% left"
+        remainingPercentText(for: snapshot, basis: .display, unavailableText: "unavailable")
     }
 
     func remainingPercentValueText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentValueText(for: snapshot, basis: .display)
+    }
+
+    func remainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentDisplayValueText(for: snapshot, basis: .display)
+    }
+
+    func sessionRemainingPercentText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentText(for: snapshot, basis: .session, unavailableText: "unavailable")
+    }
+
+    func sessionRemainingPercentValueText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentValueText(for: snapshot, basis: .session)
+    }
+
+    func sessionRemainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
+        remainingPercentDisplayValueText(for: snapshot, basis: .session)
+    }
+
+    private enum RemainingPercentBasis {
+        case display
+        case session
+    }
+
+    private func remainingPercentText(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis,
+        unavailableText: String
+    ) -> String {
+        guard snapshot.isAvailable else {
+            return unavailableText
+        }
+
+        return "\(roundedRemainingPercent(for: snapshot, basis: basis))% left"
+    }
+
+    private func remainingPercentValueText(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis
+    ) -> String {
         guard snapshot.isAvailable else {
             return "n/a"
         }
 
-        return "\(Int(snapshot.remainingPercent.rounded()))%"
+        return "\(roundedRemainingPercent(for: snapshot, basis: basis))%"
     }
 
-    func remainingPercentDisplayValueText(for snapshot: UsageSnapshot) -> String {
-        let value = remainingPercentValueText(for: snapshot)
+    private func remainingPercentDisplayValueText(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis
+    ) -> String {
+        let value = remainingPercentValueText(for: snapshot, basis: basis)
         return snapshot.confidence == .estimated ? "~\(value)" : value
+    }
+
+    private func roundedRemainingPercent(
+        for snapshot: UsageSnapshot,
+        basis: RemainingPercentBasis
+    ) -> Int {
+        let percent = switch basis {
+        case .display:
+            snapshot.remainingPercent
+        case .session:
+            snapshot.sessionRemainingPercent
+        }
+
+        return Int(percent.rounded())
     }
 
     func remainingText(for snapshot: UsageSnapshot) -> String {
@@ -735,11 +747,8 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
+    // retained for future weekly UI; not currently displayed
     func weeklyText(for snapshot: UsageSnapshot) -> String? {
-        guard snapshot.provider == .claude else {
-            return nil
-        }
-
         if snapshot.isFreshWeeklyWindow {
             return "Week: 100% left · fresh week"
         }
@@ -749,7 +758,7 @@ final class PromptJuiceViewModel: ObservableObject {
             return nil
         }
 
-        var text = "Week: \(Int(remaining.rounded()))% left · resets \(weeklyResetText(for: weeklyWindow))"
+        var text = "Week: \(Int(remaining.rounded()))% left · resets in \(weeklyResetText(for: weeklyWindow))"
 
         if let weeklyUpdatedAt = snapshot.weeklyUpdatedAt,
            now().timeIntervalSince(weeklyUpdatedAt) > 30 * 60 {
@@ -759,24 +768,13 @@ final class PromptJuiceViewModel: ObservableObject {
         return text
     }
 
-    func weeklyBarRemainingPercent(for snapshot: UsageSnapshot) -> Double? {
-        guard snapshot.provider == .claude else {
-            return nil
-        }
-
-        return snapshot.weeklyRemainingPercent
-    }
-
+    // retained for future weekly UI; not currently displayed
     private func weeklyResetText(for window: RateWindow) -> String {
         guard let minutes = window.minutesUntilReset(now: now()) else {
             return "n/a"
         }
 
-        if minutes < 60 {
-            return "\(minutes)m"
-        }
-
-        let hours = minutes / 60
+        let hours = max(1, minutes / 60)
         if hours < 24 {
             return "\(hours)h"
         }

@@ -47,8 +47,8 @@ struct AlertEngine {
     }
 
     /// The single judgment for one provider, used by the chip, row/bar color,
-    /// header droplet, and menu-bar glyph. "Nearly out" (red) takes priority
-    /// over "use it before reset" (amber).
+    /// header droplet, and menu-bar glyph. Low and empty are calm display states;
+    /// use-soon is the one alerting state.
     func severity(
         for snapshot: ProviderSnapshot,
         thresholds: AlertThresholds,
@@ -59,11 +59,7 @@ struct AlertEngine {
             return .unavailable
         }
 
-        let remaining = snapshot.sessionRemainingPercent
-
-        if snapshot.isFreshSessionWindow {
-            return .healthy
-        }
+        let remaining = snapshot.remainingPercent
 
         if remaining <= 0 {
             return .empty
@@ -110,11 +106,13 @@ struct AlertEngine {
             return "Unavailable"
         }
 
-        if snapshot.sessionRemainingPercent <= 0 {
+        let remaining = snapshot.remainingPercent
+
+        if remaining <= 0 {
             return "Empty"
         }
 
-        if snapshot.sessionRemainingPercent >= Double(UsageSeverity.lowRemainingFloor) {
+        if remaining >= Double(UsageSeverity.lowRemainingFloor) {
             return "Some left"
         }
 

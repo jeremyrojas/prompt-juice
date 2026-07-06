@@ -514,10 +514,15 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
         static let lastGoodClaudeSnapshot = "lastGoodClaudeStatuslineSnapshot"
     }
 
-    private let defaults: UserDefaults
+    private let storage: ProviderWindowSnapshotCache
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+        storage = ProviderWindowSnapshotCache(
+            defaults: defaults,
+            key: Key.lastGoodClaudeSnapshot,
+            identity: .claude,
+            cacheSource: .claudeCache
+        )
     }
 
     func save(_ snapshot: ProviderSnapshot) {
@@ -527,77 +532,11 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
             return
         }
 
-        let existing = cachedSnapshot()
-
-        var sessionWindow = existing?.session
-        if !snapshot.isFreshSessionWindow, snapshot.rateWindow.isAvailable {
-            sessionWindow = CachedClaudeWindow(
-                window: snapshot.rateWindow,
-                updatedAt: snapshot.updatedAt
-            )
-        }
-
-        var weeklyWindow = existing?.weekly
-        if !snapshot.isFreshWeeklyWindow,
-           let weekly = snapshot.weeklyWindow,
-           weekly.isAvailable {
-            weeklyWindow = CachedClaudeWindow(
-                window: weekly,
-                updatedAt: snapshot.weeklyUpdatedAt ?? snapshot.updatedAt
-            )
-        }
-
-        guard sessionWindow != nil || weeklyWindow != nil else {
-            return
-        }
-
-        let cached = CachedClaudeSnapshot(
-            session: sessionWindow,
-            weekly: weeklyWindow
-        )
-
-        if let data = try? JSONEncoder().encode(cached) {
-            defaults.set(data, forKey: Key.lastGoodClaudeSnapshot)
-        }
+        storage.save(snapshot)
     }
 
     func snapshot(now: Date, failureDetail: String?) -> ProviderSnapshot? {
-        guard let cached = cachedSnapshot(),
-              cached.session != nil || cached.weekly != nil else {
-            return nil
-        }
-
-        let validSession = cached.session?.rateWindowIfUnexpired(now: now)
-        let validWeekly = cached.weekly?.rateWindowIfUnexpired(now: now)
-        let newestUpdatedAt = [
-            cached.session?.updatedAt,
-            cached.weekly?.updatedAt
-        ].compactMap { $0 }.max() ?? now
-
-        guard validSession != nil || validWeekly != nil else {
-            return nil
-        }
-
-        return ProviderSnapshot(
-            identity: .claude,
-            rateWindow: validSession ?? .unavailable,
-            weeklyWindow: validWeekly,
-            source: .claudeCache,
-            confidence: .stale,
-            updatedAt: cached.session?.updatedAt ?? newestUpdatedAt,
-            weeklyUpdatedAt: cached.weekly?.updatedAt,
-            statusDetail: failureDetail,
-            isFreshSessionWindow: validSession == nil,
-            isFreshWeeklyWindow: validWeekly == nil && cached.weekly != nil
-        )
-    }
-
-    private func cachedSnapshot() -> CachedClaudeSnapshot? {
-        guard let data = defaults.data(forKey: Key.lastGoodClaudeSnapshot) else {
-            return nil
-        }
-
-        return try? JSONDecoder().decode(CachedClaudeSnapshot.self, from: data)
+        storage.snapshot(now: now, failureDetail: failureDetail)
     }
 }
 
@@ -1124,100 +1063,6 @@ private struct ClaudeStatuslineRateLimitWindow: Decodable {
         }
 
         return nil
-    }
-}
-
-private struct CachedClaudeWindow: Codable, Equatable {
-    let usedPercent: Double
-    let resetAt: Date
-    let durationMinutes: Int
-    let updatedAt: Date
-
-    init?(
-        window: RateWindow,
-        updatedAt: Date
-    ) {
-        guard let usedPercent = window.usedPercent,
-              let resetAt = window.resetAt,
-              let durationMinutes = window.durationMinutes else {
-            return nil
-        }
-
-        self.usedPercent = usedPercent
-        self.resetAt = resetAt
-        self.durationMinutes = durationMinutes
-        self.updatedAt = updatedAt
-    }
-
-    init(
-        usedPercent: Double,
-        resetAt: Date,
-        durationMinutes: Int,
-        updatedAt: Date
-    ) {
-        self.usedPercent = usedPercent
-        self.resetAt = resetAt
-        self.durationMinutes = durationMinutes
-        self.updatedAt = updatedAt
-    }
-
-    func rateWindowIfUnexpired(now: Date) -> RateWindow? {
-        guard resetAt > now else {
-            return nil
-        }
-
-        return .available(
-            usedPercent: usedPercent,
-            resetAt: resetAt,
-            durationMinutes: durationMinutes
-        )
-    }
-}
-
-private struct CachedClaudeSnapshot: Codable {
-    let session: CachedClaudeWindow?
-    let weekly: CachedClaudeWindow?
-
-    init(session: CachedClaudeWindow?, weekly: CachedClaudeWindow?) {
-        self.session = session
-        self.weekly = weekly
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case session
-        case weekly
-        case usedPercent
-        case resetAt
-        case durationMinutes
-        case updatedAt
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        if let session = try? container.decodeIfPresent(CachedClaudeWindow.self, forKey: .session) {
-            self.session = session
-        } else if let usedPercent = try? container.decode(Double.self, forKey: .usedPercent),
-                  let resetAt = try? container.decode(Date.self, forKey: .resetAt),
-                  let durationMinutes = try? container.decode(Int.self, forKey: .durationMinutes),
-                  let updatedAt = try? container.decode(Date.self, forKey: .updatedAt) {
-            self.session = CachedClaudeWindow(
-                usedPercent: usedPercent,
-                resetAt: resetAt,
-                durationMinutes: durationMinutes,
-                updatedAt: updatedAt
-            )
-        } else {
-            self.session = nil
-        }
-
-        weekly = try? container.decodeIfPresent(CachedClaudeWindow.self, forKey: .weekly)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(session, forKey: .session)
-        try container.encodeIfPresent(weekly, forKey: .weekly)
     }
 }
 

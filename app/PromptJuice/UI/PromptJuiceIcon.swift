@@ -3,8 +3,8 @@ import AppKit
 enum PromptJuiceIcon {
     /// Live menu-bar glyph: a droplet whose juice level encodes the remaining
     /// capacity, like the battery icon but juice. Healthy renders as a system
-    /// template (tinted white/black by the bar); the low states render in amber
-    /// or red, matching the panel.
+    /// template (tinted white/black by the bar); the use-soon nudge renders in
+    /// amber, matching the panel.
     static func statusBarImage(
         remaining: Double = 1,
         severity: UsageSeverity = .healthy

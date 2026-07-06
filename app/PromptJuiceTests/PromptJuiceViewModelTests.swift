@@ -107,7 +107,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.percentText(for: codex), "69% left")
     }
 
-    func testManualVerdictAndSubtitleReflectAggregate() {
+    func testManualVerdictAndSubtitleUsesSoonestReset() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -119,9 +119,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.showManualCheck()
 
         XCTAssertEqual(viewModel.headline, "Use prompt juice soon")
-        XCTAssertTrue(viewModel.detail.contains("Claude 43%"))
-        XCTAssertTrue(viewModel.detail.contains("Codex 69%"))
-        XCTAssertTrue(viewModel.detail.contains("resets in"))
+        XCTAssertEqual(viewModel.detail, "Resets in 42m")
     }
 
     func testManualSubtitleUsesCodexResetWhenClaudeIsFresh() {
@@ -156,9 +154,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.detail,
-            "Claude Fresh window · Codex 80% · resets in 3h 0m"
+            "Resets in 3h 0m"
         )
-        XCTAssertTrue(viewModel.detail.hasSuffix("resets in 3h 0m"))
     }
 
     func testManualVerdictIsCalmWhenHealthy() {
@@ -202,7 +199,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.detail, "Usage unavailable")
     }
 
-    func testManualSubtitleNamesUnavailableClaudeAsNotSetUp() {
+    func testManualSubtitleUsesAvailableResetWhenClaudeIsUnavailable() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -214,11 +211,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertTrue(viewModel.detail.contains("Claude not set up"))
-        XCTAssertFalse(viewModel.detail.contains("Claude n/a"))
+        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
     }
 
-    func testManualSubtitleNamesAwaitingClaudeAsWaitingForTerminal() {
+    func testManualSubtitleUsesAvailableResetWhenClaudeAwaitsTerminal() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -230,12 +226,10 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertTrue(viewModel.detail.contains("Claude waiting for terminal"))
-        XCTAssertFalse(viewModel.detail.contains("Claude not set up"))
-        XCTAssertFalse(viewModel.detail.contains("Claude n/a"))
+        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
     }
 
-    func testManualSubtitleNamesUnavailableCodexAsNotDetected() {
+    func testManualSubtitleUsesAvailableResetWhenCodexIsUnavailable() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -246,8 +240,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertTrue(viewModel.detail.contains("Codex not detected"))
-        XCTAssertFalse(viewModel.detail.contains("Codex n/a"))
+        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
     }
 
     func testEnabledProvidersDefaultToAllWhenKeyIsAbsent() {
@@ -283,7 +276,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibleSnapshots.map(\.provider), [.codex])
         XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Codex 65% · resets in 3h 0m")
+        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
         XCTAssertEqual(viewModel.menuBarRemainingPercent, 65)
     }
 
@@ -428,7 +421,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertTrue(viewModel.detail.contains("Claude waiting for terminal"))
+        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
     }
 
     func testClaudeStalePopoverNamesLastExactReading() {
@@ -1129,9 +1122,9 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshots, Self.alertSnapshots)
     }
 
-    // MARK: - Row selection
+    // MARK: - Dormant row selection
 
-    func testSelectingProviderScopesHeaderToThatProvider() {
+    func testDormantSelectionDoesNotChangeVisibleHeader() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -1142,20 +1135,74 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertTrue(viewModel.detail.contains("Claude 90%"))
-        XCTAssertTrue(viewModel.detail.contains("Codex 88%"))
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
 
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
-        XCTAssertEqual(viewModel.headline, "Claude has plenty of juice")
-        XCTAssertEqual(viewModel.detail, "90% · resets in 4h 0m")
-        XCTAssertFalse(viewModel.detail.contains("Codex"))
-        XCTAssertEqual(viewModel.headerRemainingPercent, 90)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
+        XCTAssertEqual(viewModel.headerRemainingPercent, 88)
         XCTAssertEqual(viewModel.headerSeverity, .healthy)
     }
 
-    func testSelectingCodexScopesHeaderToCodex() {
+    func testWeeklyWindowsStayDormantInVisibleHeader() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.weeklySnapshots),
+            now: { Self.fixedNow }
+        )
+        let claude = viewModel.visibleSnapshots.first { $0.provider == .claude }!
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
+        XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: claude), "80%")
+        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "80%")
+        XCTAssertEqual(claude.effectiveRemainingPercent, 65)
+
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
+        XCTAssertEqual(viewModel.headerRemainingPercent, 80)
+        XCTAssertEqual(
+            viewModel.weeklyText(for: claude),
+            "Week: 65% left · resets in 3d 4h"
+        )
+
+        viewModel.toggleSelection(.codex)
+
+        XCTAssertEqual(viewModel.selectedProvider, .codex)
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
+        XCTAssertEqual(viewModel.headerRemainingPercent, 80)
+        XCTAssertEqual(
+            viewModel.weeklyText(for: viewModel.visibleSnapshots.first { $0.provider == .codex }!),
+            "Week: 70% left · resets in 4d"
+        )
+
+        viewModel.toggleSelection(.codex)
+
+        XCTAssertNil(viewModel.selectedProvider)
+    }
+
+    func testSelectedProviderWithoutWeeklyKeepsVisibleOverview() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.toggleSelection(.claude)
+
+        XCTAssertEqual(viewModel.selectedProvider, .claude)
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
+    }
+
+    func testSelectingCodexKeepsVisibleOverview() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -1167,8 +1214,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.toggleSelection(.codex)
 
         XCTAssertEqual(viewModel.selectedProvider, .codex)
-        XCTAssertEqual(viewModel.headline, "Codex has plenty of juice")
-        XCTAssertEqual(viewModel.detail, "88% · resets in 4h 10m")
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
         XCTAssertEqual(viewModel.headerRemainingPercent, 88)
     }
 
@@ -1186,7 +1233,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertTrue(viewModel.detail.contains("Codex 88%"))
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
     }
 
     func testUnavailableProviderCannotBeSelected() {
@@ -1211,16 +1258,18 @@ final class PromptJuiceViewModelTests: XCTestCase {
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
-            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            providerClient: StaticUsageProviderClient(snapshots: Self.weeklySnapshots),
             now: { Self.fixedNow }
         )
 
         viewModel.toggleSelection(.codex)
         XCTAssertEqual(viewModel.selectedProvider, .codex)
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
 
         viewModel.dismissCurrentWindow()
 
         XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
     }
 
     func testClearSelectionReturnsToOverview() {
@@ -1239,6 +1288,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
+        XCTAssertEqual(viewModel.detail, "Resets in 4h 0m")
     }
 
     func testClaudeRowOffersSetupOnlyWhenSetupCueShows() {
@@ -1286,7 +1336,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
-        XCTAssertEqual(viewModel.detail, "~42% · resets in 2h 30m")
+        XCTAssertEqual(viewModel.detail, "Resets in 2h 30m")
     }
 
     private func makeFixture() -> (
@@ -1380,6 +1430,43 @@ final class PromptJuiceViewModelTests: XCTestCase {
             source: .fixture,
             confidence: .exact,
             updatedAt: fixedNow
+        )
+    ]
+
+    private static let weeklySnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(240 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 35,
+                resetAt: fixedNow.addingTimeInterval((3 * 24 + 4) * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow,
+            weeklyUpdatedAt: fixedNow
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 12,
+                resetAt: fixedNow.addingTimeInterval(250 * 60),
+                durationMinutes: 300
+            ),
+            weeklyWindow: .available(
+                usedPercent: 30,
+                resetAt: fixedNow.addingTimeInterval(4 * 24 * 60 * 60),
+                durationMinutes: 10_080
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow,
+            weeklyUpdatedAt: fixedNow
         )
     ]
 

@@ -3,22 +3,14 @@ import SwiftUI
 enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
     static let plainRowHeight: CGFloat = 48
-    static let weeklyRowHeight: CGFloat = 70
     static let rowSpacing: CGFloat = 7
 
-    static func height(mode: PanelMode, rowCount: Int, weeklyRowCount: Int = 0) -> CGFloat {
+    static func height(mode: PanelMode, rowCount: Int) -> CGFloat {
         let rows = max(rowCount, 1)
-        let weeklyRows = min(max(weeklyRowCount, 0), rows)
-        let plainRows = rows - weeklyRows
-        let rowBlockHeight = CGFloat(weeklyRows) * weeklyRowHeight
-            + CGFloat(plainRows) * plainRowHeight
+        let rowBlockHeight = CGFloat(rows) * plainRowHeight
             + CGFloat(max(rows - 1, 0)) * rowSpacing
         let chromeHeight: CGFloat = mode == .alert ? 95 : 63
         return chromeHeight + rowBlockHeight
-    }
-
-    static func rowHeight(hasWeeklyLine: Bool) -> CGFloat {
-        hasWeeklyLine ? weeklyRowHeight : plainRowHeight
     }
 }
 
@@ -30,8 +22,7 @@ struct PromptJuicePanelView: View {
     private var panelHeight: CGFloat {
         PromptJuicePanelMetrics.height(
             mode: viewModel.mode,
-            rowCount: viewModel.visibleSnapshots.count,
-            weeklyRowCount: viewModel.visibleWeeklyRowCount
+            rowCount: viewModel.visibleSnapshots.count
         )
     }
     private let panelCornerRadius: CGFloat = 22
@@ -191,28 +182,15 @@ private struct ProviderUsageRow: View {
             }
 
             if snapshot.isAvailable {
-                CapacityBar(remainingPercent: snapshot.remainingPercent, color: severityColor)
+                CapacityBar(remainingPercent: snapshot.sessionRemainingPercent, color: severityColor)
             } else {
                 ghostBar
             }
 
-            if let weeklyText = viewModel.weeklyText(for: snapshot),
-               let weeklyRemaining = viewModel.weeklyBarRemainingPercent(for: snapshot) {
-                VStack(spacing: 3) {
-                    Text(weeklyText)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.48))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .lineLimit(1)
-
-                    CapacityBar(remainingPercent: weeklyRemaining, color: providerColor.opacity(0.82))
-                        .frame(height: 4)
-                }
-            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .frame(height: PromptJuicePanelMetrics.rowHeight(hasWeeklyLine: hasWeeklyLine))
+        .frame(height: PromptJuicePanelMetrics.plainRowHeight)
         .glassInset(
             cornerRadius: 14,
             accentColor: isSelected ? providerColor : nil,
@@ -231,12 +209,7 @@ private struct ProviderUsageRow: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.72))
         } else if snapshot.isAvailable {
-            Text(percentLabel)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.54))
-                .monospacedDigit()
-
-            resetLabel
+            resetCluster
         } else {
             Text(unavailableLabel)
                 .font(.system(size: 11, weight: .medium))
@@ -251,10 +224,6 @@ private struct ProviderUsageRow: View {
 
     private var isRefreshing: Bool {
         viewModel.isRefreshing(snapshot.provider)
-    }
-
-    private var hasWeeklyLine: Bool {
-        viewModel.showsWeeklyLine(for: snapshot)
     }
 
     private var unavailableLabel: String {
@@ -317,24 +286,28 @@ private struct ProviderUsageRow: View {
 
     /// Estimates get a leading `~`; the only visible tell that a reading is a guess.
     private var percentLabel: String {
-        viewModel.remainingPercentDisplayValueText(for: snapshot)
-    }
-
-    private var resetColor: Color {
-        severity.isAlerting ? severityColor : Color.white.opacity(0.86)
+        viewModel.sessionRemainingPercentDisplayValueText(for: snapshot)
     }
 
     @ViewBuilder
-    private var resetLabel: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: 8, weight: .bold))
-            Text(viewModel.resetText(for: snapshot))
+    private var resetCluster: some View {
+        HStack(spacing: 5) {
+            Text(percentLabel)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.54))
+                .monospacedDigit()
+
+            Text("·")
                 .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.32))
+
+            Text(viewModel.fullResetText(for: snapshot))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(severity.isAlerting ? severityColor : Color.white.opacity(0.86))
                 .monospacedDigit()
         }
-        .foregroundStyle(resetColor)
-        .frame(width: 62, alignment: .trailing)
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     /// One-alert model: only the amber use-soon nudge gets a chip.
@@ -360,7 +333,7 @@ private struct ProviderUsageRow: View {
 
     private var accessibilityValue: String {
         snapshot.isAvailable
-            ? "\(viewModel.percentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
+            ? "\(viewModel.sessionRemainingPercentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
             : unavailableLabel
     }
 }

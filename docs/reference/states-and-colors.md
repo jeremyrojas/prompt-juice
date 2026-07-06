@@ -22,7 +22,6 @@ Source: [`SeverityAppearance.swift`](../../app/PromptJuice/UI/SeverityAppearance
 |---|---|---|---|
 | `green` | 0.373, 0.820, 0.122 | `#5FD11F` | healthy |
 | `amber` | 0.941, 0.639, 0.165 | `#F0A32A` | the use-soon nudge (the only alert) |
-| `red` | 0.941, 0.271, 0.224 | `#F04539` | **retired** — no longer mapped to any state |
 | `muted` | 0.590, 0.610, 0.650 | `#969CA6` | calm low / empty / unavailable |
 
 Provider identity dots are SwiftUI system colors (not `JuicePalette`):
@@ -38,19 +37,23 @@ Provider identity dots are SwiftUI system colors (not `JuicePalette`):
 
 Source: [`UsageSeverity.swift`](../../app/PromptJuice/Models/UsageSeverity.swift) · [`AlertEngine.severity`](../../app/PromptJuice/Services/AlertEngine.swift)
 
-Evaluated per provider, in this order. `remaining` = remaining %, `reset` = minutes
-until reset. Thresholds default **60 min / 40%** (see §3).
+Evaluated per provider, in this order. `session remaining` drives visible
+percentages, droplet fill, and low/empty severity. `effective remaining` =
+`min(session remaining, weekly remaining ?? 100)` is retained in the data layer
+for future weekly UI.
+`session reset` = minutes until the current session window resets. Thresholds
+default **60 min / 40%** (see §3).
 
 | Severity | Trigger | Panel tint | Hex | Chip | Raises alert? | Menu-bar tint | Rank |
 |---|---|---|---|---|---|---|---|
-| `empty` | `remaining ≤ 0` | muted | `#969CA6` | — | no | plain | 3 |
-| `useSoon` | `reset ≤ TimeThreshold` **and** `remaining ≥ JuiceThreshold` | amber | `#F0A32A` | **Use soon** | **yes** | amber | 4 |
-| `low` | `remaining < 15` | muted | `#969CA6` | — | no | plain | 2 |
+| `empty` | `session remaining ≤ 0` | muted | `#969CA6` | — | no | plain | 3 |
+| `useSoon` | `session reset ≤ TimeThreshold` **and** `session remaining ≥ JuiceThreshold` | amber | `#F0A32A` | **Use soon** | **yes** | amber | 4 |
+| `low` | `session remaining < 15` | muted | `#969CA6` | — | no | plain | 2 |
 | `healthy` | otherwise | green | `#5FD11F` | — | no | plain | 0 |
 | `unavailable` | no usable reading | muted | `#969CA6` | — | no | plain | 1 |
 
 Notes:
-- **Only `useSoon` gets a chip and counts as alerting.** `low`/`empty` are calm — the short bar communicates "low" without an alarm. Red is no longer used.
+- **Only `useSoon` gets a chip and counts as alerting.** `low`/`empty` are calm — the short bar communicates "low" without an alarm.
 - **Rank** is the worst-wins order for the aggregate; `useSoon` (4) outranks everything so the nudge always wins the header/glyph over a calm low.
 - **Menu-bar tint** is `nil` ("plain template") for everything except `useSoon` — the glyph only lights up (amber) when there's something to do.
 
@@ -70,26 +73,32 @@ The `low` boundary (`< 15%`) is a fixed constant (`UsageSeverity.lowRemainingFlo
 
 ---
 
-## 4. Fetch / trust axis — Claude data freshness (drives the number)
+## 4. Rows, header detail, and fetch/trust
 
 Source: [`SnapshotConfidence.swift`](../../app/PromptJuice/Models/SnapshotConfidence.swift) · row in [`PromptJuicePanelView.swift`](../../app/PromptJuice/UI/PromptJuicePanelView.swift) · tooltip in [`PromptJuiceViewModel.sourceTooltip`](../../app/PromptJuice/Services/PromptJuiceViewModel.swift)
 
+Rows are 48 pt single-line session rows. Each row shows the session remaining
+number, session bar, and a grouped trailing cluster such as
+`85% · resets in 4h 33m`. Provider rows are display-only. The manual header
+keeps the verdict headline and shows the soonest visible reset as
+`Resets in 4h 33m`.
+
 Codex is normally exact/Live; it can be stale or unavailable, but never estimated.
-The matrix below is Claude-only.
+The fetch/trust matrix below is Claude-specific.
 "Bridge current" means `statusLine.command` points at the installed Application Support
 script, that file exists, and `statusLine.refreshInterval` is `10`.
 
 | # | Condition | Settings status | Settings affordance | Juicebar # | Juicebar tooltip | Row click |
 |---|---|---|---|---|---|---|
-| 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | open Settings |
-| 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | open Settings + consent sheet |
-| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | open Settings |
-| 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | open Settings (+sheet if #2) |
-| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining; no reset countdown | Fresh window · starts with your next Claude Code message | open Settings |
-| 6 | valid weekly window | same as session state | same as session state | Week: N% left · resets 4d; `as of 9:46` when older than 30 min | session tooltip | open Settings |
-| 7 | fresh weekly window | same as session state | same as session state | Week: 100% left · fresh week | session tooltip | open Settings |
+| 1 | exact (fresh from terminal) | Live + ⓘ | — | 41% | Read from Claude Code | no action |
+| 2 | estimated, bridge missing/stale | Estimate + ⓘ | Set up live readings | ~41% | Estimated from local Claude Code activity · open Settings to set up live | no action |
+| 3 | estimated, bridge current | Estimate + ⓘ | — | ~41% | Estimated from local Claude Code activity | no action |
+| 4 | stale | Read earlier · 9:46 + ⓘ | as #2/#3 by bridge status | 41% | Read from Claude Code · 9:46 | no action |
+| 5 | fresh session window | Fresh window + ⓘ | — | Fresh window, 100% session remaining; no reset countdown | Fresh window · starts with your next Claude Code message | no action |
+| 6 | provider has a valid weekly window | same as session state | same as session state | same session row; weekly retained for future UI | session tooltip | no action |
+| 7 | provider has a fresh weekly window | same as session state | same as session state | same session row; weekly retained for future UI | session tooltip | no action |
 | 8 | unavailable, bridge missing | Not set up yet + ⓘ | Set Up… | — ghost | (existing status detail) | open Settings + consent sheet |
-| 9 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | open Settings |
+| 9 | unavailable, bridge current | Waiting for Claude statusline + ⓘ | — | Waiting for terminal ghost row, no Set up cue | You're set up · waiting for Claude Code usage | no action |
 | 10 | refreshing | Checking… | — | Checking… ghost row; header "Checking usage…" / "Just a moment…" while every visible provider is still loading | — | — |
 
 On apply, the setup sheet shows a success + next-step confirmation ("You're almost set") before the user returns to Settings.
@@ -101,9 +110,9 @@ Desktop-only users stay on Estimate by design.
 Notes:
 - The fetch axis only changes the **number presentation + hover**, never the color (that's the severity axis).
 - The only at-rest visible tell of a guess is the `~`. Source/age live in the hover tooltip only — facts, never promises.
-- Fresh session windows are presentation-only: they carry no reset timestamp, always evaluate healthy, and wait behind any valid real reading.
-- Last-good Claude cache is used only while the cached session or weekly reset is still ahead. After both pass reset, Claude returns to the waiting/setup path.
-- Claude's visible fill uses `min(session remaining, weekly remaining)`, with fresh or unknown windows counting as 100. Severity and alerts still use the five-hour session window only.
+- Fresh session windows are presentation-only: they carry no reset timestamp and wait behind any valid real reading.
+- Last-good provider cache is used only while the cached session or weekly reset is still ahead. After both pass reset, the provider returns to the waiting/setup path.
+- Rows, header/menu-bar fill, and low/empty severity use session remaining. The amber use-soon nudge uses session reset timing.
 
 ---
 
@@ -114,7 +123,7 @@ Source: [`AppDelegate.updateStatusItemGlyph`](../../app/PromptJuice/App/AppDeleg
 | Property | Rule |
 |---|---|
 | Tint | amber if any provider is `useSoon`, else plain (uncolored) |
-| Fill | the `useSoon` provider's session % when a nudge is active, else the lowest available provider fill; Claude provider fill is `min(session, weekly)`, else 100 |
+| Fill | the `useSoon` provider's session remaining when a nudge is active, else the lowest available provider session remaining |
 | Redraw | every ~1s, deduped on `"percent-severity"` |
 
 ---
@@ -146,7 +155,7 @@ The matrix applies after the enabled-provider filter.
 | healthy | healthy | "Plenty of prompt juice left" | green, lower % |
 | useSoon | healthy | "Use [A] before it resets" | amber, A's % |
 | useSoon | useSoon | "Use prompt juice soon" | amber, lower % |
-| **useSoon** | **low** | "Use [A] before it resets" | **amber, A's %** (not B's low %) |
+| **useSoon** | **low** | "Use [A] before it resets" | **amber, A's session remaining** |
 | low | healthy | "[low one] is running low" | muted, low % |
 | low | low | "Running low on both" | muted, lower % |
 | not-measured | healthy | "Plenty of prompt juice left" | green, B's % |
@@ -154,8 +163,7 @@ The matrix applies after the enabled-provider filter.
 | not-measured | not-measured | "Not measured yet" | muted / ghost |
 
 **Clash rule (use-soon + low):** the amber nudge wins the header, and the droplet fill
-follows the *nudged* provider (e.g. 78%), not the lowest (8%) — an 8% amber droplet under a
-"Use [provider]" headline would contradict itself. The low provider stays calm in its own row.
+follows the *nudged* provider's session remaining. The low provider stays calm in its own row.
 
 ---
 
@@ -167,4 +175,3 @@ follows the *nudged* provider (e.g. 78%), not the lowest (8%) — an 8% amber dr
 | Use soon (the nudge) | amber | `#F0A32A` |
 | Low / Empty | muted | `#969CA6` |
 | Not measured / unavailable | muted | `#969CA6` |
-| (Red) | — | retired |
