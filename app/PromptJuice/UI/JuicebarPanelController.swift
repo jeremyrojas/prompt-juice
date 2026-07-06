@@ -24,6 +24,7 @@ private final class JuicebarPanel: NSPanel {
 
 enum PanelClickTarget: Equatable {
     case close
+    case settings
     case provider(UsageProvider)
     /// A click on empty panel chrome (header, gaps) — clears any selection
     /// without dismissing the panel.
@@ -32,7 +33,7 @@ enum PanelClickTarget: Equatable {
 
 enum PanelClickRouter {
     private static let horizontalInset: CGFloat = 12
-    private static let manualRowsBottomInset: CGFloat = 14
+    private static let manualRowsBottomInset: CGFloat = 20
     private static let closeTopInset: CGFloat = 10
     private static let closeTrailingInset: CGFloat = 10
     private static let closeSize: CGFloat = 44
@@ -60,6 +61,19 @@ enum PanelClickRouter {
         }
     }
 
+    static func settingsRect(in bounds: NSRect) -> NSRect {
+        NSRect(
+            x: bounds.width
+                - PromptJuicePanelMetrics.settingsTrailingInset
+                - PromptJuicePanelMetrics.settingsHitSize,
+            y: bounds.height
+                - PromptJuicePanelMetrics.settingsBottomInset
+                - PromptJuicePanelMetrics.settingsHitSize,
+            width: PromptJuicePanelMetrics.settingsHitSize,
+            height: PromptJuicePanelMetrics.settingsHitSize
+        )
+    }
+
     static func target(
         at point: NSPoint,
         in bounds: NSRect,
@@ -75,6 +89,10 @@ enum PanelClickRouter {
         )
         if contains(point, in: closeRect) {
             return .close
+        }
+
+        if contains(point, in: settingsRect(in: bounds)) {
+            return .settings
         }
 
         for (provider, rowRect) in rowRects(
@@ -106,8 +124,10 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     private let providers: () -> [UsageProvider]
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
+    private let onHoverTargetChanged: (PanelClickTarget?) -> Void
     private let onCancel: () -> Void
     private var trackingArea: NSTrackingArea?
+    private var hoveredTarget: PanelClickTarget?
     private var pendingToolTipTask: Task<Void, Never>?
     private var pendingToolTipText: String?
     private var visibleToolTipText: String?
@@ -117,6 +137,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         self.providers = { [] }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
+        self.onHoverTargetChanged = { _ in }
         self.onCancel = {}
         super.init(rootView: rootView)
         pinCoordinateSpace()
@@ -127,11 +148,13 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         providers: @escaping () -> [UsageProvider],
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
+        onHoverTargetChanged: @escaping (PanelClickTarget?) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.providers = providers
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
+        self.onHoverTargetChanged = onHoverTargetChanged
         self.onCancel = onCancel
         super.init(rootView: rootView)
         pinCoordinateSpace()
@@ -196,8 +219,10 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        let target = clickTarget(at: point)
+        setHoveredTarget(target)
 
-        guard let text = rowToolTipText(at: point) else {
+        guard let text = panelToolTipText(for: target) else {
             hidePanelToolTip()
             return
         }
@@ -206,6 +231,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     }
 
     override func mouseExited(with event: NSEvent) {
+        setHoveredTarget(nil)
         hidePanelToolTip()
     }
 
@@ -226,6 +252,15 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         )
     }
 
+    private func setHoveredTarget(_ target: PanelClickTarget?) {
+        guard hoveredTarget != target else {
+            return
+        }
+
+        hoveredTarget = target
+        onHoverTargetChanged(target)
+    }
+
     private func pinCoordinateSpace() {
         // NSHostingView exposes top-down hit-test coordinates. Make that
         // contract explicit so mouseUp, mouseMoved, and PanelClickRouter share
@@ -233,16 +268,19 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         isFlipped = true
     }
 
-    private func rowToolTipText(at point: NSPoint) -> String? {
-        guard case .provider(let provider) = PanelClickRouter.target(
-            at: point,
-            in: bounds,
-            providers: providers()
-        ) else {
+    private func panelToolTipText(for target: PanelClickTarget?) -> String? {
+        guard let target else {
             return nil
         }
 
-        return toolTipProvider(provider)
+        switch target {
+        case .provider(let provider):
+            return toolTipProvider(provider)
+        case .settings:
+            return "Settings"
+        case .close, .background:
+            return nil
+        }
     }
 
     private func schedulePanelToolTip(_ text: String) {
@@ -378,6 +416,7 @@ final class PanelToolTipView: NSView {
 final class JuicebarPanelController {
     private let viewModel: PromptJuiceViewModel
     private let onClaudeSettingsRequested: (Bool) -> Void
+    private let onSettingsRequested: () -> Void
     private var panel: NSWindow?
     private var cancellables = Set<AnyCancellable>()
     private var localClickMonitor: Any?
@@ -403,10 +442,12 @@ final class JuicebarPanelController {
 
     init(
         viewModel: PromptJuiceViewModel,
-        onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in }
+        onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in },
+        onSettingsRequested: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
         self.onClaudeSettingsRequested = onClaudeSettingsRequested
+        self.onSettingsRequested = onSettingsRequested
 
         viewModel.$enabledProviders
             .receive(on: RunLoop.main)
@@ -446,6 +487,7 @@ final class JuicebarPanelController {
 
     func hide() {
         (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
+        viewModel.setHoveredPanelTarget(nil)
         removeEventMonitors()
         panel?.orderOut(nil)
     }
@@ -502,6 +544,9 @@ final class JuicebarPanelController {
             onPanelClick: { [weak self] target in
                 self?.handleClick(target)
             },
+            onHoverTargetChanged: { [weak viewModel] target in
+                viewModel?.setHoveredPanelTarget(target)
+            },
             onCancel: { [weak self] in
                 self?.dismissSurface()
             }
@@ -514,6 +559,9 @@ final class JuicebarPanelController {
         switch target {
         case .close:
             dismissSurface()
+        case .settings:
+            dismissSurface()
+            onSettingsRequested()
         case .provider(let provider):
             if provider == .claude, viewModel.claudeRowOffersSetup {
                 dismissSurface()

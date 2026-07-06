@@ -20,6 +20,7 @@ final class PanelClickRouterTests: XCTestCase {
         assertRowEdges(rows[0].rect, routeTo: .claude, in: bounds, providers: providers)
         assertRowEdges(rows[1].rect, routeTo: .codex, in: bounds, providers: providers)
         XCTAssertEqual(target(at: closeCenter(in: bounds), in: bounds, providers: providers), .close)
+        XCTAssertEqual(target(at: PanelClickRouter.settingsRect(in: bounds).center, in: bounds, providers: providers), .settings)
         XCTAssertNil(target(at: NSPoint(x: bounds.midX, y: 28), in: bounds, providers: providers))
         XCTAssertNil(target(at: NSPoint(x: bounds.midX, y: (rows[0].rect.maxY + rows[1].rect.minY) / 2), in: bounds, providers: providers))
         XCTAssertNil(target(at: NSPoint(x: 6, y: rows[0].rect.midY), in: bounds, providers: providers))
@@ -42,7 +43,10 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertEqual(rows[1].rect.height, PromptJuicePanelMetrics.plainRowHeight)
         XCTAssertEqual(
             bounds.height,
-            63 + PromptJuicePanelMetrics.plainRowHeight * 2 + PromptJuicePanelMetrics.rowSpacing
+            63
+                + PromptJuicePanelMetrics.plainRowHeight * 2
+                + PromptJuicePanelMetrics.rowSpacing
+                + PromptJuicePanelMetrics.settingsHeightIncrement
         )
         XCTAssertEqual(
             PanelClickRouter.target(
@@ -70,6 +74,7 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertEqual(rows.map(\.provider), providers)
         XCTAssertEqual(target(at: rows[0].rect.center, in: bounds, providers: providers), .provider(provider))
         assertRowEdges(rows[0].rect, routeTo: provider, in: bounds, providers: providers)
+        XCTAssertEqual(target(at: PanelClickRouter.settingsRect(in: bounds).center, in: bounds, providers: providers), .settings)
         XCTAssertNil(target(at: NSPoint(x: bounds.midX, y: 28), in: bounds, providers: providers))
         XCTAssertNil(target(at: NSPoint(x: bounds.midX, y: rows[0].rect.minY - 4), in: bounds, providers: providers))
         XCTAssertNil(target(at: NSPoint(x: 6, y: rows[0].rect.midY), in: bounds, providers: providers))

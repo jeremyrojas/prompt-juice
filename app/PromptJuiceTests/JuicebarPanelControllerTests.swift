@@ -145,6 +145,50 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.panelFrameForTesting?.height, expectedHeight)
     }
 
+    func testSettingsGearClickOpensSettings() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        var settingsOpenCount = 0
+        let controller = JuicebarPanelController(
+            viewModel: viewModel,
+            onSettingsRequested: { settingsOpenCount += 1 }
+        )
+
+        controller.show()
+        defer { controller.hide() }
+
+        await waitUntil {
+            controller.panelFrameForTesting != nil
+        }
+
+        let frame = try XCTUnwrap(controller.panelFrameForTesting)
+        let bounds = NSRect(origin: .zero, size: frame.size)
+        let providers = viewModel.visibleSnapshots.map(\.provider)
+        let target = try XCTUnwrap(
+            PanelClickRouter.target(
+                at: PanelClickRouter.settingsRect(in: bounds).center,
+                in: bounds,
+                providers: providers
+            )
+        )
+
+        XCTAssertEqual(target, .settings)
+
+        controller.clickTargetForTesting(target)
+
+        XCTAssertEqual(settingsOpenCount, 1)
+        XCTAssertNil(viewModel.selectedProvider)
+    }
+
     private func makeFixture() -> (
         suiteName: String,
         defaults: UserDefaults,

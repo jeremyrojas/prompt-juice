@@ -4,12 +4,16 @@ enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
     static let plainRowHeight: CGFloat = 48
     static let rowSpacing: CGFloat = 7
+    static let settingsHitSize: CGFloat = 22
+    static let settingsHeightIncrement: CGFloat = 6
+    static let settingsBottomInset: CGFloat = 0
+    static let settingsTrailingInset: CGFloat = 14
 
     static func height(rowCount: Int) -> CGFloat {
         let rows = max(rowCount, 1)
         let rowBlockHeight = CGFloat(rows) * plainRowHeight
             + CGFloat(max(rows - 1, 0)) * rowSpacing
-        return 63 + rowBlockHeight
+        return 63 + rowBlockHeight + settingsHeightIncrement
     }
 }
 
@@ -32,6 +36,11 @@ struct PromptJuicePanelView: View {
         .padding(14)
         .frame(width: PromptJuicePanelMetrics.width, height: panelHeight)
         .glassPanel(cornerRadius: panelCornerRadius)
+        .overlay(alignment: .bottomTrailing) {
+            settingsGear
+                .padding(.trailing, PromptJuicePanelMetrics.settingsTrailingInset)
+                .padding(.bottom, PromptJuicePanelMetrics.settingsBottomInset)
+        }
     }
 
     private var header: some View {
@@ -90,6 +99,27 @@ struct PromptJuicePanelView: View {
                 ProviderUsageRow(snapshot: snapshot, viewModel: viewModel)
             }
         }
+    }
+
+    private var settingsGear: some View {
+        let isHovered = viewModel.hoveredPanelTarget == .settings
+
+        return Image(systemName: "gearshape")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.40))
+            .frame(
+                width: PromptJuicePanelMetrics.settingsHitSize,
+                height: PromptJuicePanelMetrics.settingsHitSize
+            )
+            .background {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .opacity(isHovered ? 1 : 0)
+                    .overlay(Circle().fill(Color.white.opacity(isHovered ? 0.065 : 0)))
+            }
+            .overlay(Circle().stroke(Color.white.opacity(isHovered ? 0.12 : 0), lineWidth: 1))
+            .contentShape(Circle())
+            .accessibilityLabel("Settings")
     }
 
     private var headerTint: Color {
