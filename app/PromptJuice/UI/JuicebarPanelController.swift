@@ -426,6 +426,10 @@ final class JuicebarPanelController {
         panel?.frame
     }
 
+    func clickTargetForTesting(_ target: PanelClickTarget) {
+        handleClick(target)
+    }
+
     init(
         viewModel: PromptJuiceViewModel,
         onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in }
@@ -557,8 +561,12 @@ final class JuicebarPanelController {
         case .snooze:
             viewModel.snooze()
             scheduleSnoozeAutoHide()
-        case .provider:
-            break
+        case .provider(let provider):
+            if provider == .claude, viewModel.claudeRowOffersSetup {
+                dismissSurface()
+                onClaudeSettingsRequested(true)
+                return
+            }
         case .background:
             viewModel.clearSelection()
         }

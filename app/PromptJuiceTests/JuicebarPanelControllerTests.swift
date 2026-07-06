@@ -74,6 +74,82 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.panelFrameForTesting?.height, initialHeight)
     }
 
+    func testClaudeSetupRowClickOpensClaudeSettings() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.claudeSetupSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { false }
+        )
+        var settingsRequests: [Bool] = []
+        let controller = JuicebarPanelController(
+            viewModel: viewModel,
+            onClaudeSettingsRequested: { settingsRequests.append($0) }
+        )
+
+        controller.show()
+        defer { controller.hide() }
+
+        await waitUntil {
+            controller.panelFrameForTesting != nil
+        }
+
+        XCTAssertTrue(viewModel.claudeRowOffersSetup)
+
+        let target = try providerTarget(row: 0, controller: controller, viewModel: viewModel)
+        XCTAssertEqual(target, .provider(.claude))
+
+        controller.clickTargetForTesting(target)
+
+        XCTAssertEqual(settingsRequests, [true])
+        XCTAssertNil(viewModel.selectedProvider)
+    }
+
+    func testAvailableProviderRowClickIsDisplayOnly() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        var settingsRequests: [Bool] = []
+        let controller = JuicebarPanelController(
+            viewModel: viewModel,
+            onClaudeSettingsRequested: { settingsRequests.append($0) }
+        )
+        let expectedHeight = PromptJuicePanelMetrics.height(
+            mode: .manual,
+            rowCount: 2
+        )
+
+        controller.show()
+        defer { controller.hide() }
+
+        await waitUntil {
+            controller.panelFrameForTesting?.height == expectedHeight
+        }
+
+        let target = try providerTarget(row: 1, controller: controller, viewModel: viewModel)
+        XCTAssertEqual(target, .provider(.codex))
+
+        controller.clickTargetForTesting(target)
+
+        XCTAssertNil(viewModel.selectedProvider)
+        XCTAssertTrue(settingsRequests.isEmpty)
+        XCTAssertEqual(viewModel.detail, "Resets in 3h 0m")
+        XCTAssertEqual(controller.panelFrameForTesting?.height, expectedHeight)
+    }
+
     private func makeFixture() -> (
         suiteName: String,
         defaults: UserDefaults,
@@ -99,6 +175,34 @@ final class JuicebarPanelControllerTests: XCTestCase {
         }
 
         XCTAssertTrue(condition(), file: file, line: line)
+    }
+
+    private func providerTarget(
+        row: Int,
+        controller: JuicebarPanelController,
+        viewModel: PromptJuiceViewModel,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> PanelClickTarget {
+        let frame = try XCTUnwrap(controller.panelFrameForTesting, file: file, line: line)
+        let providers = viewModel.visibleSnapshots.map(\.provider)
+        let bounds = NSRect(origin: .zero, size: frame.size)
+        let rows = PanelClickRouter.rowRects(
+            in: bounds,
+            mode: viewModel.mode,
+            providers: providers
+        )
+        let row = try XCTUnwrap(rows[safe: row], file: file, line: line)
+        return try XCTUnwrap(
+            PanelClickRouter.target(
+                at: row.rect.center,
+                in: bounds,
+                mode: viewModel.mode,
+                providers: providers
+            ),
+            file: file,
+            line: line
+        )
     }
 
     private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
@@ -158,6 +262,34 @@ final class JuicebarPanelControllerTests: XCTestCase {
             updatedAt: fixedNow.addingTimeInterval(60)
         )
     ]
+
+    private static let claudeSetupSnapshots = [
+        ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeStatusline,
+            confidence: .unavailable,
+            updatedAt: fixedNow,
+            statusDetail: "Claude statusline and local usage unavailable"
+        ),
+        ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: fixedNow.addingTimeInterval(180 * 60),
+                durationMinutes: 300
+            ),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: fixedNow
+        )
+    ]
+}
+
+private extension Array {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }
 
 private final class MutableUsageProviderClient: UsageProviderClient, @unchecked Sendable {
