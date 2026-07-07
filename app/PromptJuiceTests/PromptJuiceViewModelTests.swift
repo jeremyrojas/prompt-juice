@@ -670,12 +670,110 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "Read from Claude Code · \(time)"
+            "Read from Claude Code at \(time) · send any message in Claude Code to refresh"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
             "Right now it's showing your last exact reading from \(time). Claude Code will replace it when the statusline sends a current window."
         )
+    }
+
+    func testStaleClaudeIndicatorAppearsOnlyAfterTenMinutes() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        let staleUpdatedAt = Self.fixedNow.addingTimeInterval(-11 * 60)
+        let staleClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 32,
+                resetAt: Self.fixedNow.addingTimeInterval(78 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeCache,
+            confidence: .stale,
+            updatedAt: staleUpdatedAt
+        )
+        let time = clockTime(staleUpdatedAt)
+
+        XCTAssertTrue(viewModel.showsStaleReadingIndicator(for: staleClaude))
+        XCTAssertEqual(
+            viewModel.staleReadingIndicatorAccessibilityLabel(for: staleClaude),
+            "Reading from \(time)"
+        )
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: staleClaude),
+            "Read from Claude Code at \(time) · send any message in Claude Code to refresh"
+        )
+        XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: staleClaude), "68%")
+        XCTAssertEqual(viewModel.fullResetText(for: staleClaude), "resets in 1h 18m")
+    }
+
+    func testStaleClaudeIndicatorStaysHiddenForNonqualifyingRows() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        let oldUpdate = Self.fixedNow.addingTimeInterval(-11 * 60)
+        let exactlyTenMinutesOld = Self.fixedNow.addingTimeInterval(-10 * 60)
+        let baseRateWindow = RateWindow.available(
+            usedPercent: 32,
+            resetAt: Self.fixedNow.addingTimeInterval(78 * 60),
+            durationMinutes: 300
+        )
+        let cases = [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: baseRateWindow,
+                source: .claudeStatusline,
+                confidence: .exact,
+                updatedAt: oldUpdate
+            ),
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: baseRateWindow,
+                source: .claudeLocalLogs,
+                confidence: .estimated,
+                updatedAt: oldUpdate
+            ),
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: baseRateWindow,
+                source: .claudeCache,
+                confidence: .stale,
+                updatedAt: exactlyTenMinutesOld
+            ),
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .unavailable,
+                source: .claudeStatusline,
+                confidence: .stale,
+                updatedAt: oldUpdate,
+                statusDetail: "Fresh window",
+                isFreshSessionWindow: true
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: baseRateWindow,
+                source: .codexCache,
+                confidence: .stale,
+                updatedAt: oldUpdate
+            )
+        ]
+
+        for snapshot in cases {
+            XCTAssertFalse(viewModel.showsStaleReadingIndicator(for: snapshot), snapshot.displayName)
+            XCTAssertNil(viewModel.staleReadingIndicatorAccessibilityLabel(for: snapshot), snapshot.displayName)
+        }
     }
 
     func testClaudeUnavailableSetupUsesShortButtonLabel() {

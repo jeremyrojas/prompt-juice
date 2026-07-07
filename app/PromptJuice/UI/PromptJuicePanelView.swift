@@ -148,9 +148,7 @@ private struct ProviderUsageRow: View {
             HStack(spacing: 8) {
                 providerDot
 
-                Text(snapshot.displayName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(snapshot.isAvailable ? 0.88 : 0.6))
+                providerName
 
                 statusChip
 
@@ -244,6 +242,21 @@ private struct ProviderUsageRow: View {
             .frame(width: 7, height: 7)
             .opacity(snapshot.isAvailable ? 1 : 0.4)
             .shadow(color: providerColor.opacity(snapshot.isAvailable ? 0.55 : 0), radius: 5)
+    }
+
+    private var providerName: some View {
+        HStack(spacing: 5) {
+            Text(snapshot.displayName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(snapshot.isAvailable ? 0.88 : 0.6))
+
+            if let staleReadingLabel = viewModel.staleReadingIndicatorAccessibilityLabel(for: snapshot) {
+                Image(systemName: "exclamationmark.circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.46))
+                    .accessibilityLabel(staleReadingLabel)
+            }
+        }
     }
 
     private var providerColor: Color {

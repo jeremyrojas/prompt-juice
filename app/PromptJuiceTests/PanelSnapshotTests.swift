@@ -22,6 +22,7 @@ final class PanelSnapshotTests: XCTestCase {
         try render("checking", CheckingFixtureClient())
         try render("notmeasured", NotMeasuredFixtureClient())
         try render("clash", ClashFixtureClient())
+        try render("stale-claude", StaleClaudeFixtureClient())
         try render("codexonly", CodexOnlyFixtureClient(), enabledProviders: [.codex])
         try render(
             "claudeonly-notmeasured",
@@ -104,7 +105,40 @@ final class PanelSnapshotTests: XCTestCase {
                 viewModel: setupAvailableViewModel(),
                 isEnabled: false
             )
-            .environment(\.colorScheme, .dark)
+                .environment(\.colorScheme, .dark)
+        )
+    }
+
+    func testRenderStaleClaudeIndicatorSnapshots() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
+            "Set PROMPTJUICE_SNAPSHOT=1 to render stale Claude snapshots."
+        )
+
+        let viewModel = staleClaudeViewModel()
+        let panelHeight = PromptJuicePanelMetrics.height(
+            rowCount: viewModel.visibleSnapshots.count
+        )
+        let content = ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.12, blue: 0.16),
+                    Color(red: 0.04, green: 0.05, blue: 0.08)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            PromptJuicePanelView(viewModel: viewModel, onClose: {})
+                .padding(40)
+        }
+        .frame(width: 464, height: panelHeight + 80)
+
+        try renderView("panel-stale-claude", content: content)
+        try renderView(
+            "tooltip-stale-claude",
+            content: AwaitingTooltipPreview(text: tooltipText(from: viewModel))
+                .environment(\.colorScheme, .dark)
         )
     }
 
@@ -290,6 +324,22 @@ final class PanelSnapshotTests: XCTestCase {
         return viewModel
     }
 
+    private func staleClaudeViewModel() -> PromptJuiceViewModel {
+        let suiteName = "PanelSnapshotTests.stale-claude.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: StaleClaudeFixtureClient(),
+            now: { self.now },
+            isClaudeBridgeCurrent: { true }
+        )
+        viewModel.showManualCheck()
+        return viewModel
+    }
+
     private func claudeSetupPlan(isWrappingExisting: Bool) -> ClaudeBridgeInstaller.Plan {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let settingsPath = home
@@ -399,6 +449,37 @@ private struct EstimateFixtureClient: UsageProviderClient {
                 updatedAt: now
             ),
             codexExact(now)
+        ]
+    }
+}
+
+private struct StaleClaudeFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .claudeCache
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .available(
+                    usedPercent: 32,
+                    resetAt: now.addingTimeInterval(78 * 60),
+                    durationMinutes: 300
+                ),
+                source: .claudeCache,
+                confidence: .stale,
+                updatedAt: now.addingTimeInterval(-11 * 60)
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .available(
+                    usedPercent: 11,
+                    resetAt: now.addingTimeInterval(81 * 60),
+                    durationMinutes: 300
+                ),
+                source: .codexAppServer,
+                confidence: .exact,
+                updatedAt: now
+            )
         ]
     }
 }
