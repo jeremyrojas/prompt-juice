@@ -48,6 +48,7 @@ final class PromptJuiceViewModel: ObservableObject {
     /// Dormant row selection state retained for future scoped provider UI.
     /// Provider row clicks currently leave this unchanged.
     @Published private(set) var selectedProvider: UsageProvider?
+    @Published private(set) var hoveredPanelTarget: PanelClickTarget?
     @Published private(set) var actionMessage: String?
     @Published private(set) var thresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
@@ -344,6 +345,14 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func clearSelection() {
         selectedProvider = nil
+    }
+
+    func setHoveredPanelTarget(_ target: PanelClickTarget?) {
+        guard hoveredPanelTarget != target else {
+            return
+        }
+
+        hoveredPanelTarget = target
     }
 
     private var alertSnapshot: UsageSnapshot? {

@@ -2,7 +2,7 @@ import AppKit
 import Combine
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let viewModel = PromptJuiceViewModel()
     private let claudeBridgeInstaller = ClaudeBridgeInstaller()
     private let claudeStatusCachePoller = ClaudeStatusCachePoller()
@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel: viewModel,
         onClaudeSettingsRequested: { [weak self] presentingSetup in
             self?.settingsWindowController.show(presentingClaudeSetup: presentingSetup)
+        },
+        onSettingsRequested: { [weak self] in
+            self?.settingsWindowController.show()
         }
     )
     private var statusItem: NSStatusItem?
@@ -209,11 +212,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showContextMenu() {
-        guard let button = statusItem?.button else {
+        guard let statusItem,
+              let button = statusItem.button else {
             return
         }
 
         let menu = NSMenu()
+        menu.delegate = self
         menu.addItem(
             withTitle: "Show Usage",
             action: #selector(showUsage),
@@ -237,11 +242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q"
         ).target = self
 
-        menu.popUp(
-            positioning: nil,
-            at: NSPoint(x: 0, y: 0),
-            in: button
-        )
+        statusItem.menu = menu
+        button.performClick(nil)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        statusItem?.menu = nil
     }
 
     @objc private func showUsage() {
