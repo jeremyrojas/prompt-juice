@@ -824,7 +824,7 @@ final class PromptJuiceViewModel: ObservableObject {
                     return "Estimated from local Claude Code activity"
                 }
             case .stale:
-                return "Read from Claude Code · \(clockTime(snapshot.updatedAt))"
+                return "Read from Claude Code at \(clockTime(snapshot.updatedAt)) · send any message in Claude Code to refresh"
             case .unavailable:
                 if claudeLiveUpgrade == .awaitingSession {
                     return "You're set up · waiting for Claude Code usage"
@@ -856,6 +856,21 @@ final class PromptJuiceViewModel: ObservableObject {
         case .unavailable:
             return snapshot.statusDetail ?? "Not measured yet"
         }
+    }
+
+    func showsStaleReadingIndicator(for snapshot: UsageSnapshot) -> Bool {
+        snapshot.provider == .claude
+            && snapshot.confidence == .stale
+            && !snapshot.isFreshSessionWindow
+            && now().timeIntervalSince(snapshot.updatedAt) > 10 * 60
+    }
+
+    func staleReadingIndicatorAccessibilityLabel(for snapshot: UsageSnapshot) -> String? {
+        guard showsStaleReadingIndicator(for: snapshot) else {
+            return nil
+        }
+
+        return "Reading from \(clockTime(snapshot.updatedAt))"
     }
 
     var shouldShowClaudeMeasurementInfo: Bool {
