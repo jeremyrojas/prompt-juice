@@ -217,33 +217,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        let menu = NSMenu()
+        let menu = Self.makeContextMenu(target: self)
         menu.delegate = self
+        statusItem.menu = menu
+        button.performClick(nil)
+    }
+
+    static func makeContextMenu(target: AnyObject) -> NSMenu {
+        let menu = NSMenu()
         menu.addItem(
             withTitle: "Show Usage",
             action: #selector(showUsage),
             keyEquivalent: ""
-        ).target = self
-        menu.addItem(
-            withTitle: "Refresh Usage",
-            action: #selector(refreshUsage),
-            keyEquivalent: "r"
-        ).target = self
+        ).target = target
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "Settings…",
             action: #selector(showSettings),
             keyEquivalent: ","
-        ).target = self
+        ).target = target
         menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit PromptJuice",
             action: #selector(quit),
             keyEquivalent: "q"
-        ).target = self
+        ).target = target
 
-        statusItem.menu = menu
-        button.performClick(nil)
+        return menu
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -257,11 +257,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showSettings() {
         settingsWindowController.show()
-    }
-
-    @objc private func refreshUsage() {
-        viewModel.refreshUsage()
-        panelController.show()
     }
 
     @objc private func quit() {
