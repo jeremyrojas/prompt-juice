@@ -8,6 +8,10 @@ import SwiftUI
 struct VisualEffectBackground: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
     var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+    /// Round the effect view's own layer. SwiftUI's `.clipShape` doesn't mask a
+    /// hosted `NSView`'s backing layer, so without this the rectangular material
+    /// pokes square corners past the panel's rounded outline.
+    var cornerRadius: CGFloat = 0
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -15,6 +19,7 @@ struct VisualEffectBackground: NSViewRepresentable {
         view.blendingMode = blendingMode
         view.state = .active
         view.isEmphasized = true
+        applyCornerRadius(to: view)
         return view
     }
 
@@ -22,6 +27,18 @@ struct VisualEffectBackground: NSViewRepresentable {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.state = .active
+        applyCornerRadius(to: nsView)
+    }
+
+    private func applyCornerRadius(to view: NSVisualEffectView) {
+        guard cornerRadius > 0 else {
+            return
+        }
+
+        view.wantsLayer = true
+        view.layer?.cornerRadius = cornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
     }
 }
 
@@ -42,7 +59,7 @@ struct PanelMaterial: View {
                 .glassEffect(.regular, in: shape)
         } else {
             ZStack {
-                VisualEffectBackground()
+                VisualEffectBackground(cornerRadius: cornerRadius)
                 shape.fill(Color.black.opacity(0.24))
             }
             .clipShape(shape)
