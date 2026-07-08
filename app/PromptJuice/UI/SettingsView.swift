@@ -48,10 +48,6 @@ struct SettingsView: View {
             .frame(height: 174)
 
             HStack {
-                Text("Keep at least one on")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
                 Spacer()
 
                 Button("Continue", action: onFirstRunContinue)
@@ -67,12 +63,12 @@ struct SettingsView: View {
         VStack(spacing: 9) {
             ZStack {
                 Circle()
-                    .fill(Color.orange.opacity(0.16))
+                    .fill(JuicePalette.green.opacity(0.16))
                     .frame(width: 54, height: 54)
 
                 DropletGauge(
-                    remaining: 0.66,
-                    tint: .orange,
+                    remaining: 0.92,
+                    tint: JuicePalette.green,
                     lineWidth: 2
                 )
                 .frame(width: 25, height: 29)
@@ -81,7 +77,7 @@ struct SettingsView: View {
             Text("Welcome to PromptJuice")
                 .font(.title3.weight(.semibold))
 
-            Text("Pick the providers you use. The Juicebar only watches what you turn on — change it anytime in Settings.")
+            Text("Toggle on the AI tools that you use. Change anytime in Settings.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -118,7 +114,7 @@ struct SettingsView: View {
                     provider: provider,
                     viewModel: viewModel,
                     isEnabled: firstRunProviderBinding(for: provider),
-                    isToggleDisabled: false,
+                    isToggleDisabled: isFirstRunLastEnabledProvider(provider),
                     onSetUpClaude: {
                         state.isClaudeSetupPresented = true
                     }
@@ -191,6 +187,11 @@ struct SettingsView: View {
     private func isLastEnabledProvider(_ provider: UsageProvider) -> Bool {
         viewModel.enabledProviders.count == 1
             && viewModel.enabledProviders.contains(provider)
+    }
+
+    private func isFirstRunLastEnabledProvider(_ provider: UsageProvider) -> Bool {
+        state.firstRunEnabledProviders.count == 1
+            && state.firstRunEnabledProviders.contains(provider)
     }
 }
 

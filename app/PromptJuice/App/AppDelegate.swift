@@ -297,14 +297,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func processUseSoonNotifications() {
         let notificationDate = Date()
 
-        for withdrawal in viewModel.staleUseSoonNotificationWithdrawals(now: notificationDate) {
-            notificationService.removeUseSoonNotifications(identifiers: [withdrawal.notificationIdentifier])
-            viewModel.clearUseSoonNotificationLatch(for: withdrawal)
+        let withdrawals = viewModel.staleUseSoonNotificationWithdrawals(now: notificationDate)
+        if !withdrawals.isEmpty {
+            // Providers merge into one banner, so also drop the merged id — not
+            // just the per-provider ones — then clear each stale latch.
+            var identifiers = withdrawals.map(\.notificationIdentifier)
+            if let merged = viewModel.lastDispatchedUseSoonNotificationIdentifier {
+                identifiers.append(merged)
+            }
+            notificationService.removeUseSoonNotifications(identifiers: identifiers)
+            withdrawals.forEach(viewModel.clearUseSoonNotificationLatch)
+            viewModel.forgetDispatchedUseSoonNotificationIfCleared()
         }
 
-        for notice in viewModel.pendingUseSoonNotifications(now: notificationDate) {
-            viewModel.markUseSoonNoticeDispatched(notice)
-            notificationService.sendUseSoonNotification(notice)
+        let pending = viewModel.pendingUseSoonNotifications(now: notificationDate)
+        guard !pending.isEmpty,
+              let merged = MergedUseSoonNotification(notices: pending) else {
+            return
         }
+
+        pending.forEach(viewModel.markUseSoonNoticeDispatched)
+        viewModel.rememberDispatchedUseSoonNotification(merged)
+        notificationService.sendUseSoonNotification(merged)
     }
 }

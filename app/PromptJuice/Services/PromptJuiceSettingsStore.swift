@@ -10,6 +10,8 @@ final class PromptJuiceSettingsStore {
         static let remainingPercentThreshold = "remainingPercentThreshold"
         static let notifiedUseSoonWindowIDs = "notifiedUseSoonWindowIDs"
         static let useSoonNotificationsEnabled = "useSoonNotificationsEnabled"
+        static let didOfferUseSoonNotification = "didOfferUseSoonNotification"
+        static let lastUseSoonNotificationIdentifier = "lastUseSoonNotificationIdentifier"
         static let usageSourceMode = "usageSourceMode"
     }
 
@@ -62,6 +64,30 @@ final class PromptJuiceSettingsStore {
         }
         set {
             defaults.set(newValue, forKey: Key.useSoonNotificationsEnabled)
+        }
+    }
+
+    /// True once the in-panel "want notifications?" prime has been shown and
+    /// answered (enabled or dismissed). Latches forever so the just-in-time ask
+    /// appears at most once; Settings stays the always-on path afterward.
+    var didOfferUseSoonNotification: Bool {
+        get {
+            defaults.bool(forKey: Key.didOfferUseSoonNotification)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.didOfferUseSoonNotification)
+        }
+    }
+
+    /// Identifier of the most recently delivered use-soon notification. Because
+    /// several amber providers are merged into a single banner, this is the one
+    /// id to remove when the covered windows go stale.
+    var lastUseSoonNotificationIdentifier: String? {
+        get {
+            defaults.string(forKey: Key.lastUseSoonNotificationIdentifier)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.lastUseSoonNotificationIdentifier)
         }
     }
 

@@ -31,6 +31,51 @@ final class PanelSnapshotTests: XCTestCase {
         )
     }
 
+    func testRenderNotificationPrimeSnapshot() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
+            "Set PROMPTJUICE_SNAPSHOT=1 to render the notification prime snapshot."
+        )
+
+        let suiteName = "PanelSnapshotTests.prime.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: FixtureUsageProviderClient(scenario: .underusedCodex),
+            now: { self.now }
+        )
+        viewModel.showManualCheck()
+        viewModel.setNotificationAuthorization(.notDetermined)
+
+        XCTAssertTrue(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        let panelHeight = PromptJuicePanelMetrics.height(
+            rowCount: viewModel.visibleSnapshots.count,
+            showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
+        )
+
+        let content = ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.12, blue: 0.16),
+                    Color(red: 0.04, green: 0.05, blue: 0.08)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            PromptJuicePanelView(viewModel: viewModel, onClose: {})
+                .padding(40)
+        }
+        .frame(width: 464, height: panelHeight + 80)
+
+        try renderView("panel-notification-prime", content: content)
+    }
+
     func testRenderClaudeSetupSnapshots() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",

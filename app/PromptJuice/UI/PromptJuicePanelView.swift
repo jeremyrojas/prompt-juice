@@ -8,12 +8,27 @@ enum PromptJuicePanelMetrics {
     static let settingsHeightIncrement: CGFloat = 30
     static let settingsBottomInset: CGFloat = 8
     static let settingsTrailingInset: CGFloat = 14
+    static let contentPadding: CGFloat = 14
+    static let contentSpacing: CGFloat = 10
 
-    static func height(rowCount: Int) -> CGFloat {
+    // Just-in-time notification prime banner. Shared by the view (layout) and
+    // `PanelClickRouter` (hit-testing) so the amber CTA and its tap targets stay
+    // pixel-aligned.
+    static let primeBannerHeight: CGFloat = 84
+    static let primeCardPadding: CGFloat = 11
+    static let primeButtonHeight: CGFloat = 30
+    static let primeButtonSpacing: CGFloat = 8
+    static let primeEnableButtonWidth: CGFloat = 172
+    static let primeDismissButtonWidth: CGFloat = 76
+
+    static func height(rowCount: Int, showsNotificationPrime: Bool = false) -> CGFloat {
         let rows = max(rowCount, 1)
         let rowBlockHeight = CGFloat(rows) * plainRowHeight
             + CGFloat(max(rows - 1, 0)) * rowSpacing
-        return 63 + rowBlockHeight + settingsHeightIncrement
+        let primeBlockHeight = showsNotificationPrime
+            ? contentSpacing + primeBannerHeight
+            : 0
+        return 63 + rowBlockHeight + primeBlockHeight + settingsHeightIncrement
     }
 }
 
@@ -23,17 +38,22 @@ struct PromptJuicePanelView: View {
 
     private var panelHeight: CGFloat {
         PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count
+            rowCount: viewModel.visibleSnapshots.count,
+            showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
         )
     }
     private let panelCornerRadius: CGFloat = 22
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: PromptJuicePanelMetrics.contentSpacing) {
             header
             usageRows
+
+            if viewModel.shouldOfferUseSoonNotificationPrime {
+                NotificationPrimeBanner()
+            }
         }
-        .padding(14)
+        .padding(PromptJuicePanelMetrics.contentPadding)
         .frame(width: PromptJuicePanelMetrics.width, height: panelHeight, alignment: .top)
         .glassPanel(cornerRadius: panelCornerRadius)
         .overlay(alignment: .bottomTrailing) {
@@ -136,6 +156,89 @@ struct PromptJuicePanelView: View {
             lineWidth: 1.6
         )
         .frame(width: 17, height: 19)
+    }
+}
+
+/// One-time just-in-time prime for macOS notifications, shown under the rows
+/// during an amber moment. Visual only — the panel routes clicks through
+/// `PanelClickRouter`, so the two labels are matched by hit-rects there, not by
+/// SwiftUI `Button` actions.
+private struct NotificationPrimeBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(JuicePalette.amber)
+
+                Text("Want to get notified when to use your juice?")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: PromptJuicePanelMetrics.primeButtonSpacing) {
+                Spacer(minLength: 0)
+                dismissLabel
+                enableLabel
+            }
+        }
+        .padding(PromptJuicePanelMetrics.primeCardPadding)
+        .frame(height: PromptJuicePanelMetrics.primeBannerHeight)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(JuicePalette.amber.opacity(0.08))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(JuicePalette.amber.opacity(0.28), lineWidth: 1)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Turn on notifications to know when to use your juice")
+    }
+
+    // Both push buttons share the native macOS 6pt radius; the pair differs only
+    // in fill — secondary bordered, primary filled accent — not in shape.
+    private static let buttonCornerRadius: CGFloat = 6
+
+    private var dismissLabel: some View {
+        Text("Not now")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.82))
+            .frame(
+                width: PromptJuicePanelMetrics.primeDismissButtonWidth,
+                height: PromptJuicePanelMetrics.primeButtonHeight
+            )
+            .background(
+                RoundedRectangle(cornerRadius: Self.buttonCornerRadius, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.buttonCornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+    }
+
+    private var enableLabel: some View {
+        Text("Turn on notifications")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(
+                width: PromptJuicePanelMetrics.primeEnableButtonWidth,
+                height: PromptJuicePanelMetrics.primeButtonHeight
+            )
+            .background(
+                RoundedRectangle(cornerRadius: Self.buttonCornerRadius, style: .continuous)
+                    .fill(Color.accentColor)
+            )
     }
 }
 

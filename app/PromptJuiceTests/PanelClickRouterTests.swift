@@ -70,6 +70,60 @@ final class PanelClickRouterTests: XCTestCase {
         )
     }
 
+    func testRoutesNotificationPrimeButtonsOnlyWhenShown() {
+        let providers: [UsageProvider] = [.claude, .codex]
+        let bounds = NSRect(
+            x: 0,
+            y: 0,
+            width: PromptJuicePanelMetrics.width,
+            height: PromptJuicePanelMetrics.height(
+                rowCount: providers.count,
+                showsNotificationPrime: true
+            )
+        )
+        let rects = PanelClickRouter.notificationPrimeButtonRects(
+            in: bounds,
+            rowCount: providers.count
+        )
+
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: rects.enable.center,
+                in: bounds,
+                providers: providers,
+                showsNotificationPrime: true
+            ),
+            .enableNotifications
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: rects.dismiss.center,
+                in: bounds,
+                providers: providers,
+                showsNotificationPrime: true
+            ),
+            .dismissNotificationPrime
+        )
+
+        // With the prime hidden, those same points must not route to it.
+        XCTAssertNotEqual(
+            PanelClickRouter.target(
+                at: rects.enable.center,
+                in: bounds,
+                providers: providers,
+                showsNotificationPrime: false
+            ),
+            .enableNotifications
+        )
+
+        // The banner buttons sit clear of the rows above and the gear below.
+        let rows = PanelClickRouter.rowRects(in: bounds, providers: providers)
+        XCTAssertGreaterThan(rects.enable.minY, rows[1].rect.maxY)
+        XCTAssertLessThan(rects.enable.maxY, PanelClickRouter.settingsRect(in: bounds).minY)
+        XCTAssertGreaterThan(rects.dismiss.minX, 0)
+        XCTAssertLessThan(rects.enable.maxX, bounds.width)
+    }
+
     private func assertSingleProvider(_ provider: UsageProvider) {
         let providers = [provider]
         let bounds = panelBounds(providerCount: providers.count)

@@ -19,7 +19,7 @@ struct UseSoonNotice: Equatable {
     }
 
     var body: String {
-        "\(remainingPercent)% left · resets in \(resetText)"
+        "You have \(remainingPercent)% left with \(resetText) until reset"
     }
 
     var notificationIdentifier: String {
@@ -40,6 +40,51 @@ struct UseSoonNotificationWithdrawal: Equatable {
     }
 }
 
+/// The single macOS notification actually delivered. When more than one provider
+/// is amber at once their per-provider `UseSoonNotice`s are merged into this so
+/// the user gets one banner listing every provider, not one banner each.
+struct MergedUseSoonNotification: Equatable {
+    let title: String
+    let body: String
+    let identifier: String
+
+    /// Builds the delivered banner from the qualifying per-provider notices,
+    /// already sorted by provider order. Returns `nil` when there's nothing to
+    /// send. One provider reuses its own copy; two or more are combined, and the
+    /// reset clause collapses when the windows share a time (matching the panel).
+    init?(notices: [UseSoonNotice]) {
+        guard let first = notices.first else {
+            return nil
+        }
+
+        if notices.count == 1 {
+            title = first.title
+            body = first.body
+            identifier = first.notificationIdentifier
+            return
+        }
+
+        let names = notices.map(\.providerDisplayName)
+        title = "Use \(names.joined(separator: " and ")) before they reset"
+
+        let sharesResetTime = Set(notices.map(\.resetText)).count == 1
+        if sharesResetTime {
+            let leadIn = notices
+                .map { "\($0.providerDisplayName) \($0.remainingPercent)%" }
+                .joined(separator: " · ")
+            body = "\(leadIn) left, resetting in \(first.resetText)"
+        } else {
+            body = notices
+                .map { "\($0.providerDisplayName) \($0.remainingPercent)% left in \($0.resetText)" }
+                .joined(separator: " · ")
+        }
+
+        identifier = "promptjuice.use-soon.merged." + notices
+            .map { "\($0.provider.rawValue).\($0.windowID)" }
+            .joined(separator: "_")
+    }
+}
+
 private typealias RefreshCompletion = @MainActor @Sendable () -> Void
 
 @MainActor
@@ -55,6 +100,9 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var enabledProviders: Set<UsageProvider>
     @Published private(set) var useSoonNotificationsEnabled: Bool
     @Published private(set) var notificationAuthorization: PromptJuiceNotificationAuthorization = .unknown
+    /// Mirrors `settingsStore.didOfferUseSoonNotification` so SwiftUI re-renders
+    /// the panel when the just-in-time prime is answered.
+    @Published private(set) var didOfferUseSoonNotification: Bool
 
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
@@ -114,6 +162,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.isClaudeBridgeCurrent = isClaudeBridgeCurrent
         self.isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
         self.useSoonNotificationsEnabled = settingsStore.useSoonNotificationsEnabled
+        self.didOfferUseSoonNotification = settingsStore.didOfferUseSoonNotification
         thresholds = settingsStore.thresholds
         snapshots = if let providerClient {
             providerClient.snapshots(now: now())
@@ -415,6 +464,40 @@ final class PromptJuiceViewModel: ObservableObject {
         useSoonNotificationsEnabled && notificationAuthorization == .denied
     }
 
+    /// Just-in-time notification prime: show the one-time in-panel ask only when
+    /// there's a live amber nudge, notifications aren't on, macOS hasn't been
+    /// asked yet, and we haven't already offered it. Any other auth state
+    /// (`.denied`, `.authorized`, `.unknown`) suppresses it — a denied user can't
+    /// be re-prompted from here, an authorized one needs nothing.
+    var shouldOfferUseSoonNotificationPrime: Bool {
+        !didOfferUseSoonNotification
+            && !useSoonNotificationsEnabled
+            && notificationAuthorization == .notDetermined
+            && aggregateSeverity == .useSoon
+    }
+
+    /// Accept the prime: enable notifications (which requests macOS authorization
+    /// upstream) and latch the ask closed.
+    func enableUseSoonNotificationsFromPrime() {
+        markUseSoonNotificationPrimeOffered()
+        setUseSoonNotificationsEnabled(true)
+    }
+
+    /// Decline the prime: latch it closed without enabling. Settings stays the
+    /// always-on path.
+    func dismissUseSoonNotificationPrime() {
+        markUseSoonNotificationPrimeOffered()
+    }
+
+    private func markUseSoonNotificationPrimeOffered() {
+        guard !didOfferUseSoonNotification else {
+            return
+        }
+
+        settingsStore.didOfferUseSoonNotification = true
+        didOfferUseSoonNotification = true
+    }
+
     func setProviderEnabled(_ provider: UsageProvider, _ enabled: Bool) {
         var next = enabledProviders
 
@@ -516,11 +599,35 @@ final class PromptJuiceViewModel: ObservableObject {
             }
     }
 
+    /// The single banner to deliver for the current pending notices — the merge
+    /// of every amber provider into one notification.
+    func mergedUseSoonNotification(now noticeDate: Date) -> MergedUseSoonNotification? {
+        MergedUseSoonNotification(notices: pendingUseSoonNotifications(now: noticeDate))
+    }
+
     func markUseSoonNoticeDispatched(_ notice: UseSoonNotice) {
         settingsStore.markUseSoonWindowNotified(
             provider: notice.provider,
             windowID: notice.windowID
         )
+    }
+
+    /// Remembers the id of the merged banner just delivered so it can be removed
+    /// when its windows go stale.
+    func rememberDispatchedUseSoonNotification(_ merged: MergedUseSoonNotification) {
+        settingsStore.lastUseSoonNotificationIdentifier = merged.identifier
+    }
+
+    var lastDispatchedUseSoonNotificationIdentifier: String? {
+        settingsStore.lastUseSoonNotificationIdentifier
+    }
+
+    /// Drops the remembered banner id once no windows remain latched, so a future
+    /// amber moment starts clean.
+    func forgetDispatchedUseSoonNotificationIfCleared() {
+        if settingsStore.notifiedUseSoonWindowIDs.isEmpty {
+            settingsStore.lastUseSoonNotificationIdentifier = nil
+        }
     }
 
     func staleUseSoonNotificationWithdrawals(now withdrawalDate: Date) -> [UseSoonNotificationWithdrawal] {
