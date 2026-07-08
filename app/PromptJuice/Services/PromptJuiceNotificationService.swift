@@ -1,6 +1,17 @@
 import Foundation
 import UserNotifications
 
+enum PromptJuiceNotificationAuthorization: Equatable {
+    case unknown
+    case notDetermined
+    case authorized
+    case denied
+
+    var allowsDelivery: Bool {
+        self == .authorized
+    }
+}
+
 @MainActor
 final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
@@ -11,10 +22,30 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
         center.delegate = self
     }
 
-    func requestAuthorization(completion: (@MainActor @Sendable (Bool) -> Void)? = nil) {
+    func refreshAuthorizationStatus(
+        completion: @MainActor @Sendable @escaping (PromptJuiceNotificationAuthorization) -> Void
+    ) {
         Task { [center] in
-            let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
-            completion?(granted)
+            let settings = await center.notificationSettings()
+            let authorization = Self.authorization(from: settings.authorizationStatus)
+
+            await MainActor.run {
+                completion(authorization)
+            }
+        }
+    }
+
+    func requestAuthorization(
+        completion: (@MainActor @Sendable (PromptJuiceNotificationAuthorization) -> Void)? = nil
+    ) {
+        Task { [center] in
+            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+            let settings = await center.notificationSettings()
+            let authorization = Self.authorization(from: settings.authorizationStatus)
+
+            await MainActor.run {
+                completion?(authorization)
+            }
         }
     }
 
@@ -22,8 +53,8 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
         _ notice: UseSoonNotice,
         completion: (@MainActor @Sendable (Bool) -> Void)? = nil
     ) {
-        requestAuthorization { [weak self] granted in
-            guard granted else {
+        requestAuthorization { [weak self] authorization in
+            guard authorization.allowsDelivery else {
                 completion?(false)
                 return
             }
@@ -81,5 +112,20 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
         }
 
         completionHandler()
+    }
+
+    private static func authorization(
+        from status: UNAuthorizationStatus
+    ) -> PromptJuiceNotificationAuthorization {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .denied:
+            return .denied
+        case .authorized, .provisional, .ephemeral:
+            return .authorized
+        @unknown default:
+            return .unknown
+        }
     }
 }

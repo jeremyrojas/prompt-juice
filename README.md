@@ -63,6 +63,19 @@ Build a local app bundle:
 ./scripts/build_app.sh
 ```
 
+The build script gives preview builds a stable local code requirement based on
+the app bundle identifier. This keeps macOS notification permissions attached
+to one PromptJuice identity across repeated source builds.
+
+Distributed releases should use Apple Developer ID signing and notarization so
+macOS presents the normal trusted-app install experience.
+
+You can inspect the local signing requirement with:
+
+```bash
+codesign -d -r- build/PromptJuice.app
+```
+
 Build and open the app:
 
 ```bash

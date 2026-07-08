@@ -55,7 +55,7 @@ final class PromptJuiceSettingsStore {
     var useSoonNotificationsEnabled: Bool {
         get {
             guard defaults.object(forKey: Key.useSoonNotificationsEnabled) != nil else {
-                return true
+                return false
             }
 
             return defaults.bool(forKey: Key.useSoonNotificationsEnabled)
@@ -113,6 +113,7 @@ final class PromptJuiceSettingsStore {
         defaults.register(defaults: [
             Key.remainingMinutesThreshold: AlertThresholds.default.remainingMinutes,
             Key.remainingPercentThreshold: AlertThresholds.default.remainingPercent,
+            Key.useSoonNotificationsEnabled: false,
             Key.usageSourceMode: UsageSourceMode.defaultMode.rawValue
         ])
     }

@@ -105,6 +105,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.processUseSoonNotifications()
             }
             .store(in: &cancellables)
+
+        viewModel.$useSoonNotificationsEnabled
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] enabled in
+                guard enabled else {
+                    return
+                }
+
+                self?.requestUseSoonNotificationAuthorization()
+            }
+            .store(in: &cancellables)
     }
 
     private func configureNotifications() {
@@ -115,6 +128,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             self.viewModel.showManualCheck()
             self.panelController.show()
+        }
+
+        refreshUseSoonNotificationAuthorization()
+
+        if viewModel.useSoonNotificationsEnabled {
+            requestUseSoonNotificationAuthorization()
+        }
+    }
+
+    private func refreshUseSoonNotificationAuthorization() {
+        notificationService.refreshAuthorizationStatus { [weak self] authorization in
+            self?.viewModel.setNotificationAuthorization(authorization)
+        }
+    }
+
+    private func requestUseSoonNotificationAuthorization() {
+        notificationService.requestAuthorization { [weak self] authorization in
+            self?.viewModel.setNotificationAuthorization(authorization)
         }
     }
 
