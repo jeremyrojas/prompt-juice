@@ -26,6 +26,10 @@ enum PanelClickTarget: Equatable {
     case close
     case settings
     case provider(UsageProvider)
+    /// The "Turn on notifications" CTA in the just-in-time prime banner.
+    case enableNotifications
+    /// The "Not now" label in the just-in-time prime banner.
+    case dismissNotificationPrime
     /// A click on empty panel chrome (header, gaps) — clears any selection
     /// without dismissing the panel.
     case background
@@ -58,6 +62,41 @@ enum PanelClickRouter {
         }
     }
 
+    /// Hit-rects for the two prime-banner labels, derived from the same metrics
+    /// the SwiftUI banner lays out with so the tap targets track the pixels.
+    static func notificationPrimeButtonRects(
+        in bounds: NSRect,
+        rowCount: Int
+    ) -> (enable: NSRect, dismiss: NSRect) {
+        let rows = max(rowCount, 1)
+        let rowBlock = CGFloat(rows) * PromptJuicePanelMetrics.plainRowHeight
+            + CGFloat(max(rows - 1, 0)) * PromptJuicePanelMetrics.rowSpacing
+        let bannerTop = manualRowsTopInset + rowBlock + PromptJuicePanelMetrics.contentSpacing
+        let buttonsTop = bannerTop
+            + PromptJuicePanelMetrics.primeBannerHeight
+            - PromptJuicePanelMetrics.primeCardPadding
+            - PromptJuicePanelMetrics.primeButtonHeight
+        let innerRight = bounds.width
+            - PromptJuicePanelMetrics.contentPadding
+            - PromptJuicePanelMetrics.primeCardPadding
+
+        let enable = NSRect(
+            x: innerRight - PromptJuicePanelMetrics.primeEnableButtonWidth,
+            y: buttonsTop,
+            width: PromptJuicePanelMetrics.primeEnableButtonWidth,
+            height: PromptJuicePanelMetrics.primeButtonHeight
+        )
+        let dismiss = NSRect(
+            x: enable.minX
+                - PromptJuicePanelMetrics.primeButtonSpacing
+                - PromptJuicePanelMetrics.primeDismissButtonWidth,
+            y: buttonsTop,
+            width: PromptJuicePanelMetrics.primeDismissButtonWidth,
+            height: PromptJuicePanelMetrics.primeButtonHeight
+        )
+        return (enable, dismiss)
+    }
+
     static func settingsRect(in bounds: NSRect) -> NSRect {
         NSRect(
             x: bounds.width
@@ -74,7 +113,8 @@ enum PanelClickRouter {
     static func target(
         at point: NSPoint,
         in bounds: NSRect,
-        providers: [UsageProvider]
+        providers: [UsageProvider],
+        showsNotificationPrime: Bool = false
     ) -> PanelClickTarget? {
         let width = bounds.width
 
@@ -90,6 +130,16 @@ enum PanelClickRouter {
 
         if contains(point, in: settingsRect(in: bounds)) {
             return .settings
+        }
+
+        if showsNotificationPrime {
+            let rects = notificationPrimeButtonRects(in: bounds, rowCount: providers.count)
+            if contains(point, in: rects.enable.insetBy(dx: -4, dy: -8)) {
+                return .enableNotifications
+            }
+            if contains(point, in: rects.dismiss.insetBy(dx: -4, dy: -8)) {
+                return .dismissNotificationPrime
+            }
         }
 
         for (provider, rowRect) in rowRects(
@@ -119,6 +169,7 @@ private protocol PanelToolTipRefreshing: AnyObject {
 
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let providers: () -> [UsageProvider]
+    private let showsNotificationPrime: () -> Bool
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onHoverTargetChanged: (PanelClickTarget?) -> Void
@@ -132,6 +183,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     required init(rootView: Content) {
         self.providers = { [] }
+        self.showsNotificationPrime = { false }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
         self.onHoverTargetChanged = { _ in }
@@ -143,12 +195,14 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     init(
         rootView: Content,
         providers: @escaping () -> [UsageProvider],
+        showsNotificationPrime: @escaping () -> Bool,
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onHoverTargetChanged: @escaping (PanelClickTarget?) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.providers = providers
+        self.showsNotificationPrime = showsNotificationPrime
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
         self.onHoverTargetChanged = onHoverTargetChanged
@@ -249,7 +303,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         PanelClickRouter.target(
             at: point,
             in: bounds,
-            providers: providers()
+            providers: providers(),
+            showsNotificationPrime: showsNotificationPrime()
         )
     }
 
@@ -279,7 +334,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             return toolTipProvider(provider)
         case .settings:
             return "Settings"
-        case .close, .background:
+        case .close, .background, .enableNotifications, .dismissNotificationPrime:
             return nil
         }
     }
@@ -436,7 +491,8 @@ final class JuicebarPanelController {
         NSSize(
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: viewModel.visibleSnapshots.count
+                rowCount: viewModel.visibleSnapshots.count,
+                showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
             )
         )
     }
@@ -475,6 +531,20 @@ final class JuicebarPanelController {
                 self?.applyPanelFrameIfVisible(force: false)
             }
             .store(in: &cancellables)
+
+        // The just-in-time prime banner grows the panel; resize when any of its
+        // inputs flip (auth status resolving, notifications enabling, or the ask
+        // being answered) so the window and the SwiftUI content stay in sync.
+        Publishers.Merge3(
+            viewModel.$notificationAuthorization.map { _ in () },
+            viewModel.$useSoonNotificationsEnabled.map { _ in () },
+            viewModel.$didOfferUseSoonNotification.map { _ in () }
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] in
+            self?.applyPanelFrameIfVisible(force: true)
+        }
+        .store(in: &cancellables)
     }
 
     func toggle() {
@@ -547,6 +617,9 @@ final class JuicebarPanelController {
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
             },
+            showsNotificationPrime: { [weak viewModel] in
+                viewModel?.shouldOfferUseSoonNotificationPrime ?? false
+            },
             toolTipProvider: { [weak viewModel] provider in
                 guard let snapshot = viewModel?.visibleSnapshots.first(where: { $0.provider == provider }) else {
                     return nil
@@ -582,6 +655,13 @@ final class JuicebarPanelController {
                 onClaudeSettingsRequested(true)
                 return
             }
+        case .enableNotifications:
+            (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
+            viewModel.enableUseSoonNotificationsFromPrime()
+            applyPanelFrameIfVisible(force: true)
+        case .dismissNotificationPrime:
+            viewModel.dismissUseSoonNotificationPrime()
+            applyPanelFrameIfVisible(force: true)
         case .background:
             viewModel.clearSelection()
         }

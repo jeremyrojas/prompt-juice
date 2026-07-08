@@ -50,7 +50,7 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
     }
 
     func sendUseSoonNotification(
-        _ notice: UseSoonNotice,
+        _ notification: MergedUseSoonNotification,
         completion: (@MainActor @Sendable (Bool) -> Void)? = nil
     ) {
         requestAuthorization { [weak self] authorization in
@@ -59,7 +59,7 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
                 return
             }
 
-            self?.deliverUseSoonNotification(notice, completion: completion)
+            self?.deliverUseSoonNotification(notification, completion: completion)
         }
     }
 
@@ -69,16 +69,16 @@ final class PromptJuiceNotificationService: NSObject, UNUserNotificationCenterDe
     }
 
     private func deliverUseSoonNotification(
-        _ notice: UseSoonNotice,
+        _ notification: MergedUseSoonNotification,
         completion: (@MainActor @Sendable (Bool) -> Void)?
     ) {
         let content = UNMutableNotificationContent()
-        content.title = notice.title
-        content.body = notice.body
+        content.title = notification.title
+        content.body = notification.body
         content.sound = .default
 
         let request = UNNotificationRequest(
-            identifier: notice.notificationIdentifier,
+            identifier: notification.identifier,
             content: content,
             trigger: nil
         )

@@ -19,8 +19,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(
             notices.map(\.body),
             [
-                "80% left · resets in 10m",
-                "78% left · resets in 12m"
+                "You have 80% left with 10m until reset",
+                "You have 78% left with 12m until reset"
             ]
         )
         XCTAssertEqual(
@@ -145,6 +145,212 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.setUseSoonNotificationsEnabled(false)
 
         XCTAssertFalse(viewModel.showsNotificationAuthorizationHint)
+    }
+
+    func testNotificationPrimeOffersOnlyDuringAmberWhenAuthUndetermined() {
+        let fixture = makeFixture(notificationsEnabled: nil)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.aggregateSeverity, .useSoon)
+        // Auth starts .unknown until the async status refresh lands — suppressed.
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        viewModel.setNotificationAuthorization(.notDetermined)
+        XCTAssertTrue(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        viewModel.setNotificationAuthorization(.denied)
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        viewModel.setNotificationAuthorization(.authorized)
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+    }
+
+    func testNotificationPrimeHiddenWhenNotAmber() {
+        let fixture = makeFixture(notificationsEnabled: nil)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+        viewModel.setNotificationAuthorization(.notDetermined)
+
+        XCTAssertNotEqual(viewModel.aggregateSeverity, .useSoon)
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+    }
+
+    func testNotificationPrimeHiddenWhenNotificationsAlreadyEnabled() {
+        let fixture = makeFixture(notificationsEnabled: true)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        viewModel.setNotificationAuthorization(.notDetermined)
+
+        XCTAssertTrue(viewModel.useSoonNotificationsEnabled)
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+    }
+
+    func testEnablingNotificationPrimeEnablesAndLatchesForever() {
+        let fixture = makeFixture(notificationsEnabled: nil)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        viewModel.setNotificationAuthorization(.notDetermined)
+        XCTAssertTrue(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        viewModel.enableUseSoonNotificationsFromPrime()
+
+        XCTAssertTrue(viewModel.useSoonNotificationsEnabled)
+        XCTAssertTrue(viewModel.didOfferUseSoonNotification)
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+        XCTAssertTrue(fixture.store.didOfferUseSoonNotification)
+
+        // Latch survives relaunch even while still amber + undetermined.
+        let relaunched = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        relaunched.setNotificationAuthorization(.notDetermined)
+        XCTAssertFalse(relaunched.shouldOfferUseSoonNotificationPrime)
+    }
+
+    func testDismissingNotificationPrimeLatchesWithoutEnabling() {
+        let fixture = makeFixture(notificationsEnabled: nil)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        viewModel.setNotificationAuthorization(.notDetermined)
+        XCTAssertTrue(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        viewModel.dismissUseSoonNotificationPrime()
+
+        XCTAssertFalse(viewModel.useSoonNotificationsEnabled)
+        XCTAssertTrue(viewModel.didOfferUseSoonNotification)
+        XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
+
+        let relaunched = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+        relaunched.setNotificationAuthorization(.notDetermined)
+        XCTAssertFalse(relaunched.shouldOfferUseSoonNotificationPrime)
+    }
+
+    func testMergedNotificationCombinesBothProvidersWithDistinctResetTimes() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        let merged = viewModel.mergedUseSoonNotification(now: Self.fixedNow)
+
+        XCTAssertEqual(merged?.title, "Use Claude and Codex before they reset")
+        XCTAssertEqual(merged?.body, "Claude 80% left in 10m · Codex 78% left in 12m")
+        XCTAssertEqual(merged?.identifier.hasPrefix("promptjuice.use-soon.merged."), true)
+    }
+
+    func testMergedNotificationCollapsesSharedResetTime() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let sameTime = [
+            ProviderSnapshot(
+                identity: .claude,
+                rateWindow: .available(
+                    usedPercent: 20,
+                    resetAt: Self.fixedNow.addingTimeInterval(10 * 60),
+                    durationMinutes: 300
+                ),
+                source: .fixture,
+                confidence: .exact,
+                updatedAt: Self.fixedNow
+            ),
+            ProviderSnapshot(
+                identity: .codex,
+                rateWindow: .available(
+                    usedPercent: 22,
+                    resetAt: Self.fixedNow.addingTimeInterval(10 * 60),
+                    durationMinutes: 300
+                ),
+                source: .fixture,
+                confidence: .exact,
+                updatedAt: Self.fixedNow
+            )
+        ]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: sameTime),
+            now: { Self.fixedNow }
+        )
+
+        let merged = viewModel.mergedUseSoonNotification(now: Self.fixedNow)
+
+        XCTAssertEqual(merged?.title, "Use Claude and Codex before they reset")
+        XCTAssertEqual(merged?.body, "Claude 80% · Codex 78% left, resetting in 10m")
+    }
+
+    func testMergedNotificationForSingleProviderReusesSingleProviderCopy() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.claudeUseSoonCodexHealthySnapshots),
+            now: { Self.fixedNow }
+        )
+
+        let single = viewModel.pendingUseSoonNotifications(now: Self.fixedNow).first!
+        let merged = viewModel.mergedUseSoonNotification(now: Self.fixedNow)
+
+        XCTAssertEqual(merged?.title, single.title)
+        XCTAssertEqual(merged?.body, single.body)
+        XCTAssertEqual(merged?.identifier, single.notificationIdentifier)
+        XCTAssertEqual(merged?.identifier.contains("merged"), false)
+    }
+
+    func testDispatchedMergedIdentifierIsRememberedThenForgotten() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        let notices = viewModel.pendingUseSoonNotifications(now: Self.fixedNow)
+        let merged = MergedUseSoonNotification(notices: notices)!
+        notices.forEach(viewModel.markUseSoonNoticeDispatched)
+        viewModel.rememberDispatchedUseSoonNotification(merged)
+
+        XCTAssertEqual(viewModel.lastDispatchedUseSoonNotificationIdentifier, merged.identifier)
+        // Dedup still holds: both windows latched, nothing re-pends.
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+
+        notices.forEach {
+            viewModel.clearUseSoonNotificationLatch(
+                for: UseSoonNotificationWithdrawal(provider: $0.provider, windowID: $0.windowID)
+            )
+        }
+        viewModel.forgetDispatchedUseSoonNotificationIfCleared()
+
+        XCTAssertNil(viewModel.lastDispatchedUseSoonNotificationIdentifier)
     }
 
     func testUnavailableFreshLowEmptyAndHealthySnapshotsDoNotCreateUseSoonNotices() {
