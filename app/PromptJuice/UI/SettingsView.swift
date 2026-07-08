@@ -149,6 +149,12 @@ struct SettingsView: View {
                 }
             }
             .toggleStyle(.switch)
+
+            if viewModel.showsNotificationAuthorizationHint {
+                Text("Notifications are turned off for PromptJuice — turn them on in System Settings → Notifications.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

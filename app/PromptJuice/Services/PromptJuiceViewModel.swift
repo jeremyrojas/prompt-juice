@@ -54,6 +54,7 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var sourceMode: UsageSourceMode
     @Published private(set) var enabledProviders: Set<UsageProvider>
     @Published private(set) var useSoonNotificationsEnabled: Bool
+    @Published private(set) var notificationAuthorization: PromptJuiceNotificationAuthorization = .unknown
 
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
@@ -400,6 +401,18 @@ final class PromptJuiceViewModel: ObservableObject {
 
         settingsStore.useSoonNotificationsEnabled = enabled
         useSoonNotificationsEnabled = enabled
+    }
+
+    func setNotificationAuthorization(_ authorization: PromptJuiceNotificationAuthorization) {
+        guard authorization != notificationAuthorization else {
+            return
+        }
+
+        notificationAuthorization = authorization
+    }
+
+    var showsNotificationAuthorizationHint: Bool {
+        useSoonNotificationsEnabled && notificationAuthorization == .denied
     }
 
     func setProviderEnabled(_ provider: UsageProvider, _ enabled: Bool) {

@@ -105,6 +105,48 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertFalse(relaunchedViewModel.useSoonNotificationsEnabled)
     }
 
+    func testUseSoonNotificationsDefaultOffUntilEnabled() {
+        let fixture = makeFixture(notificationsEnabled: nil)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertFalse(viewModel.useSoonNotificationsEnabled)
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(viewModel.aggregateSeverity, .useSoon)
+
+        viewModel.setUseSoonNotificationsEnabled(true)
+
+        XCTAssertTrue(viewModel.useSoonNotificationsEnabled)
+        XCTAssertEqual(
+            viewModel.pendingUseSoonNotifications(now: Self.fixedNow).map(\.provider),
+            [.claude, .codex]
+        )
+    }
+
+    func testDeniedNotificationAuthorizationShowsHintOnlyWhenEnabled() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertFalse(viewModel.showsNotificationAuthorizationHint)
+
+        viewModel.setNotificationAuthorization(.denied)
+
+        XCTAssertTrue(viewModel.showsNotificationAuthorizationHint)
+
+        viewModel.setUseSoonNotificationsEnabled(false)
+
+        XCTAssertFalse(viewModel.showsNotificationAuthorizationHint)
+    }
+
     func testUnavailableFreshLowEmptyAndHealthySnapshotsDoNotCreateUseSoonNotices() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -1661,7 +1703,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.detail, "Claude resets in 2h 30m")
     }
 
-    private func makeFixture() -> (
+    private func makeFixture(notificationsEnabled: Bool? = true) -> (
         suiteName: String,
         defaults: UserDefaults,
         store: PromptJuiceSettingsStore
@@ -1670,6 +1712,11 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let store = PromptJuiceSettingsStore(defaults: defaults)
+
+        if let notificationsEnabled {
+            store.useSoonNotificationsEnabled = notificationsEnabled
+        }
+
         return (suiteName, defaults, store)
     }
 
