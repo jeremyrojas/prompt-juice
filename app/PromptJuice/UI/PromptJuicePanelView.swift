@@ -470,7 +470,11 @@ private extension View {
                 )
                 .blendMode(.screen)
         }
-        .shadow(color: .black.opacity(0.52), radius: 26, x: 0, y: 18)
+        // No SwiftUI drop shadow here: the panel window is sized to the content,
+        // so a `.shadow` fills the transparent corner wedges and hard-clips at the
+        // window edge (the "shadow corners"). The window server draws the shadow
+        // instead — outside the frame, from the rounded content shape — via
+        // `hasShadow` on the panel.
     }
 
     func glassInset(cornerRadius: CGFloat, accentColor: Color?, isSelected: Bool) -> some View {

@@ -596,7 +596,10 @@ final class JuicebarPanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        // Let the window server cast the shadow from the rounded content shape,
+        // outside the frame. A SwiftUI `.shadow` would instead fill the window's
+        // transparent corners and clip square at the edges.
+        panel.hasShadow = true
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
         panel.isMovable = false
@@ -784,6 +787,9 @@ final class JuicebarPanelController {
         let x = frame.midX - size.width / 2
         let y = frame.maxY - size.height - 10
         panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        // The content shape changed (e.g. the prime banner grew the panel), so
+        // recompute the window shadow to match the new rounded outline.
+        panel.invalidateShadow()
     }
 
     private func targetScreen() -> NSScreen? {
