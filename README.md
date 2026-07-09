@@ -199,4 +199,11 @@ scripts/               Build, run, icon, and Claude bridge helpers
 - [Claude statusline bridge](docs/claude-statusline-bridge.md)
 - [Usage state board](design/prompt-juice-states.html)
 
+## License
+
+PromptJuice source code and documentation are available under the
+[MIT License](LICENSE). Contributions are accepted under the same license.
+The PromptJuice name, logo, and app icon are covered by the
+[trademark policy](TRADEMARKS.md).
+
 Keep the prompts flowing. Down to the last drop.
