@@ -19,7 +19,7 @@ jobs:
         .agents/skills/promptjuice-install/scripts/install_promptjuice.sh
         .agents/skills/promptjuice-update/scripts/update_promptjuice.sh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show Swift version
         run: swift --version
