@@ -399,11 +399,33 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
     let interactiveContentView: NSView
     private let toolTipRefreshing: PanelToolTipRefreshing
     private let cornerRadius: CGFloat
+    private static let roundedRectMaskImage: NSImage = {
+        let cornerRadius = PromptJuicePanelMetrics.panelCornerRadius
+        let diameter = ceil(cornerRadius * 2 + 1)
+        let size = NSSize(width: diameter, height: diameter)
+        let image = NSImage(size: size, flipped: true) { rect in
+            NSColor.white.setFill()
+            NSBezierPath(
+                roundedRect: rect,
+                xRadius: cornerRadius,
+                yRadius: cornerRadius
+            ).fill()
+            return true
+        }
+
+        image.capInsets = NSEdgeInsets(
+            top: cornerRadius,
+            left: cornerRadius,
+            bottom: cornerRadius,
+            right: cornerRadius
+        )
+        image.resizingMode = .stretch
+        return image
+    }()
 
     init(
         contentView: NSView & PanelToolTipRefreshing,
-        cornerRadius: CGFloat,
-        includesLiquidGlass: Bool
+        cornerRadius: CGFloat
     ) {
         self.interactiveContentView = contentView
         self.toolTipRefreshing = contentView
@@ -414,13 +436,13 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
         blendingMode = .behindWindow
         state = .active
         isEmphasized = true
-        maskImage = Self.roundedRectMaskImage(cornerRadius: cornerRadius)
+        maskImage = Self.roundedRectMaskImage
         wantsLayer = true
         layer?.cornerRadius = cornerRadius
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
 
-        if includesLiquidGlass, #available(macOS 26.0, *) {
+        if #available(macOS 26.0, *) {
             installLiquidGlass(cornerRadius: cornerRadius)
         }
         installInteractiveContent(contentView)
@@ -430,11 +452,6 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
         toolTipRefreshing.hidePanelToolTip()
     }
 
-    override func layout() {
-        super.layout()
-        maskImage = Self.roundedRectMaskImage(cornerRadius: cornerRadius)
-    }
-
     @available(macOS 26.0, *)
     private func installLiquidGlass(cornerRadius: CGFloat) {
         let glassView = NSGlassEffectView()
@@ -442,7 +459,6 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
         glassView.style = .regular
         glassView.cornerRadius = cornerRadius
         glassView.clipsToBounds = true
-        glassView.tintColor = NSColor.black.withAlphaComponent(0.10)
         glassView.wantsLayer = true
         glassView.layer?.cornerRadius = cornerRadius
         glassView.layer?.cornerCurve = .continuous
@@ -467,33 +483,6 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
             view.topAnchor.constraint(equalTo: topAnchor),
             view.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
-    }
-
-    private static func roundedRectMaskImage(cornerRadius: CGFloat) -> NSImage {
-        let diameter = ceil(cornerRadius * 2 + 1)
-        let size = NSSize(width: diameter, height: diameter)
-        let rect = NSRect(origin: .zero, size: size)
-        let image = NSImage(size: size)
-
-        image.lockFocus()
-        NSColor.clear.setFill()
-        rect.fill()
-        NSColor.white.setFill()
-        NSBezierPath(
-            roundedRect: rect,
-            xRadius: cornerRadius,
-            yRadius: cornerRadius
-        ).fill()
-        image.unlockFocus()
-
-        image.capInsets = NSEdgeInsets(
-            top: cornerRadius,
-            left: cornerRadius,
-            bottom: cornerRadius,
-            right: cornerRadius
-        )
-        image.resizingMode = .stretch
-        return image
     }
 
     @available(*, unavailable)
@@ -615,6 +604,23 @@ final class JuicebarPanelController {
 
     var panelIsVisibleForTesting: Bool {
         panel?.isVisible == true
+    }
+
+    var panelContentForwardsToolTipsForTesting: Bool {
+        panel?.contentView is PanelToolTipRefreshing
+    }
+
+    var panelFirstResponderIsInteractiveContentForTesting: Bool {
+        guard let panel,
+              let contentView = panel.contentView as? PanelContentRootView else {
+            return false
+        }
+
+        return panel.firstResponder === contentView.interactiveContentView
+    }
+
+    var panelHasShadowForTesting: Bool {
+        panel?.hasShadow == true
     }
 
     func clickTargetForTesting(_ target: PanelClickTarget) {
@@ -761,17 +767,9 @@ final class JuicebarPanelController {
     private func makePanelContentRoot(
         _ contentView: NSView & PanelToolTipRefreshing
     ) -> NSView & PanelContentRootView {
-        let includesLiquidGlass: Bool
-        if #available(macOS 26.0, *) {
-            includesLiquidGlass = true
-        } else {
-            includesLiquidGlass = false
-        }
-
         return MaterialPanelRootView(
             contentView: contentView,
-            cornerRadius: PromptJuicePanelMetrics.panelCornerRadius,
-            includesLiquidGlass: includesLiquidGlass
+            cornerRadius: PromptJuicePanelMetrics.panelCornerRadius
         )
     }
 
