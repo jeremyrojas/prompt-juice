@@ -10,6 +10,7 @@ enum PromptJuicePanelMetrics {
     static let settingsTrailingInset: CGFloat = 14
     static let contentPadding: CGFloat = 14
     static let contentSpacing: CGFloat = 10
+    static let panelCornerRadius: CGFloat = 22
 
     // Just-in-time notification prime banner. Shared by the view (layout) and
     // `PanelClickRouter` (hit-testing) so the amber CTA and its tap targets stay
@@ -42,7 +43,7 @@ struct PromptJuicePanelView: View {
             showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
         )
     }
-    private let panelCornerRadius: CGFloat = 22
+    private let panelCornerRadius = PromptJuicePanelMetrics.panelCornerRadius
 
     var body: some View {
         VStack(spacing: PromptJuicePanelMetrics.contentSpacing) {
@@ -470,7 +471,11 @@ private extension View {
                 )
                 .blendMode(.screen)
         }
-        .shadow(color: .black.opacity(0.52), radius: 26, x: 0, y: 18)
+        // No SwiftUI drop shadow here: the panel window is sized to the content,
+        // so a `.shadow` fills the transparent corner wedges and hard-clips at the
+        // window edge (the "shadow corners"). The window server draws the shadow
+        // instead — outside the frame, from the rounded content shape — via
+        // `hasShadow` on the panel.
     }
 
     func glassInset(cornerRadius: CGFloat, accentColor: Color?, isSelected: Bool) -> some View {

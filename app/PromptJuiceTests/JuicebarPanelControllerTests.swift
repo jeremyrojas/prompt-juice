@@ -190,6 +190,37 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertNil(viewModel.selectedProvider)
     }
 
+    func testMaterialRootPreservesPanelInteractionContracts() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        let controller = JuicebarPanelController(viewModel: viewModel)
+
+        controller.prepare()
+
+        XCTAssertTrue(controller.panelContentForwardsToolTipsForTesting)
+        XCTAssertTrue(controller.panelHasShadowForTesting)
+
+        controller.show()
+        defer { controller.hide() }
+
+        await waitUntil {
+            controller.panelIsVisibleForTesting
+        }
+
+        XCTAssertTrue(controller.panelFirstResponderIsInteractiveContentForTesting)
+        XCTAssertTrue(controller.panelContentForwardsToolTipsForTesting)
+        XCTAssertTrue(controller.panelHasShadowForTesting)
+    }
+
     private func makeFixture() -> (
         suiteName: String,
         defaults: UserDefaults,

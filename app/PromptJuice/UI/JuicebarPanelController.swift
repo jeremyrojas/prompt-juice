@@ -167,6 +167,11 @@ private protocol PanelToolTipRefreshing: AnyObject {
     func hidePanelToolTip()
 }
 
+@MainActor
+private protocol PanelContentRootView: PanelToolTipRefreshing {
+    var interactiveContentView: NSView { get }
+}
+
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let providers: () -> [UsageProvider]
     private let showsNotificationPrime: () -> Bool
@@ -390,6 +395,100 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     }
 }
 
+private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootView {
+    let interactiveContentView: NSView
+    private let toolTipRefreshing: PanelToolTipRefreshing
+    private static let roundedRectMaskImage: NSImage = {
+        let cornerRadius = PromptJuicePanelMetrics.panelCornerRadius
+        let diameter = ceil(cornerRadius * 2 + 1)
+        let size = NSSize(width: diameter, height: diameter)
+        let image = NSImage(size: size, flipped: true) { rect in
+            NSColor.white.setFill()
+            NSBezierPath(
+                roundedRect: rect,
+                xRadius: cornerRadius,
+                yRadius: cornerRadius
+            ).fill()
+            return true
+        }
+
+        image.capInsets = NSEdgeInsets(
+            top: cornerRadius,
+            left: cornerRadius,
+            bottom: cornerRadius,
+            right: cornerRadius
+        )
+        image.resizingMode = .stretch
+        return image
+    }()
+
+    init(
+        contentView: NSView & PanelToolTipRefreshing,
+        cornerRadius: CGFloat
+    ) {
+        self.interactiveContentView = contentView
+        self.toolTipRefreshing = contentView
+        super.init(frame: .zero)
+
+        material = .hudWindow
+        blendingMode = .behindWindow
+        state = .active
+        isEmphasized = true
+        maskImage = Self.roundedRectMaskImage
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
+
+        if #available(macOS 26.0, *) {
+            installLiquidGlass(cornerRadius: cornerRadius)
+        }
+        installInteractiveContent(contentView)
+    }
+
+    func hidePanelToolTip() {
+        toolTipRefreshing.hidePanelToolTip()
+    }
+
+    @available(macOS 26.0, *)
+    private func installLiquidGlass(cornerRadius: CGFloat) {
+        let glassView = NSGlassEffectView()
+        glassView.translatesAutoresizingMaskIntoConstraints = false
+        glassView.style = .regular
+        glassView.cornerRadius = cornerRadius
+        glassView.clipsToBounds = true
+        glassView.wantsLayer = true
+        glassView.layer?.cornerRadius = cornerRadius
+        glassView.layer?.cornerCurve = .continuous
+        glassView.layer?.masksToBounds = true
+        addSubview(glassView, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            glassView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassView.topAnchor.constraint(equalTo: topAnchor),
+            glassView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    private func installInteractiveContent(_ view: NSView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: trailingAnchor),
+            view.topAnchor.constraint(equalTo: topAnchor),
+            view.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    @MainActor dynamic required init?(coder: NSCoder) {
+        nil
+    }
+}
+
 final class PanelToolTipView: NSView {
     private let text: String
     private let font = NSFont.systemFont(ofSize: 12)
@@ -505,6 +604,23 @@ final class JuicebarPanelController {
         panel?.isVisible == true
     }
 
+    var panelContentForwardsToolTipsForTesting: Bool {
+        panel?.contentView is PanelToolTipRefreshing
+    }
+
+    var panelFirstResponderIsInteractiveContentForTesting: Bool {
+        guard let panel,
+              let contentView = panel.contentView as? PanelContentRootView else {
+            return false
+        }
+
+        return panel.firstResponder === contentView.interactiveContentView
+    }
+
+    var panelHasShadowForTesting: Bool {
+        panel?.hasShadow == true
+    }
+
     func clickTargetForTesting(_ target: PanelClickTarget) {
         handleClick(target)
     }
@@ -565,7 +681,9 @@ final class JuicebarPanelController {
         applyPanelFrame(panel, force: true)
         installEventMonitors()
         panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(panel.contentView)
+        let firstResponder = (panel.contentView as? PanelContentRootView)?.interactiveContentView
+            ?? panel.contentView
+        panel.makeFirstResponder(firstResponder)
     }
 
     func hide() {
@@ -596,7 +714,9 @@ final class JuicebarPanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        // The AppKit material root gives the window server a rounded shape for
+        // the native panel shadow.
+        panel.hasShadow = true
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
         panel.isMovable = false
@@ -612,7 +732,7 @@ final class JuicebarPanelController {
             }
         )
 
-        panel.contentView = ClickReadyHostingView(
+        let contentView = ClickReadyHostingView(
             rootView: rootView,
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
@@ -637,8 +757,18 @@ final class JuicebarPanelController {
                 self?.dismissSurface()
             }
         )
+        panel.contentView = makePanelContentRoot(contentView)
         self.panel = panel
         return panel
+    }
+
+    private func makePanelContentRoot(
+        _ contentView: NSView & PanelToolTipRefreshing
+    ) -> NSView & PanelContentRootView {
+        return MaterialPanelRootView(
+            contentView: contentView,
+            cornerRadius: PromptJuicePanelMetrics.panelCornerRadius
+        )
     }
 
     private func handleClick(_ target: PanelClickTarget) {
@@ -784,6 +914,9 @@ final class JuicebarPanelController {
         let x = frame.midX - size.width / 2
         let y = frame.maxY - size.height - 10
         panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        // The content shape changed (e.g. the prime banner grew the panel), so
+        // recompute the window shadow to match the new rounded outline.
+        panel.invalidateShadow()
     }
 
     private func targetScreen() -> NSScreen? {
