@@ -2,6 +2,8 @@ import AppKit
 import Combine
 import SwiftUI
 
+private let panelDragThreshold: CGFloat = 3
+
 private final class JuicebarPanel: NSPanel {
     var onCancel: (() -> Void)?
 
@@ -24,7 +26,6 @@ private final class JuicebarPanel: NSPanel {
 
 enum PanelClickTarget: Equatable {
     case close
-    case settings
     case provider(UsageProvider)
     /// The "Turn on notifications" CTA in the just-in-time prime banner.
     case enableNotifications
@@ -33,6 +34,11 @@ enum PanelClickTarget: Equatable {
     /// A click on empty panel chrome (header, gaps) — clears any selection
     /// without dismissing the panel.
     case background
+}
+
+enum JuicebarPanelMode: Equatable {
+    case anchored
+    case pinned
 }
 
 enum PanelClickRouter {
@@ -97,19 +103,6 @@ enum PanelClickRouter {
         return (enable, dismiss)
     }
 
-    static func settingsRect(in bounds: NSRect) -> NSRect {
-        NSRect(
-            x: bounds.width
-                - PromptJuicePanelMetrics.settingsTrailingInset
-                - PromptJuicePanelMetrics.settingsHitSize,
-            y: bounds.height
-                - PromptJuicePanelMetrics.settingsBottomInset
-                - PromptJuicePanelMetrics.settingsHitSize,
-            width: PromptJuicePanelMetrics.settingsHitSize,
-            height: PromptJuicePanelMetrics.settingsHitSize
-        )
-    }
-
     static func target(
         at point: NSPoint,
         in bounds: NSRect,
@@ -126,10 +119,6 @@ enum PanelClickRouter {
         )
         if contains(point, in: closeRect) {
             return .close
-        }
-
-        if contains(point, in: settingsRect(in: bounds)) {
-            return .settings
         }
 
         if showsNotificationPrime {
@@ -179,12 +168,18 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     private let onPanelClick: (PanelClickTarget) -> Void
     private let onHoverTargetChanged: (PanelClickTarget?) -> Void
     private let onCancel: () -> Void
+    private let onPanelDragStarted: () -> Void
+    private let onPanelDragged: (NSPoint) -> Void
     private var trackingArea: NSTrackingArea?
     private var hoveredTarget: PanelClickTarget?
     private var pendingToolTipTask: Task<Void, Never>?
     private var pendingToolTipText: String?
     private var visibleToolTipText: String?
     private var visibleToolTipWindow: NSWindow?
+    private var mouseDownTarget: PanelClickTarget?
+    private var dragStartScreenPoint: NSPoint?
+    private var dragStartFrameOrigin: NSPoint?
+    private var isDraggingPanel = false
 
     required init(rootView: Content) {
         self.providers = { [] }
@@ -193,6 +188,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         self.onPanelClick = { _ in }
         self.onHoverTargetChanged = { _ in }
         self.onCancel = {}
+        self.onPanelDragStarted = {}
+        self.onPanelDragged = { _ in }
         super.init(rootView: rootView)
         pinCoordinateSpace()
     }
@@ -204,7 +201,9 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
         onHoverTargetChanged: @escaping (PanelClickTarget?) -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onPanelDragStarted: @escaping () -> Void,
+        onPanelDragged: @escaping (NSPoint) -> Void
     ) {
         self.providers = providers
         self.showsNotificationPrime = showsNotificationPrime
@@ -212,6 +211,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         self.onPanelClick = onPanelClick
         self.onHoverTargetChanged = onHoverTargetChanged
         self.onCancel = onCancel
+        self.onPanelDragStarted = onPanelDragStarted
+        self.onPanelDragged = onPanelDragged
         super.init(rootView: rootView)
         pinCoordinateSpace()
     }
@@ -252,11 +253,59 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     override func mouseDown(with event: NSEvent) {
         hidePanelToolTip()
+        let point = convert(event.locationInWindow, from: nil)
+        mouseDownTarget = clickTarget(at: point)
+        dragStartScreenPoint = NSEvent.mouseLocation
+        dragStartFrameOrigin = window?.frame.origin
+        isDraggingPanel = false
         window?.makeKey()
         window?.makeFirstResponder(self)
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        guard mouseDownTarget == nil,
+              let dragStartScreenPoint,
+              let dragStartFrameOrigin,
+              let window else {
+            return
+        }
+
+        let screenPoint = NSEvent.mouseLocation
+        let delta = NSPoint(
+            x: screenPoint.x - dragStartScreenPoint.x,
+            y: screenPoint.y - dragStartScreenPoint.y
+        )
+
+        if !isDraggingPanel {
+            let distance = hypot(delta.x, delta.y)
+            guard distance >= panelDragThreshold else {
+                return
+            }
+
+            isDraggingPanel = true
+            onPanelDragStarted()
+        }
+
+        let origin = NSPoint(
+            x: dragStartFrameOrigin.x + delta.x,
+            y: dragStartFrameOrigin.y + delta.y
+        )
+        window.setFrameOrigin(origin)
+        onPanelDragged(origin)
+    }
+
     override func mouseUp(with event: NSEvent) {
+        defer {
+            mouseDownTarget = nil
+            dragStartScreenPoint = nil
+            dragStartFrameOrigin = nil
+            isDraggingPanel = false
+        }
+
+        guard !isDraggingPanel else {
+            return
+        }
+
         let point = convert(event.locationInWindow, from: nil)
         // Single authority for in-panel clicks. A point that hits no element is
         // the panel background, which clears the current selection.
@@ -337,8 +386,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         switch target {
         case .provider(let provider):
             return toolTipProvider(provider)
-        case .settings:
-            return "Settings"
         case .close, .background, .enableNotifications, .dismissNotificationPrime:
             return nil
         }
@@ -576,15 +623,18 @@ final class PanelToolTipView: NSView {
 }
 
 @MainActor
-final class JuicebarPanelController {
+final class JuicebarPanelController: NSObject {
     private let viewModel: PromptJuiceViewModel
+    private let settingsStore: PromptJuiceSettingsStore
     private let onClaudeSettingsRequested: (Bool) -> Void
     private let onSettingsRequested: () -> Void
     private var panel: NSWindow?
+    private var panelMode: JuicebarPanelMode = .anchored
     private var cancellables = Set<AnyCancellable>()
     private var localClickMonitor: Any?
     private var globalClickMonitor: Any?
     private var localKeyMonitor: Any?
+    private var programmaticFrameUpdateDepth = 0
 
     private var panelSize: NSSize {
         NSSize(
@@ -621,18 +671,56 @@ final class JuicebarPanelController {
         panel?.hasShadow == true
     }
 
+    var panelAnimationBehaviorForTesting: NSWindow.AnimationBehavior? {
+        panel?.animationBehavior
+    }
+
+    var panelModeForTesting: JuicebarPanelMode {
+        panelMode
+    }
+
+    var panelIsMovableForTesting: Bool {
+        panel?.isMovable == true
+    }
+
+    var panelAllowsBackgroundDraggingForTesting: Bool {
+        panel?.isMovableByWindowBackground == true
+    }
+
+    var panelContextMenuTitlesForTesting: [String] {
+        panel?.contentView?.menu?.items
+            .filter { !$0.isSeparatorItem }
+            .map(\.title) ?? []
+    }
+
+    var isPinned: Bool {
+        panelMode == .pinned
+    }
+
     func clickTargetForTesting(_ target: PanelClickTarget) {
         handleClick(target)
     }
 
+    func movePanelOriginForTesting(to origin: NSPoint) {
+        guard let panel else {
+            return
+        }
+
+        panel.setFrameOrigin(origin)
+        panelDidMove(Notification(name: NSWindow.didMoveNotification, object: panel))
+    }
+
     init(
         viewModel: PromptJuiceViewModel,
+        settingsStore: PromptJuiceSettingsStore = .shared,
         onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in },
         onSettingsRequested: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
+        self.settingsStore = settingsStore
         self.onClaudeSettingsRequested = onClaudeSettingsRequested
         self.onSettingsRequested = onSettingsRequested
+        super.init()
 
         viewModel.$enabledProviders
             .receive(on: RunLoop.main)
@@ -663,6 +751,10 @@ final class JuicebarPanelController {
         .store(in: &cancellables)
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     func toggle() {
         if panel?.isVisible == true {
             hide()
@@ -678,12 +770,38 @@ final class JuicebarPanelController {
     func show() {
         viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
         let panel = ensurePanel()
+        setPanelMode(.anchored)
         applyPanelFrame(panel, force: true)
-        installEventMonitors()
-        panel.makeKeyAndOrderFront(nil)
-        let firstResponder = (panel.contentView as? PanelContentRootView)?.interactiveContentView
-            ?? panel.contentView
-        panel.makeFirstResponder(firstResponder)
+        orderFront(panel)
+    }
+
+    func pin() {
+        viewModel.refreshClaudeStatusCacheNow(reason: "panel pin")
+        let panel = ensurePanel()
+        let size = panelSize
+        let origin = pinnedOrigin(for: panel, size: size)
+
+        setPanelMode(.pinned)
+        applyPinnedPanelFrame(panel, origin: origin, size: size, force: true, persist: true)
+        orderFront(panel)
+    }
+
+    func unpin() {
+        let panel = ensurePanel()
+        setPanelMode(.anchored)
+        applyPanelFrame(panel, force: true)
+
+        if panel.isVisible {
+            orderFront(panel)
+        }
+    }
+
+    func togglePin() {
+        if panelMode == .pinned {
+            unpin()
+        } else {
+            pin()
+        }
     }
 
     func hide() {
@@ -691,6 +809,7 @@ final class JuicebarPanelController {
         viewModel.setHoveredPanelTarget(nil)
         removeEventMonitors()
         panel?.orderOut(nil)
+        setPanelMode(.anchored)
     }
 
     private func ensurePanel() -> NSWindow {
@@ -710,6 +829,7 @@ final class JuicebarPanelController {
         }
         panel.becomesKeyOnlyIfNeeded = false
         panel.level = .floating
+        panel.animationBehavior = .none
         panel.title = "PromptJuice Juicebar"
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false
@@ -720,6 +840,7 @@ final class JuicebarPanelController {
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
         panel.isMovable = false
+        panel.isMovableByWindowBackground = true
         panel.isReleasedWhenClosed = false
         panel.setAccessibilityElement(true)
         panel.setAccessibilityRole(.window)
@@ -755,10 +876,23 @@ final class JuicebarPanelController {
             },
             onCancel: { [weak self] in
                 self?.dismissSurface()
+            },
+            onPanelDragStarted: { [weak self] in
+                self?.handlePanelDragStarted()
+            },
+            onPanelDragged: { [weak self] origin in
+                self?.handlePanelDragged(to: origin)
             }
         )
         panel.contentView = makePanelContentRoot(contentView)
         self.panel = panel
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(panelDidMove(_:)),
+            name: NSWindow.didMoveNotification,
+            object: panel
+        )
+        refreshPanelContextMenu()
         return panel
     }
 
@@ -775,10 +909,6 @@ final class JuicebarPanelController {
         switch target {
         case .close:
             dismissSurface()
-        case .settings:
-            (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
-            viewModel.setHoveredPanelTarget(nil)
-            onSettingsRequested()
         case .provider(let provider):
             if provider == .claude, viewModel.claudeRowOffersSetup {
                 dismissSurface()
@@ -795,6 +925,34 @@ final class JuicebarPanelController {
         case .background:
             viewModel.clearSelection()
         }
+    }
+
+    @objc private func showSettingsFromPanelMenu() {
+        (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
+        viewModel.setHoveredPanelTarget(nil)
+        onSettingsRequested()
+    }
+
+    @objc private func togglePinFromPanelMenu() {
+        togglePin()
+    }
+
+    @objc private func quitFromPanelMenu() {
+        NSApp.terminate(nil)
+    }
+
+    @objc private func panelDidMove(_ notification: Notification) {
+        guard programmaticFrameUpdateDepth == 0,
+              let movedPanel = notification.object as? NSWindow,
+              movedPanel === panel else {
+            return
+        }
+
+        if panelMode == .anchored {
+            setPanelMode(.pinned)
+        }
+
+        savePinnedOrigin(movedPanel.frame.origin)
     }
 
     private func dismissSurface() {
@@ -878,7 +1036,7 @@ final class JuicebarPanelController {
         }
 
         guard panel.frame.contains(screenPoint) else {
-            if allowsOutsideDismissal {
+            if allowsOutsideDismissal, panelMode == .anchored {
                 dismissSurface()
             }
 
@@ -905,21 +1063,96 @@ final class JuicebarPanelController {
             return
         }
 
-        position(panel, size: size)
+        switch panelMode {
+        case .anchored:
+            position(panel, size: size)
+        case .pinned:
+            applyPinnedPanelFrame(
+                panel,
+                origin: panel.frame.origin,
+                size: size,
+                force: force,
+                persist: true
+            )
+        }
     }
 
     private func position(_ panel: NSWindow, size: NSSize) {
-        let screen = targetScreen()
-        let frame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        let x = frame.midX - size.width / 2
-        let y = frame.maxY - size.height - 10
-        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
-        // The content shape changed (e.g. the prime banner grew the panel), so
-        // recompute the window shadow to match the new rounded outline.
+        setPanelFrame(panel, anchoredFrame(size: size))
+    }
+
+    private func applyPinnedPanelFrame(
+        _ panel: NSWindow,
+        origin: NSPoint,
+        size: NSSize,
+        force: Bool,
+        persist: Bool
+    ) {
+        let screen = targetScreen(containing: NSRect(origin: origin, size: size))
+        let clampedOrigin = clamped(origin: origin, size: size, screen: screen)
+        let frame = NSRect(origin: clampedOrigin, size: size)
+
+        if !force, panel.frame == frame {
+            return
+        }
+
+        setPanelFrame(panel, frame)
+
+        if persist {
+            savePinnedOrigin(panel.frame.origin)
+        }
+    }
+
+    private func setPanelFrame(_ panel: NSWindow, _ frame: NSRect) {
+        programmaticFrameUpdateDepth += 1
+        panel.setFrame(frame, display: true)
+        programmaticFrameUpdateDepth = max(0, programmaticFrameUpdateDepth - 1)
         panel.invalidateShadow()
     }
 
-    private func targetScreen() -> NSScreen? {
+    private func anchoredFrame(size: NSSize) -> NSRect {
+        let frame = targetScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let x = frame.midX - size.width / 2
+        let y = frame.maxY - size.height - 10
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    private func pinnedOrigin(for panel: NSWindow, size: NSSize) -> NSPoint {
+        if panel.isVisible {
+            return panel.frame.origin
+        }
+
+        if let savedOrigin = settingsStore.pinnedJuicebarOrigin {
+            return NSPoint(x: savedOrigin.x, y: savedOrigin.y)
+        }
+
+        return anchoredFrame(size: size).origin
+    }
+
+    private func clamped(origin: NSPoint, size: NSSize, screen: NSScreen?) -> NSPoint {
+        let frame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let minX = frame.minX
+        let maxX = max(frame.minX, frame.maxX - size.width)
+        let minY = frame.minY
+        let maxY = max(frame.minY, frame.maxY - size.height)
+
+        return NSPoint(
+            x: min(max(origin.x, minX), maxX),
+            y: min(max(origin.y, minY), maxY)
+        )
+    }
+
+    private func targetScreen(containing rect: NSRect? = nil) -> NSScreen? {
+        if let rect {
+            if let screen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(rect) }) {
+                return screen
+            }
+
+            if let screen = NSScreen.screens.first(where: { $0.frame.contains(rect.origin) }) {
+                return screen
+            }
+        }
+
         let mouseLocation = NSEvent.mouseLocation
 
         if let screenUnderCursor = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) {
@@ -927,5 +1160,86 @@ final class JuicebarPanelController {
         }
 
         return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func setPanelMode(_ mode: JuicebarPanelMode) {
+        panelMode = mode
+
+        if let panel {
+            panel.isMovable = mode == .pinned
+            panel.isMovableByWindowBackground = true
+        }
+
+        refreshPanelContextMenu()
+    }
+
+    private func orderFront(_ panel: NSWindow) {
+        installEventMonitors()
+        panel.makeKeyAndOrderFront(nil)
+        let firstResponder = (panel.contentView as? PanelContentRootView)?.interactiveContentView
+            ?? panel.contentView
+        panel.makeFirstResponder(firstResponder)
+    }
+
+    private func handlePanelDragStarted() {
+        guard let panel else {
+            return
+        }
+
+        if panelMode == .anchored {
+            setPanelMode(.pinned)
+        }
+
+        savePinnedOrigin(panel.frame.origin)
+    }
+
+    private func handlePanelDragged(to origin: NSPoint) {
+        guard panelMode == .pinned else {
+            return
+        }
+
+        savePinnedOrigin(origin)
+    }
+
+    private func savePinnedOrigin(_ origin: NSPoint) {
+        settingsStore.pinnedJuicebarOrigin = CGPoint(x: origin.x, y: origin.y)
+    }
+
+    private var pinMenuItemTitle: String {
+        panelMode == .pinned ? "Unpin Juicebar" : "Pin Juicebar"
+    }
+
+    private func refreshPanelContextMenu() {
+        guard let panel else {
+            return
+        }
+
+        panel.contentView?.menu = makePanelContextMenu()
+
+        if let contentView = panel.contentView as? PanelContentRootView {
+            contentView.interactiveContentView.menu = makePanelContextMenu()
+        }
+    }
+
+    private func makePanelContextMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: "Settings…",
+            action: #selector(showSettingsFromPanelMenu),
+            keyEquivalent: ","
+        ).target = self
+        menu.addItem(
+            withTitle: pinMenuItemTitle,
+            action: #selector(togglePinFromPanelMenu),
+            keyEquivalent: ""
+        ).target = self
+        menu.addItem(.separator())
+        menu.addItem(
+            withTitle: "Quit PromptJuice",
+            action: #selector(quitFromPanelMenu),
+            keyEquivalent: "q"
+        ).target = self
+
+        return menu
     }
 }

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 @MainActor
@@ -13,6 +14,8 @@ final class PromptJuiceSettingsStore {
         static let didOfferUseSoonNotification = "didOfferUseSoonNotification"
         static let lastUseSoonNotificationIdentifier = "lastUseSoonNotificationIdentifier"
         static let usageSourceMode = "usageSourceMode"
+        static let pinnedJuicebarOriginX = "pinnedJuicebarOriginX"
+        static let pinnedJuicebarOriginY = "pinnedJuicebarOriginY"
     }
 
     private let defaults: UserDefaults
@@ -127,6 +130,30 @@ final class PromptJuiceSettingsStore {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.usageSourceMode)
+        }
+    }
+
+    var pinnedJuicebarOrigin: CGPoint? {
+        get {
+            guard defaults.object(forKey: Key.pinnedJuicebarOriginX) != nil,
+                  defaults.object(forKey: Key.pinnedJuicebarOriginY) != nil else {
+                return nil
+            }
+
+            return CGPoint(
+                x: defaults.double(forKey: Key.pinnedJuicebarOriginX),
+                y: defaults.double(forKey: Key.pinnedJuicebarOriginY)
+            )
+        }
+        set {
+            guard let newValue else {
+                defaults.removeObject(forKey: Key.pinnedJuicebarOriginX)
+                defaults.removeObject(forKey: Key.pinnedJuicebarOriginY)
+                return
+            }
+
+            defaults.set(Double(newValue.x), forKey: Key.pinnedJuicebarOriginX)
+            defaults.set(Double(newValue.y), forKey: Key.pinnedJuicebarOriginY)
         }
     }
 

@@ -145,7 +145,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.panelFrameForTesting?.height, expectedHeight)
     }
 
-    func testSettingsGearClickOpensSettings() async throws {
+    func testPinnedCloseReturnsToAnchoredMode() async throws {
         let fixture = makeFixture()
         fixture.store.usageSourceMode = .fixture
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -157,10 +157,9 @@ final class JuicebarPanelControllerTests: XCTestCase {
             now: { Self.fixedNow },
             isClaudeBridgeCurrent: { true }
         )
-        var settingsOpenCount = 0
         let controller = JuicebarPanelController(
             viewModel: viewModel,
-            onSettingsRequested: { settingsOpenCount += 1 }
+            settingsStore: fixture.store
         )
 
         controller.show()
@@ -170,24 +169,155 @@ final class JuicebarPanelControllerTests: XCTestCase {
             controller.panelFrameForTesting != nil
         }
 
-        let frame = try XCTUnwrap(controller.panelFrameForTesting)
-        let bounds = NSRect(origin: .zero, size: frame.size)
-        let providers = viewModel.visibleSnapshots.map(\.provider)
-        let target = try XCTUnwrap(
-            PanelClickRouter.target(
-                at: PanelClickRouter.settingsRect(in: bounds).center,
-                in: bounds,
-                providers: providers
-            )
+        let anchoredFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(controller.panelModeForTesting, .anchored)
+        XCTAssertFalse(controller.panelIsMovableForTesting)
+        XCTAssertTrue(controller.panelAllowsBackgroundDraggingForTesting)
+
+        controller.pin()
+
+        XCTAssertEqual(controller.panelModeForTesting, .pinned)
+        XCTAssertTrue(controller.panelIsMovableForTesting)
+        let pinnedOrigin = try XCTUnwrap(fixture.store.pinnedJuicebarOrigin)
+        XCTAssertEqual(pinnedOrigin.x, anchoredFrame.origin.x)
+        XCTAssertEqual(pinnedOrigin.y, anchoredFrame.origin.y)
+
+        controller.clickTargetForTesting(.close)
+
+        await waitUntil {
+            controller.panelIsVisibleForTesting == false
+        }
+
+        XCTAssertEqual(controller.panelModeForTesting, .anchored)
+        XCTAssertNil(viewModel.selectedProvider)
+
+        controller.show()
+
+        await waitUntil {
+            controller.panelIsVisibleForTesting
+        }
+
+        let reopenedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(reopenedFrame.origin.x, anchoredFrame.origin.x, accuracy: 0.5)
+        XCTAssertEqual(reopenedFrame.origin.y, anchoredFrame.origin.y, accuracy: 0.5)
+        XCTAssertEqual(controller.panelModeForTesting, .anchored)
+    }
+
+    func testPinnedOriginPersistsAndRestoresFromClosed() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        let controller = JuicebarPanelController(
+            viewModel: viewModel,
+            settingsStore: fixture.store
         )
 
-        XCTAssertEqual(target, .settings)
+        controller.show()
+        defer { controller.hide() }
 
-        controller.clickTargetForTesting(target)
+        await waitUntil {
+            controller.panelFrameForTesting != nil
+        }
 
-        XCTAssertEqual(settingsOpenCount, 1)
-        XCTAssertTrue(controller.panelIsVisibleForTesting)
-        XCTAssertNil(viewModel.selectedProvider)
+        controller.pin()
+
+        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 900)
+        let savedOrigin = NSPoint(x: visibleFrame.minX + 24, y: visibleFrame.minY + 24)
+        controller.movePanelOriginForTesting(to: savedOrigin)
+
+        let pinnedOrigin = try XCTUnwrap(fixture.store.pinnedJuicebarOrigin)
+        XCTAssertEqual(pinnedOrigin.x, savedOrigin.x, accuracy: 0.5)
+        XCTAssertEqual(pinnedOrigin.y, savedOrigin.y, accuracy: 0.5)
+
+        controller.hide()
+        controller.pin()
+
+        await waitUntil {
+            controller.panelIsVisibleForTesting
+        }
+
+        let restoredFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(controller.panelModeForTesting, .pinned)
+        XCTAssertEqual(restoredFrame.origin.x, savedOrigin.x, accuracy: 0.5)
+        XCTAssertEqual(restoredFrame.origin.y, savedOrigin.y, accuracy: 0.5)
+    }
+
+    func testPinnedOriginRestoresOnScreen() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        fixture.store.pinnedJuicebarOrigin = CGPoint(x: 100_000, y: 100_000)
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        let controller = JuicebarPanelController(
+            viewModel: viewModel,
+            settingsStore: fixture.store
+        )
+
+        controller.pin()
+        defer { controller.hide() }
+
+        await waitUntil {
+            controller.panelIsVisibleForTesting
+        }
+
+        let frame = try XCTUnwrap(controller.panelFrameForTesting)
+        let isInsideVisibleFrame = NSScreen.screens.contains { screen in
+            frame.minX >= screen.visibleFrame.minX
+                && frame.maxX <= screen.visibleFrame.maxX + 0.5
+                && frame.minY >= screen.visibleFrame.minY
+                && frame.maxY <= screen.visibleFrame.maxY + 0.5
+        }
+        XCTAssertTrue(isInsideVisibleFrame)
+    }
+
+    func testPanelContextMenuReflectsPinState() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let provider = MutableUsageProviderClient(snapshots: Self.plainSnapshots)
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            now: { Self.fixedNow },
+            isClaudeBridgeCurrent: { true }
+        )
+        let controller = JuicebarPanelController(
+            viewModel: viewModel,
+            settingsStore: fixture.store
+        )
+
+        controller.prepare()
+
+        XCTAssertEqual(controller.panelContextMenuTitlesForTesting, [
+            "Settings…",
+            "Pin Juicebar",
+            "Quit PromptJuice"
+        ])
+
+        controller.pin()
+        defer { controller.hide() }
+
+        XCTAssertEqual(controller.panelContextMenuTitlesForTesting, [
+            "Settings…",
+            "Unpin Juicebar",
+            "Quit PromptJuice"
+        ])
     }
 
     func testMaterialRootPreservesPanelInteractionContracts() async throws {
@@ -208,6 +338,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         XCTAssertTrue(controller.panelContentForwardsToolTipsForTesting)
         XCTAssertTrue(controller.panelHasShadowForTesting)
+        XCTAssertEqual(controller.panelAnimationBehaviorForTesting, NSWindow.AnimationBehavior.none)
 
         controller.show()
         defer { controller.hide() }
@@ -219,6 +350,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.panelFirstResponderIsInteractiveContentForTesting)
         XCTAssertTrue(controller.panelContentForwardsToolTipsForTesting)
         XCTAssertTrue(controller.panelHasShadowForTesting)
+        XCTAssertEqual(controller.panelAnimationBehaviorForTesting, NSWindow.AnimationBehavior.none)
     }
 
     private func makeFixture() -> (

@@ -248,17 +248,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        let menu = Self.makeContextMenu(target: self)
+        let menu = Self.makeContextMenu(target: self, isJuicebarPinned: panelController.isPinned)
         menu.delegate = self
         statusItem.menu = menu
         button.performClick(nil)
     }
 
-    static func makeContextMenu(target: AnyObject) -> NSMenu {
+    static func makeContextMenu(target: AnyObject, isJuicebarPinned: Bool = false) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(
             withTitle: "Show Usage",
             action: #selector(showUsage),
+            keyEquivalent: ""
+        ).target = target
+        menu.addItem(
+            withTitle: isJuicebarPinned ? "Unpin Juicebar" : "Pin Juicebar",
+            action: #selector(togglePinJuicebar),
             keyEquivalent: ""
         ).target = target
         menu.addItem(.separator())
@@ -284,6 +289,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func showUsage() {
         viewModel.showManualCheck()
         panelController.show()
+    }
+
+    @objc private func togglePinJuicebar() {
+        viewModel.showManualCheck()
+        panelController.togglePin()
     }
 
     @objc private func showSettings() {

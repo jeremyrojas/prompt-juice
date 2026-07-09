@@ -10,10 +10,23 @@ final class AppDelegateMenuTests: XCTestCase {
 
         XCTAssertEqual(nonSeparatorItems.map(\.title), [
             "Show Usage",
+            "Pin Juicebar",
             "Settings…",
             "Quit PromptJuice"
         ])
         XCTAssertFalse(menu.items.contains { $0.title == "Refresh Usage" })
         XCTAssertFalse(menu.items.contains { $0.keyEquivalent == "r" })
+    }
+
+    func testContextMenuShowsUnpinForPinnedJuicebar() {
+        let menu = AppDelegate.makeContextMenu(target: NSObject(), isJuicebarPinned: true)
+        let nonSeparatorItems = menu.items.filter { !$0.isSeparatorItem }
+
+        XCTAssertEqual(nonSeparatorItems.map(\.title), [
+            "Show Usage",
+            "Unpin Juicebar",
+            "Settings…",
+            "Quit PromptJuice"
+        ])
     }
 }
