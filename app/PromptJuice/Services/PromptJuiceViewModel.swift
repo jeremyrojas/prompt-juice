@@ -41,7 +41,7 @@ struct UseSoonNotificationWithdrawal: Equatable {
 }
 
 /// The single macOS notification actually delivered. When more than one provider
-/// is amber at once their per-provider `UseSoonNotice`s are merged into this so
+/// is orange at once their per-provider `UseSoonNotice`s are merged into this so
 /// the user gets one banner listing every provider, not one banner each.
 struct MergedUseSoonNotification: Equatable {
     let title: String
@@ -248,7 +248,7 @@ final class PromptJuiceViewModel: ObservableObject {
     /// among available providers). 100 when nothing is available yet.
     var menuBarRemainingPercent: Double {
         // Clash rule: when a use-soon nudge is active, the fill follows the nudged
-        // provider's session remaining so the amber droplet matches its headline.
+        // provider's session remaining so the orange droplet matches its headline.
         if aggregateSeverity == .useSoon, let alertSnapshot {
             return alertSnapshot.remainingPercent
         }
@@ -476,7 +476,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     /// Just-in-time notification prime: show the one-time in-panel ask only when
-    /// there's a live amber nudge, notifications aren't on, macOS hasn't been
+    /// there's a live orange nudge, notifications aren't on, macOS hasn't been
     /// asked yet, and we haven't already offered it. Any other auth state
     /// (`.denied`, `.authorized`, `.unknown`) suppresses it — a denied user can't
     /// be re-prompted from here, an authorized one needs nothing.
@@ -611,7 +611,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     /// The single banner to deliver for the current pending notices — the merge
-    /// of every amber provider into one notification.
+    /// of every orange provider into one notification.
     func mergedUseSoonNotification(now noticeDate: Date) -> MergedUseSoonNotification? {
         MergedUseSoonNotification(notices: pendingUseSoonNotifications(now: noticeDate))
     }
@@ -634,7 +634,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     /// Drops the remembered banner id once no windows remain latched, so a future
-    /// amber moment starts clean.
+    /// orange moment starts clean.
     func forgetDispatchedUseSoonNotificationIfCleared() {
         if settingsStore.notifiedUseSoonWindowIDs.isEmpty {
             settingsStore.lastUseSoonNotificationIdentifier = nil

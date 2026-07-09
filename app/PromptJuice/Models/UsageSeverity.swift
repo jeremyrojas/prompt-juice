@@ -5,7 +5,7 @@ import Foundation
 /// surfaces agree.
 ///
 /// Two display modes stay calm while the session-reset nudge draws attention:
-/// - `useSoon` (amber): plenty left, but the window resets soon — use it or
+/// - `useSoon` (orange): plenty left, but the window resets soon — use it or
 ///   lose it.
 /// - `low` / `empty` (muted): nearly out; the short fill communicates level.
 ///
@@ -23,7 +23,7 @@ enum UsageSeverity: Equatable {
 
     /// Short chip label. `nil` means no chip is shown — the healthy state stays
     /// silent so the alerting states stand out.
-    /// One-alert model: only `useSoon` (the amber "use it before it resets" nudge)
+    /// One-alert model: only `useSoon` (the orange "use it before it resets" nudge)
     /// gets a chip. Low/empty are calm — the short bar already tells the story.
     var chipText: String? {
         switch self {
@@ -34,7 +34,7 @@ enum UsageSeverity: Equatable {
         }
     }
 
-    /// True when the severity should pull attention (amber chip + tint). Only the
+    /// True when the severity should pull attention (orange chip + tint). Only the
     /// use-soon nudge does; "running low" stays calm (no action to take).
     var isAlerting: Bool {
         switch self {
@@ -46,7 +46,7 @@ enum UsageSeverity: Equatable {
     }
 
     /// Worst-wins ordering for aggregating across providers (higher = louder). The
-    /// amber `useSoon` nudge outranks everything so it always surfaces in the
+    /// orange `useSoon` nudge outranks everything so it always surfaces in the
     /// header/glyph, even when the other provider is low.
     var rank: Int {
         switch self {

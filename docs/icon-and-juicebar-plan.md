@@ -61,7 +61,7 @@ The same droplet renders three ways:
 
 | Surface | Rendering | Color |
 | --- | --- | --- |
-| Menu bar | Monochrome **template** glyph, fill = live level | System-tinted (white/black), amber only when low |
+| Menu bar | Monochrome **template** glyph, fill = live level | System-tinted (white/black), orange only when low |
 | Panel header | Small colored droplet, fill = aggregate level | Lime→green juice, tinted by judgment |
 | Dock / Spotlight / app icon | Full hero render | Lime→green juice on dark squircle |
 
@@ -95,8 +95,8 @@ Touch points: [`PromptJuiceIcon.statusBarImage()`](../app/PromptJuice/UI/PromptJ
   from a 0–100 value. Outline and fill use the **same template color** (level is
   shown by filled-vs-empty area, exactly like the battery).
 - Keep `isTemplate = true` so the system tints it for light/dark/active bars.
-- **Amber low state**: when any provider is "use soon" / nearly empty, swap the
-  template for an amber-tinted image (the battery turns yellow/red the same way).
+- **Orange low state**: when any provider is "use soon" / nearly empty, swap the
+  template for an orange-tinted image (the battery turns yellow/red the same way).
   Off above the low threshold.
 - **Quantize the fill to ~8–10 discrete steps** so the level reads as deliberate
   jumps, not sub-pixel jitter on every tick. This also fixes the droplet's one
@@ -116,7 +116,7 @@ Touch points: [`PromptJuiceIcon.statusBarImage()`](../app/PromptJuice/UI/PromptJ
 - **Which number drives the glyph (decided)** — the menu-bar glyph has **no
   selection state**: when the bar is visible the panel is closed, so it always
   shows one stable aggregate = the **minimum remaining % among available
-  providers**, amber when any provider is `shouldUseSoon`. Rationale: it answers
+  providers**, orange when any provider is `shouldUseSoon`. Rationale: it answers
   "how much capacity is left" and the lowest provider runs out first.
 - Provider rows are display-only. The panel header and menu-bar glyph both show
   the aggregate across visible session readings.
@@ -125,7 +125,7 @@ Touch points: [`PromptJuiceIcon.statusBarImage()`](../app/PromptJuice/UI/PromptJ
 
 - [ ] Add a parameterized droplet-gauge template renderer in `PromptJuiceIcon`.
 - [ ] Quantize fill to N steps; tune N for 18 pt legibility.
-- [ ] Add amber low-state variant.
+- [ ] Add orange low-state variant.
 - [ ] Drive glyph from aggregate snapshot value; update on ticker.
 - [ ] Live accessibility label with the current value.
 - [ ] Verify on light bar, dark bar, and in the active/highlighted state.
@@ -202,7 +202,7 @@ just reports numbers. Touch points:
   "92% left", and a 92% bar (`statusChip` + `percentText` + `CapacityBar`).
 - **Only render the chip when it adds a judgment the number doesn't** ("Use
   soon", "Last drop"). Healthy rows show no chip. Silence in the healthy state is
-  what makes the amber state loud.
+  what makes the orange state loud.
 - Drop the repeated word "left": "92%" alone reads fine next to the bar.
 - This is a rule change in how `statusText` / the chip is gated, not new copy.
 
@@ -223,7 +223,7 @@ just reports numbers. Touch points:
   at high remaining % when reset is near) and for `< 15%` remaining. Result: red
   "Use soon" at 69% left — crying wolf.
 - Split severity:
-  - **Amber = use-it-or-lose-it** (plenty remaining, reset imminent →
+  - **Orange = use-it-or-lose-it** (plenty remaining, reset imminent →
     `shouldUseSoon`).
   - **Red = nearly empty / about to be blocked** (low remaining %).
 - The **menu-bar glyph tint follows the same judgment**, so all three surfaces
@@ -247,7 +247,7 @@ just reports numbers. Touch points:
 - [ ] Labeled reset countdown in rows.
 - [ ] Gate the status chip; hide in healthy state; drop redundant "left".
 - [ ] Gauge-droplet header icon, judgment-tinted.
-- [ ] Single severity enum → amber (use-soon) vs red (nearly empty), shared by
+- [ ] Single severity enum → orange (use-soon) vs red (nearly empty), shared by
       chip/row/glyph.
 - [ ] Evaluate `NSVisualEffectView` panel backing.
 
@@ -331,12 +331,12 @@ context menu and left-click to the panel. The accessibility help already says
 ## Acceptance criteria
 
 - Menu-bar glyph is a droplet whose fill tracks remaining capacity, quantized,
-  template-tinted, amber only when low; accessibility label states the value.
+  template-tinted, orange only when low; accessibility label states the value.
 - App icon is the vertical droplet; clean from 16 px to 1024 px; one shared
   `drawAppIcon`.
 - Panel headline is always a verdict; the reset countdown is unambiguous; healthy
   rows are quiet (no chip, no triple-repeat); header icon is the brand droplet.
-- Amber and red mean two different things, consistently across chip, row, and
+- Orange and red mean two different things, consistently across chip, row, and
   glyph.
 - Left-click opens the panel; right-click/Control-click opens the menu; no
   double-click behavior. (Settings window + gear are a separate plan.)

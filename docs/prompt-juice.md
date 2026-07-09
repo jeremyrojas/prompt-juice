@@ -19,7 +19,7 @@ PromptJuice follows one small loop:
 5. Nudge the user when meaningful capacity remains close to reset.
 
 The app refreshes on launch, activation, wake, panel open, and provider-window
-expiry. Configurable thresholds control the amber use-soon state. When several
+expiry. Configurable thresholds control the orange use-soon state. When several
 providers qualify together, PromptJuice combines them into one macOS
 notification and records one notification latch per provider reset window.
 
@@ -118,7 +118,7 @@ All PromptJuice processing and caches live on the user's Mac:
 - Displays source confidence through row details and tooltips.
 - Opens the Juice Bar from the menu-bar droplet or a notification tap.
 - Supports anchored, pinned, and draggable panel behavior.
-- Uses native notifications for the amber use-soon window.
+- Uses native notifications for the orange use-soon window.
 
 ## Development
 
