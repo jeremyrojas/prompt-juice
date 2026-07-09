@@ -398,7 +398,6 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootView {
     let interactiveContentView: NSView
     private let toolTipRefreshing: PanelToolTipRefreshing
-    private let cornerRadius: CGFloat
     private static let roundedRectMaskImage: NSImage = {
         let cornerRadius = PromptJuicePanelMetrics.panelCornerRadius
         let diameter = ceil(cornerRadius * 2 + 1)
@@ -429,7 +428,6 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
     ) {
         self.interactiveContentView = contentView
         self.toolTipRefreshing = contentView
-        self.cornerRadius = cornerRadius
         super.init(frame: .zero)
 
         material = .hudWindow
