@@ -80,7 +80,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 liveUpgrade: .setupAvailable,
                 settingsStatus: "Read earlier · \(staleTime)",
                 setupButtonTitle: "Set up live readings",
-                tooltip: "Read from Claude Code at \(staleTime) · send any message in Claude Code to refresh",
+                tooltip: "Read from Claude Code as of \(staleTime) · send any message in Claude Code to refresh",
                 popover: "Right now it's showing your last exact reading from \(staleTime). Claude Code will replace it when the statusline sends a current window.",
                 displayPercent: "42%",
                 headerDetailIncludes: ["Claude resets in 2h 30m"],

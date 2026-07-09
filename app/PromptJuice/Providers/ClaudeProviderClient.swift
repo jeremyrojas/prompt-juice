@@ -191,12 +191,17 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
 
     func snapshot(now: Date = Date()) throws -> ProviderSnapshot {
         do {
+            let statusDirectory = cacheURL.deletingLastPathComponent()
             let sessionFiles = Self.sessionCacheFiles(
-                in: cacheURL.deletingLastPathComponent()
+                in: statusDirectory
             )
 
             if !sessionFiles.isEmpty {
-                return try Self.snapshot(fromSessionFiles: sessionFiles, now: now)
+                return try Self.snapshot(
+                    fromSessionFiles: sessionFiles,
+                    latestCacheFile: Self.latestCacheFile(at: cacheURL),
+                    now: now
+                )
             }
 
             try Self.validateCacheFile(at: cacheURL)
@@ -278,6 +283,7 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
 
     private static func snapshot(
         fromSessionFiles files: [StatuslineCacheFile],
+        latestCacheFile: StatuslineCacheFile?,
         now: Date
     ) throws -> ProviderSnapshot {
         var sessionCandidates: [WindowCandidate] = []
@@ -290,21 +296,24 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
                 continue
             }
 
-            if let candidate = windowCandidate(
-                from: rateLimits.fiveHour,
-                kind: .fiveHour,
-                updatedAt: file.modificationDate
-            ) {
-                sessionCandidates.append(candidate)
-            }
+            appendWindowCandidates(
+                from: rateLimits,
+                updatedAt: file.modificationDate,
+                to: &sessionCandidates,
+                and: &weeklyCandidates
+            )
+        }
 
-            if let candidate = windowCandidate(
-                from: rateLimits.sevenDay,
-                kind: .sevenDay,
-                updatedAt: file.modificationDate
-            ) {
-                weeklyCandidates.append(candidate)
-            }
+        if let latestCacheFile,
+           let data = try? Data(contentsOf: latestCacheFile.url),
+           let payload = try? JSONDecoder().decode(ClaudeStatuslinePayload.self, from: data),
+           let rateLimits = payload.rateLimits {
+            appendWindowCandidates(
+                from: rateLimits,
+                updatedAt: latestCacheFile.modificationDate,
+                to: &sessionCandidates,
+                and: &weeklyCandidates
+            )
         }
 
         let mergedSession = mergedWindow(from: sessionCandidates, now: now)
@@ -344,6 +353,29 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
             weeklyUpdatedAt: mergedWeekly?.updatedAt ?? weeklyCandidates.map(\.updatedAt).max(),
             isFreshWeeklyWindow: mergedWeekly == nil && !weeklyCandidates.isEmpty
         )
+    }
+
+    private static func appendWindowCandidates(
+        from rateLimits: ClaudeStatuslineRateLimits,
+        updatedAt: Date,
+        to sessionCandidates: inout [WindowCandidate],
+        and weeklyCandidates: inout [WindowCandidate]
+    ) {
+        if let candidate = windowCandidate(
+            from: rateLimits.fiveHour,
+            kind: .fiveHour,
+            updatedAt: updatedAt
+        ) {
+            sessionCandidates.append(candidate)
+        }
+
+        if let candidate = windowCandidate(
+            from: rateLimits.sevenDay,
+            kind: .sevenDay,
+            updatedAt: updatedAt
+        ) {
+            weeklyCandidates.append(candidate)
+        }
     }
 
     private static func windowCandidate(
@@ -452,6 +484,15 @@ struct ClaudeStatuslineSnapshotReader: ClaudeStatuslineSnapshotReading {
             }
             .prefix(64)
             .map { $0 }
+    }
+
+    private static func latestCacheFile(at url: URL) -> StatuslineCacheFile? {
+        guard (try? validateCacheFile(at: url)) != nil,
+              let modificationDate = try? rawCacheModificationDate(at: url) else {
+            return nil
+        }
+
+        return StatuslineCacheFile(url: url, modificationDate: modificationDate)
     }
 
     private static func cacheModificationDate(at url: URL, now: Date) throws -> Date {

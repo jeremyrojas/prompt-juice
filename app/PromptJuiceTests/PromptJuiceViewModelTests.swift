@@ -637,6 +637,44 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.detail, "Fresh window")
     }
 
+    func testManualSubtitleFollowsUseSoonProviderWhenAnotherProviderIsEmpty() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [
+                ProviderSnapshot(
+                    identity: .claude,
+                    rateWindow: .available(
+                        usedPercent: 100,
+                        resetAt: Self.fixedNow.addingTimeInterval(31 * 60),
+                        durationMinutes: 300
+                    ),
+                    source: .claudeStatusline,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow
+                ),
+                ProviderSnapshot(
+                    identity: .codex,
+                    rateWindow: .available(
+                        usedPercent: 42,
+                        resetAt: Self.fixedNow.addingTimeInterval(38 * 60),
+                        durationMinutes: 300
+                    ),
+                    source: .codexAppServer,
+                    confidence: .exact,
+                    updatedAt: Self.fixedNow
+                )
+            ]),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        XCTAssertEqual(viewModel.headline, "Use Codex before it resets")
+        XCTAssertEqual(viewModel.detail, "Codex resets in 38m")
+    }
+
     func testManualVerdictIsCalmWhenHealthy() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -918,11 +956,54 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.sourceTooltip(for: claude),
-            "Read from Claude Code at \(time) · send any message in Claude Code to refresh"
+            "Read from Claude Code as of \(time) · send any message in Claude Code to refresh"
         )
         XCTAssertEqual(
             viewModel.claudeMeasurementPopoverDetail,
             "Right now it's showing your last exact reading from \(time). Claude Code will replace it when the statusline sends a current window."
+        )
+    }
+
+    func testSourceTooltipCallsOutEmptyProviderWithReadingTime() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: Self.healthySnapshots),
+            now: { Self.fixedNow }
+        )
+        let updatedAt = Self.fixedNow.addingTimeInterval(-75)
+        let emptyClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 100,
+                resetAt: Self.fixedNow.addingTimeInterval(31 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: updatedAt
+        )
+        let emptyCodex = ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .available(
+                usedPercent: 100,
+                resetAt: Self.fixedNow.addingTimeInterval(38 * 60),
+                durationMinutes: 300
+            ),
+            source: .codexAppServer,
+            confidence: .exact,
+            updatedAt: updatedAt
+        )
+        let time = clockTime(updatedAt)
+
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: emptyClaude),
+            "Claude is out until reset · read from Claude Code as of \(time)"
+        )
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: emptyCodex),
+            "Codex is out until reset · read from Codex app-server as of \(time)"
         )
     }
 
@@ -956,7 +1037,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         )
         XCTAssertEqual(
             viewModel.sourceTooltip(for: staleClaude),
-            "Read from Claude Code at \(time) · send any message in Claude Code to refresh"
+            "Read from Claude Code as of \(time) · send any message in Claude Code to refresh"
         )
         XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: staleClaude), "68%")
         XCTAssertEqual(viewModel.fullResetText(for: staleClaude), "resets in 1h 18m")
@@ -1441,6 +1522,50 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.refreshClaudeAfterStatusCacheChange()
 
         await waitForSnapshots([exactClaude, Self.healthySnapshots[1]], in: viewModel)
+        XCTAssertEqual(claudeProvider.callCount, 1)
+    }
+
+    func testClaudeStatusCacheRefreshReplacesAgedExactSnapshotWithNewerStaleReading() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let oldExactClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 51,
+                resetAt: Self.fixedNow.addingTimeInterval(31 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeStatusline,
+            confidence: .exact,
+            updatedAt: Self.fixedNow.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 30)
+        )
+        let newerStaleClaude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .available(
+                usedPercent: 103,
+                resetAt: Self.fixedNow.addingTimeInterval(31 * 60),
+                durationMinutes: 300
+            ),
+            source: .claudeCache,
+            confidence: .stale,
+            updatedAt: Self.fixedNow.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 1)
+        )
+        let aggregateProvider = CountingUsageProviderClient(snapshots: [
+            oldExactClaude,
+            Self.healthySnapshots[1]
+        ])
+        let claudeProvider = CountingUsageProviderClient(snapshots: [newerStaleClaude])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: aggregateProvider,
+            claudeStatusCacheProviderClient: claudeProvider,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshClaudeAfterStatusCacheChange()
+
+        await waitForSnapshots([newerStaleClaude, Self.healthySnapshots[1]], in: viewModel)
+        XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: newerStaleClaude), "0%")
         XCTAssertEqual(claudeProvider.callCount, 1)
     }
 

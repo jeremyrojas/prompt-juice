@@ -410,6 +410,34 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertFalse(snapshot.isFreshSessionWindow)
     }
 
+    func testClaudeStatuslineReaderLetsFreshLatestSupersedeStaleSessionFile() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
+        let statusDir = cacheURL.deletingLastPathComponent()
+        let resetAt = now.addingTimeInterval(31 * 60)
+
+        try FileManager.default.createDirectory(at: statusDir, withIntermediateDirectories: true)
+        try writeSessionCache(
+            sessionID: "stale",
+            fiveHourUsed: 51,
+            fiveHourReset: resetAt,
+            to: statusDir,
+            modificationDate: now.addingTimeInterval(-ClaudeStatuslineSnapshotReader.maximumCacheAge - 30)
+        )
+        try """
+        {"rate_limits":{"five_hour":{"used_percentage":103,"resets_at":"\(Int(resetAt.timeIntervalSince1970))","duration_minutes":300}}}
+        """.write(to: cacheURL, atomically: true, encoding: .utf8)
+        try setModificationDate(now, for: cacheURL)
+
+        let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
+
+        XCTAssertEqual(snapshot.confidence, .exact)
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 103)
+        XCTAssertEqual(snapshot.remainingPercent, 0)
+        XCTAssertEqual(snapshot.updatedAt, now)
+    }
+
     func testClaudeStatuslineReaderTreatsZombieOnlySessionsAsFreshWindow() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

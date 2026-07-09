@@ -192,15 +192,6 @@ final class PromptJuiceViewModel: ObservableObject {
         settingsStore.isFirstRun
     }
 
-    var primarySnapshot: UsageSnapshot? {
-        let refreshDate = now()
-        return visibleSnapshots
-            .filter { $0.hasActiveResetWindow(at: refreshDate) }
-            .min { first, second in
-                (first.rateWindow.resetAt ?? .distantFuture) < (second.rateWindow.resetAt ?? .distantFuture)
-            }
-    }
-
     var claudeLiveUpgrade: ClaudeLiveUpgrade {
         if let claude = snapshots.first(where: { $0.provider == .claude }),
            claude.confidence == .exact || claude.isFreshSessionWindow {
@@ -338,18 +329,38 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Fresh window"
         }
 
-        let resetTexts = resetSnapshots.map { resetText(for: $0) }
+        let contextualResetSnapshots = resetSnapshotsForHeaderDetail(
+            from: resetSnapshots,
+            at: refreshDate
+        )
+        let resetTexts = contextualResetSnapshots.map { resetText(for: $0) }
         if let sharedText = resetTexts.first,
            resetTexts.allSatisfy({ $0 == sharedText }) {
-            let verb = resetSnapshots.count == 1 ? "resets" : "reset"
-            return "\(providerNameList(resetSnapshots)) \(verb) in \(sharedText)"
+            let verb = contextualResetSnapshots.count == 1 ? "resets" : "reset"
+            return "\(providerNameList(contextualResetSnapshots)) \(verb) in \(sharedText)"
         }
 
-        if let soonest = primarySnapshot {
+        if let soonest = contextualResetSnapshots.min(by: { first, second in
+            (first.rateWindow.resetAt ?? .distantFuture) < (second.rateWindow.resetAt ?? .distantFuture)
+        }) {
             return "\(soonest.displayName) resets in \(resetText(for: soonest))"
         }
 
         return "Fresh window"
+    }
+
+    private func resetSnapshotsForHeaderDetail(
+        from resetSnapshots: [UsageSnapshot],
+        at refreshDate: Date
+    ) -> [UsageSnapshot] {
+        guard aggregateSeverity == .useSoon else {
+            return resetSnapshots
+        }
+
+        let alerting = alertingSnapshots.filter {
+            $0.hasActiveResetWindow(at: refreshDate)
+        }
+        return alerting.isEmpty ? resetSnapshots : alerting
     }
 
     private func providerNameList(_ snapshots: [UsageSnapshot]) -> String {
@@ -931,6 +942,10 @@ final class PromptJuiceViewModel: ObservableObject {
                 return "Fresh window · starts with your next Claude Code message"
             }
 
+            if snapshot.isAvailable && snapshot.remainingPercent <= 0 {
+                return "Claude is out until reset · read from Claude Code as of \(clockTime(snapshot.updatedAt))"
+            }
+
             switch snapshot.confidence {
             case .exact:
                 return "Read from Claude Code"
@@ -944,7 +959,7 @@ final class PromptJuiceViewModel: ObservableObject {
                     return "Estimated from local Claude Code activity"
                 }
             case .stale:
-                return "Read from Claude Code at \(clockTime(snapshot.updatedAt)) · send any message in Claude Code to refresh"
+                return "Read from Claude Code as of \(clockTime(snapshot.updatedAt)) · send any message in Claude Code to refresh"
             case .unavailable:
                 if claudeLiveUpgrade == .awaitingSession {
                     return "You're set up · waiting for Claude Code usage"
@@ -966,13 +981,17 @@ final class PromptJuiceViewModel: ObservableObject {
             label = "a fixture"
         }
 
+        if snapshot.isAvailable && snapshot.remainingPercent <= 0 {
+            return "\(snapshot.displayName) is out until reset · read from \(label) as of \(clockTime(snapshot.updatedAt))"
+        }
+
         switch snapshot.confidence {
         case .exact:
             return "Read from \(label)"
         case .estimated:
             return "Estimated from \(label)"
         case .stale:
-            return "Read from \(label) · \(clockTime(snapshot.updatedAt))"
+            return "Read from \(label) as of \(clockTime(snapshot.updatedAt))"
         case .unavailable:
             return snapshot.statusDetail ?? "Not measured yet"
         }
@@ -1248,7 +1267,9 @@ final class PromptJuiceViewModel: ObservableObject {
     private func mergeSnapshotIfNewer(_ snapshot: ProviderSnapshot) -> Bool {
         let refreshDate = now()
         let refreshedSnapshot = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
-        let existing = snapshots.first { $0.provider == refreshedSnapshot.provider }
+        let existing = snapshots
+            .first { $0.provider == refreshedSnapshot.provider }
+            .map { currentSnapshotForComparison($0, refreshDate: refreshDate) }
 
         if let existing,
            shouldKeepExistingSnapshot(
@@ -1505,7 +1526,9 @@ final class PromptJuiceViewModel: ObservableObject {
                     now: refreshDate
                 )
 
-                if let existing = snapshots.first(where: { $0.provider == currentSnapshot.provider }),
+                if let existing = snapshots
+                    .first(where: { $0.provider == currentSnapshot.provider })
+                    .map({ currentSnapshotForComparison($0, refreshDate: refreshDate) }),
                    shouldKeepExistingSnapshot(
                     existing,
                     over: currentSnapshot,
@@ -1541,6 +1564,33 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return existing.updatedAt > refreshed.updatedAt
+    }
+
+    private func currentSnapshotForComparison(
+        _ snapshot: ProviderSnapshot,
+        refreshDate: Date
+    ) -> ProviderSnapshot {
+        let current = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
+        guard current.identity == .claude,
+              current.source == .claudeStatusline,
+              current.confidence == .exact,
+              !current.isFreshSessionWindow,
+              refreshDate.timeIntervalSince(current.updatedAt) > ClaudeStatuslineSnapshotReader.maximumCacheAge else {
+            return current
+        }
+
+        return ProviderSnapshot(
+            identity: current.identity,
+            rateWindow: current.rateWindow,
+            weeklyWindow: current.weeklyWindow,
+            source: current.source,
+            confidence: .stale,
+            updatedAt: current.updatedAt,
+            weeklyUpdatedAt: current.weeklyUpdatedAt,
+            statusDetail: current.statusDetail,
+            isFreshSessionWindow: current.isFreshSessionWindow,
+            isFreshWeeklyWindow: current.isFreshWeeklyWindow
+        )
     }
 
     private func settledExistingSnapshot(
