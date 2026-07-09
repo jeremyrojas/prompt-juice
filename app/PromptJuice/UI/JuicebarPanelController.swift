@@ -671,6 +671,10 @@ final class JuicebarPanelController: NSObject {
         panel?.hasShadow == true
     }
 
+    var panelAnimationBehaviorForTesting: NSWindow.AnimationBehavior? {
+        panel?.animationBehavior
+    }
+
     var panelModeForTesting: JuicebarPanelMode {
         panelMode
     }
@@ -825,6 +829,7 @@ final class JuicebarPanelController: NSObject {
         }
         panel.becomesKeyOnlyIfNeeded = false
         panel.level = .floating
+        panel.animationBehavior = .none
         panel.title = "PromptJuice Juicebar"
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false

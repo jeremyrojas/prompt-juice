@@ -338,6 +338,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         XCTAssertTrue(controller.panelContentForwardsToolTipsForTesting)
         XCTAssertTrue(controller.panelHasShadowForTesting)
+        XCTAssertEqual(controller.panelAnimationBehaviorForTesting, NSWindow.AnimationBehavior.none)
 
         controller.show()
         defer { controller.hide() }
@@ -349,6 +350,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.panelFirstResponderIsInteractiveContentForTesting)
         XCTAssertTrue(controller.panelContentForwardsToolTipsForTesting)
         XCTAssertTrue(controller.panelHasShadowForTesting)
+        XCTAssertEqual(controller.panelAnimationBehaviorForTesting, NSWindow.AnimationBehavior.none)
     }
 
     private func makeFixture() -> (
