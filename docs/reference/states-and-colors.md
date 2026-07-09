@@ -5,7 +5,7 @@ tracking and future work. Reflects the implementation on main (PR #13).
 
 A row's appearance is the product of **two independent axes**:
 
-- **Severity (the situation)** → drives color. One-alert model: only the amber
+- **Severity (the situation)** → drives color. One-alert model: only the orange
   *Use soon* nudge raises its voice; everything else is calm.
 - **Fetch / trust (Claude data freshness)** → drives how the number is shown.
 
@@ -21,7 +21,7 @@ Source: [`SeverityAppearance.swift`](../../app/PromptJuice/UI/SeverityAppearance
 | Token | RGB (0–1) | Hex | Used for |
 |---|---|---|---|
 | `green` | 0.373, 0.820, 0.122 | `#5FD11F` | healthy |
-| `amber` | 0.941, 0.639, 0.165 | `#F0A32A` | the use-soon nudge (the only alert) |
+| `orange` | 0.941, 0.639, 0.165 | `#F0A32A` | the use-soon nudge (the only alert) |
 | `muted` | 0.590, 0.610, 0.650 | `#969CA6` | calm low / empty / unavailable |
 
 Provider identity dots are SwiftUI system colors (not `JuicePalette`):
@@ -47,7 +47,7 @@ default **60 min / 40%** (see §3).
 | Severity | Trigger | Panel tint | Hex | Chip | Notification candidate? | Menu-bar tint | Rank |
 |---|---|---|---|---|---|---|---|
 | `empty` | `session remaining ≤ 0` | muted | `#969CA6` | — | no | plain | 3 |
-| `useSoon` | `session reset ≤ TimeThreshold` **and** `session remaining ≥ JuiceThreshold` | amber | `#F0A32A` | **Use soon** | **yes** | amber | 4 |
+| `useSoon` | `session reset ≤ TimeThreshold` **and** `session remaining ≥ JuiceThreshold` | orange | `#F0A32A` | **Use soon** | **yes** | orange | 4 |
 | `low` | `session remaining < 15` | muted | `#969CA6` | — | no | plain | 2 |
 | `healthy` | otherwise | green | `#5FD11F` | — | no | plain | 0 |
 | `unavailable` | no usable reading | muted | `#969CA6` | — | no | plain | 1 |
@@ -55,7 +55,7 @@ default **60 min / 40%** (see §3).
 Notes:
 - **Only `useSoon` gets a chip and can create a macOS notification.** `low`/`empty` are calm — the short bar communicates "low" without an alarm.
 - **Rank** is the worst-wins order for the aggregate; `useSoon` (4) outranks everything so the nudge always wins the header/glyph over a calm low.
-- **Menu-bar tint** is `nil` ("plain template") for everything except `useSoon` — the glyph only lights up (amber) when there's something to do.
+- **Menu-bar tint** is `nil` ("plain template") for everything except `useSoon` — the glyph only lights up (orange) when there's something to do.
 
 ---
 
@@ -71,7 +71,7 @@ Source: [`AlertThresholds.swift`](../../app/PromptJuice/Models/AlertThresholds.s
 Read as one sentence: *"When reset is within [60 min] and I still have at least [40%]."*
 The `low` boundary (`< 15%`) is a fixed constant (`UsageSeverity.lowRemainingFloor`), not a user threshold — it only controls the calm "running low" look, not an alert.
 
-The **Notify me** toggle gates macOS banners. The amber droplet, row chip, and panel color still follow `useSoon` when notifications are off.
+The **Notify me** toggle gates macOS banners. The orange droplet, row chip, and panel color still follow `useSoon` when notifications are off.
 
 ---
 
@@ -115,7 +115,7 @@ Notes:
 - The only at-rest visible tell of a guess is the `~`. Source/age live in the hover tooltip only — facts, never promises.
 - Fresh session windows are presentation-only: they carry no reset timestamp and wait behind any valid real reading.
 - Last-good provider cache is used only while the cached session or weekly reset is still ahead. After both pass reset, the provider returns to the waiting/setup path.
-- Rows, header/menu-bar fill, and low/empty severity use session remaining. The amber use-soon nudge uses session reset timing.
+- Rows, header/menu-bar fill, and low/empty severity use session remaining. The orange use-soon nudge uses session reset timing.
 
 ## 5. Use-soon notifications
 
@@ -133,7 +133,7 @@ Source: [`AppDelegate.updateStatusItemGlyph`](../../app/PromptJuice/App/AppDeleg
 
 | Property | Rule |
 |---|---|
-| Tint | amber if any provider is `useSoon`, else plain (uncolored) |
+| Tint | orange if any provider is `useSoon`, else plain (uncolored) |
 | Fill | the `useSoon` provider's session remaining when a nudge is active, else the lowest available provider session remaining |
 | Redraw | every ~1s, deduped on `"percent-severity"` |
 
@@ -164,16 +164,16 @@ The matrix applies after the enabled-provider filter.
 | Provider A | Provider B | Header verdict | Droplet |
 |---|---|---|---|
 | healthy | healthy | "Plenty of prompt juice left" | green, lower % |
-| useSoon | healthy | "Use [A] before it resets" | amber, A's % |
-| useSoon | useSoon | "Use prompt juice soon" | amber, lower % |
-| **useSoon** | **low** | "Use [A] before it resets" | **amber, A's session remaining** |
+| useSoon | healthy | "Use [A] before it resets" | orange, A's % |
+| useSoon | useSoon | "Use prompt juice soon" | orange, lower % |
+| **useSoon** | **low** | "Use [A] before it resets" | **orange, A's session remaining** |
 | low | healthy | "[low one] is running low" | muted, low % |
 | low | low | "Running low on both" | muted, lower % |
 | not-measured | healthy | "Plenty of prompt juice left" | green, B's % |
-| not-measured | useSoon | "Use [B] before it resets" | amber, B's % |
+| not-measured | useSoon | "Use [B] before it resets" | orange, B's % |
 | not-measured | not-measured | "Not measured yet" | muted / ghost |
 
-**Clash rule (use-soon + low):** the amber nudge wins the header, and the droplet fill
+**Clash rule (use-soon + low):** the orange nudge wins the header, and the droplet fill
 follows the *nudged* provider's session remaining. The low provider stays calm in its own row.
 
 ---
@@ -183,6 +183,6 @@ follows the *nudged* provider's session remaining. The low provider stays calm i
 | State | Color | Hex |
 |---|---|---|
 | Healthy / Live | green | `#5FD11F` |
-| Use soon (the nudge) | amber | `#F0A32A` |
+| Use soon (the nudge) | orange | `#F0A32A` |
 | Low / Empty | muted | `#969CA6` |
 | Not measured / unavailable | muted | `#969CA6` |

@@ -18,7 +18,7 @@ a small hosting-view tweak. (2) The not-measured subtitle reads "Claude n/a"; co
 
 ## Design in one paragraph
 
-**One-alert model.** The amber **Use soon** nudge — reset is near *and* you still
+**One-alert model.** The orange **Use soon** nudge — reset is near *and* you still
 have at least the Juice Threshold left — is the *only* thing that raises its voice.
 **Low goes calm** (short bar, no chip, no red); the short fill speaks for itself.
 **Red retires** (reserved at most for truly blocked/0% later). **Claude fetch states
@@ -34,11 +34,11 @@ Files: `Models/UsageSeverity.swift`, `UI/SeverityAppearance.swift`, `Services/Al
 - `UsageSeverity`: `low`/`empty` → `isAlerting = false`, `chipText = nil`; `rank` so `useSoon` outranks `low`.
 - `SeverityAppearance`: `tint` for `low`/`empty` → neutral/calm (not red); `menuBarTint` for `low` → `nil`.
 - Aggregation rule (header verdict + menu-bar glyph; rows always stay independent):
-  - Either provider `useSoon` → amber nudge wins. One → "Use [provider] before it resets"; both → "Use prompt juice soon."
+  - Either provider `useSoon` → orange nudge wins. One → "Use [provider] before it resets"; both → "Use prompt juice soon."
   - Else → calm; droplet fill = lower provider; verdict factual ("Running low on both", "Plenty of prompt juice left").
   - not-measured never overrides the other provider's real reading; both not-measured → "Not measured yet."
   - **Clash (use-soon + low):** nudge wins AND `headerRemainingPercent`/`menuBarRemainingPercent` follow the alert (preferred) snapshot's %, NOT the global min.
-- Accept: 8% renders a calm short bar (no chip/red); use-soon(78%) + low(8%) shows the amber nudge with a 78% droplet.
+- Accept: 8% renders a calm short bar (no chip/red); use-soon(78%) + low(8%) shows the orange nudge with a 78% droplet.
 
 ### Slice 2 — Relabel the threshold menus  [self-contained]
 File: `App/AppDelegate.swift` (`addThresholdMenus`)

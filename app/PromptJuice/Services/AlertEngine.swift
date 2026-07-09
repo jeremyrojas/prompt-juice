@@ -65,7 +65,7 @@ struct AlertEngine {
             return .empty
         }
 
-        // The amber nudge takes priority; below it, "running low" is a calm state.
+        // The orange nudge takes priority; below it, "running low" is a calm state.
         if shouldUseSoon(for: snapshot, thresholds: thresholds, now: now) {
             return .useSoon
         }

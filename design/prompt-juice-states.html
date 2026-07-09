@@ -17,7 +17,7 @@
         --muted: rgba(255, 255, 255, 0.56);
         --faint: rgba(255, 255, 255, 0.34);
         --green: #37d06f;
-        --amber: #f3a336;
+        --orange: #f3a336;
         --red: #ff5b5f;
         --red-soft: rgba(255, 91, 95, 0.16);
         --cyan: #48d5ff;
@@ -575,7 +575,7 @@
         <div class="legend" aria-label="Usage level legend">
           <span class="legend-chip"><span class="dot" style="--dot-color: var(--red)"></span>Use soon: lots left, reset soon</span>
           <span class="legend-chip"><span class="dot" style="--dot-color: var(--green)"></span>Lots left: 40%+ left</span>
-          <span class="legend-chip"><span class="dot" style="--dot-color: var(--amber)"></span>Some left: 15-39% left</span>
+          <span class="legend-chip"><span class="dot" style="--dot-color: var(--orange)"></span>Some left: 15-39% left</span>
           <span class="legend-chip"><span class="dot" style="--dot-color: var(--red)"></span>Low: under 15% left</span>
         </div>
       </header>
@@ -722,7 +722,7 @@
       function levelFor(used) {
         const remaining = 100 - used;
         if (remaining >= 40) return { label: "Lots left", color: "var(--green)" };
-        if (remaining >= 15) return { label: "Some left", color: "var(--amber)" };
+        if (remaining >= 15) return { label: "Some left", color: "var(--orange)" };
         if (remaining > 0) return { label: "Low", color: "var(--red)" };
         return { label: "Empty", color: "var(--red)" };
       }

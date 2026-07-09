@@ -83,7 +83,7 @@ final class PromptJuiceSettingsStore {
     }
 
     /// Identifier of the most recently delivered use-soon notification. Because
-    /// several amber providers are merged into a single banner, this is the one
+    /// several orange providers are merged into a single banner, this is the one
     /// id to remove when the covered windows go stale.
     var lastUseSoonNotificationIdentifier: String? {
         get {

@@ -147,7 +147,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showsNotificationAuthorizationHint)
     }
 
-    func testNotificationPrimeOffersOnlyDuringAmberWhenAuthUndetermined() {
+    func testNotificationPrimeOffersOnlyDuringOrangeWhenAuthUndetermined() {
         let fixture = makeFixture(notificationsEnabled: nil)
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -170,7 +170,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
     }
 
-    func testNotificationPrimeHiddenWhenNotAmber() {
+    func testNotificationPrimeHiddenWhenNotOrange() {
         let fixture = makeFixture(notificationsEnabled: nil)
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
@@ -216,7 +216,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.shouldOfferUseSoonNotificationPrime)
         XCTAssertTrue(fixture.store.didOfferUseSoonNotification)
 
-        // Latch survives relaunch even while still amber + undetermined.
+        // Latch survives relaunch even while still orange + undetermined.
         let relaunched = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: StaticUsageProviderClient(snapshots: Self.alertSnapshots),

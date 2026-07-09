@@ -10,7 +10,7 @@ enum PromptJuicePanelMetrics {
     static let chromeHeight: CGFloat = 68
 
     // Just-in-time notification prime banner. Shared by the view (layout) and
-    // `PanelClickRouter` (hit-testing) so the amber CTA and its tap targets stay
+    // `PanelClickRouter` (hit-testing) so the orange CTA and its tap targets stay
     // pixel-aligned.
     static let primeBannerHeight: CGFloat = 84
     static let primeCardPadding: CGFloat = 11
@@ -129,7 +129,7 @@ struct PromptJuicePanelView: View {
 }
 
 /// One-time just-in-time prime for macOS notifications, shown under the rows
-/// during an amber moment. Visual only — the panel routes clicks through
+/// during an orange moment. Visual only — the panel routes clicks through
 /// `PanelClickRouter`, so the two labels are matched by hit-rects there, not by
 /// SwiftUI `Button` actions.
 private struct NotificationPrimeBanner: View {
@@ -138,7 +138,7 @@ private struct NotificationPrimeBanner: View {
             HStack(spacing: 8) {
                 Image(systemName: "bell.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(JuicePalette.amber)
+                    .foregroundStyle(JuicePalette.orange)
 
                 Text("Want to get notified when to use your juice?")
                     .font(.system(size: 12.5, weight: .medium))
@@ -163,12 +163,12 @@ private struct NotificationPrimeBanner: View {
                 .fill(.ultraThinMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(JuicePalette.amber.opacity(0.08))
+                        .fill(JuicePalette.orange.opacity(0.08))
                 )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(JuicePalette.amber.opacity(0.28), lineWidth: 1)
+                .stroke(JuicePalette.orange.opacity(0.28), lineWidth: 1)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Turn on notifications to know when to use your juice")
@@ -373,7 +373,7 @@ private struct ProviderUsageRow: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    /// One-alert model: only the amber use-soon nudge gets a chip.
+    /// One-alert model: only the orange use-soon nudge gets a chip.
     @ViewBuilder
     private var statusChip: some View {
         if let label = severity.chipText {

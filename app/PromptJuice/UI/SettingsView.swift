@@ -130,7 +130,7 @@ struct SettingsView: View {
         } header: {
             Text("Use the juice")
         } footer: {
-            Text("Turns your menu-bar droplet amber when a usage limit window is this close to resetting.")
+            Text("Turns your menu-bar droplet orange when a usage limit window is this close to resetting.")
                 .font(.footnote)
         }
 

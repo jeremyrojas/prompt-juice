@@ -12,9 +12,9 @@ menu-bar droplet gives you the glance; the Juice Bar gives you the details.
 PromptJuice is built around one valuable moment: **plenty of capacity remains,
 and very little time remains before the window resets**. You choose the time and
 remaining-juice thresholds that define that moment. When both are met, the
-droplet turns amber and PromptJuice can send one timely macOS notification.
+droplet turns orange and PromptJuice can send one timely macOS notification.
 
-That amber window is your cue to spend bigger: start the ambitious task, fan
+That orange window is your cue to spend bigger: start the ambitious task, fan
 work out to more agents, use fast mode, or reach for a stronger model while the
 capacity is already yours. Squeeze the window before the window resets.
 
@@ -58,7 +58,7 @@ on the same well-tested path.
 - A menu-bar droplet whose fill reflects remaining session capacity.
 - A compact Juice Bar with Claude and Codex percentages and reset countdowns.
 - Clear **Live**, **Earlier**, **Estimate**, and **Not set up** confidence labels.
-- Configurable time-to-reset and remaining-capacity thresholds for the amber cue.
+- Configurable time-to-reset and remaining-capacity thresholds for the orange cue.
 - One merged macOS notification for providers that enter the same use-soon moment.
 - A pinnable, draggable Juice Bar that remembers its position.
 - Local caches that carry valid last-good readings through brief provider outages.
