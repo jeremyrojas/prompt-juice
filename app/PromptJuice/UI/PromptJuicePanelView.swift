@@ -4,13 +4,10 @@ enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
     static let plainRowHeight: CGFloat = 48
     static let rowSpacing: CGFloat = 7
-    static let settingsHitSize: CGFloat = 22
-    static let settingsHeightIncrement: CGFloat = 30
-    static let settingsBottomInset: CGFloat = 8
-    static let settingsTrailingInset: CGFloat = 14
     static let contentPadding: CGFloat = 14
     static let contentSpacing: CGFloat = 10
     static let panelCornerRadius: CGFloat = 22
+    static let chromeHeight: CGFloat = 68
 
     // Just-in-time notification prime banner. Shared by the view (layout) and
     // `PanelClickRouter` (hit-testing) so the amber CTA and its tap targets stay
@@ -29,7 +26,7 @@ enum PromptJuicePanelMetrics {
         let primeBlockHeight = showsNotificationPrime
             ? contentSpacing + primeBannerHeight
             : 0
-        return 63 + rowBlockHeight + primeBlockHeight + settingsHeightIncrement
+        return chromeHeight + rowBlockHeight + primeBlockHeight
     }
 }
 
@@ -57,11 +54,6 @@ struct PromptJuicePanelView: View {
         .padding(PromptJuicePanelMetrics.contentPadding)
         .frame(width: PromptJuicePanelMetrics.width, height: panelHeight, alignment: .top)
         .glassPanel(cornerRadius: panelCornerRadius)
-        .overlay(alignment: .bottomTrailing) {
-            settingsGear
-                .padding(.trailing, PromptJuicePanelMetrics.settingsTrailingInset)
-                .padding(.bottom, PromptJuicePanelMetrics.settingsBottomInset)
-        }
     }
 
     private var header: some View {
@@ -120,30 +112,6 @@ struct PromptJuicePanelView: View {
                 ProviderUsageRow(snapshot: snapshot, viewModel: viewModel)
             }
         }
-    }
-
-    private var settingsGear: some View {
-        let isHovered = viewModel.hoveredPanelTarget == .settings
-
-        return ZStack {
-            Circle()
-                .fill(.ultraThinMaterial)
-                .opacity(isHovered ? 1 : 0)
-                .overlay(Circle().fill(Color.white.opacity(isHovered ? 0.065 : 0)))
-
-            Image(systemName: "gearshape")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 13, height: 13)
-                .foregroundStyle(.white.opacity(isHovered ? 0.85 : 0.40))
-        }
-            .frame(
-                width: PromptJuicePanelMetrics.settingsHitSize,
-                height: PromptJuicePanelMetrics.settingsHitSize
-            )
-            .overlay(Circle().strokeBorder(Color.white.opacity(isHovered ? 0.12 : 0), lineWidth: 1))
-            .contentShape(Circle())
-            .accessibilityLabel("Settings")
     }
 
     private var headerTint: Color {
@@ -381,7 +349,7 @@ private struct ProviderUsageRow: View {
 
     /// Estimates get a leading `~`; the only visible tell that a reading is a guess.
     private var percentLabel: String {
-        viewModel.sessionRemainingPercentDisplayValueText(for: snapshot)
+        "\(viewModel.sessionRemainingPercentDisplayValueText(for: snapshot)) left"
     }
 
     @ViewBuilder
