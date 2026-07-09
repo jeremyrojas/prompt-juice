@@ -58,6 +58,13 @@ fi
 
 rm -rf "$DEST_PATH"
 ditto "$APP_PATH" "$DEST_PATH"
+touch "$DEST_PATH"
+
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$LSREGISTER" ]]; then
+  "$LSREGISTER" -f "$DEST_PATH" >/dev/null 2>&1 || true
+fi
+/usr/bin/mdimport "$DEST_PATH" >/dev/null 2>&1 || true
 
 if ! open "$DEST_PATH"; then
   "$DEST_PATH/Contents/MacOS/$APP_NAME" &

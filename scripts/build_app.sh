@@ -6,6 +6,7 @@ APP_NAME="PromptJuice"
 CONFIGURATION="${CONFIGURATION:-debug}"
 APP_DIR="$ROOT_DIR/build/$APP_NAME.app"
 BINARY_PATH="$ROOT_DIR/.build/$CONFIGURATION/$APP_NAME"
+MASCOT_ICON_SOURCE="$ROOT_DIR/design/assets/promptjuice-mascot-happy.png"
 
 cd "$ROOT_DIR"
 
@@ -33,8 +34,11 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BINARY_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT_DIR/app/PromptJuice/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$ROOT_DIR/scripts/claude-statusline-bridge.sh" "$APP_DIR/Contents/Resources/claude-statusline-bridge.sh"
+cp "$MASCOT_ICON_SOURCE" "$APP_DIR/Contents/Resources/PromptJuiceMascot.png"
 chmod +x "$APP_DIR/Contents/Resources/claude-statusline-bridge.sh"
-swift "$ROOT_DIR/scripts/generate_app_icon.swift" "$APP_DIR/Contents/Resources/PromptJuice.icns" >&2
+swift "$ROOT_DIR/scripts/generate_app_icon.swift" \
+    "$MASCOT_ICON_SOURCE" \
+    "$APP_DIR/Contents/Resources/PromptJuice.icns" >&2
 
 BUNDLE_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_DIR/Contents/Info.plist")"
 sign_app_bundle "$BUNDLE_IDENTIFIER"

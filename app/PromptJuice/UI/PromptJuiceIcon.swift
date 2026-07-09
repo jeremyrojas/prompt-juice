@@ -93,101 +93,27 @@ enum PromptJuiceIcon {
         return path
     }
 
-    static func appIconImage(size: CGFloat = 128) -> NSImage {
-        NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
-            drawAppIcon(in: rect, detail: size >= 64)
+    static func appIconImage(size: CGFloat = 128) -> NSImage? {
+        guard
+            let mascotURL = Bundle.main.url(
+                forResource: "PromptJuiceMascot",
+                withExtension: "png"
+            ),
+            let mascot = NSImage(contentsOf: mascotURL)
+        else {
+            return nil
+        }
+
+        return NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            mascot.draw(
+                in: rect,
+                from: .zero,
+                operation: .copy,
+                fraction: 1,
+                respectFlipped: true,
+                hints: [.interpolation: NSImageInterpolation.high]
+            )
             return true
         }
-    }
-
-    /// The vertical "gauge droplet" hero — lime-to-green juice in a glass
-    /// droplet with a prompt cursor. Drawn in a flipped (y-down) context so the
-    /// shared `DropletGeometry` matches the menu-bar glyph. `detail` carries the
-    /// cursor and highlight, dropped below ~64 px so small icns sizes stay clean.
-    static func drawAppIcon(in rect: NSRect, detail: Bool) {
-        let size = rect.width
-        let background = NSBezierPath(
-            roundedRect: rect,
-            xRadius: size * 0.22,
-            yRadius: size * 0.22
-        )
-        NSGradient(colors: [
-            NSColor(calibratedRed: 0.086, green: 0.188, blue: 0.122, alpha: 1),
-            NSColor(calibratedRed: 0.043, green: 0.102, blue: 0.071, alpha: 1),
-            NSColor(calibratedRed: 0.020, green: 0.043, blue: 0.027, alpha: 1)
-        ])?.draw(in: background, angle: -90)
-
-        NSGraphicsContext.saveGraphicsState()
-        background.addClip()
-        let glowCenter = NSPoint(x: rect.midX, y: rect.minY + rect.height * 0.60)
-        NSGradient(colors: [
-            NSColor(calibratedRed: 0.78, green: 1, blue: 0.24, alpha: 0.22),
-            NSColor(calibratedRed: 0.78, green: 1, blue: 0.24, alpha: 0)
-        ])?.draw(
-            fromCenter: glowCenter,
-            radius: 0,
-            toCenter: glowCenter,
-            radius: size * 0.44,
-            options: []
-        )
-        NSGraphicsContext.restoreGraphicsState()
-
-        let dropRect = NSRect(
-            x: size * 0.22,
-            y: size * 0.10,
-            width: size * 0.56,
-            height: size * 0.80
-        )
-        let drop = dropletPath(in: dropRect)
-
-        NSColor.white.withAlphaComponent(0.10).setFill()
-        drop.fill()
-
-        NSGraphicsContext.saveGraphicsState()
-        drop.addClip()
-        NSGradient(colors: [
-            NSColor(calibratedRed: 0.92, green: 1.00, blue: 0.27, alpha: 1),
-            NSColor(calibratedRed: 0.44, green: 0.886, blue: 0.10, alpha: 1),
-            NSColor(calibratedRed: 0.04, green: 0.60, blue: 0.35, alpha: 1)
-        ])?.draw(in: wavePath(in: dropRect, remaining: 0.74), angle: -90)
-        NSGraphicsContext.restoreGraphicsState()
-
-        if detail {
-            let cursor = NSBezierPath()
-            cursor.move(to: dropPoint(0.34, 0.58, in: dropRect))
-            cursor.line(to: dropPoint(0.50, 0.71, in: dropRect))
-            cursor.line(to: dropPoint(0.34, 0.84, in: dropRect))
-            cursor.lineWidth = size * 0.034
-            cursor.lineCapStyle = .round
-            cursor.lineJoinStyle = .round
-            NSColor.white.withAlphaComponent(0.95).setStroke()
-            cursor.stroke()
-
-            let underscore = NSBezierPath()
-            underscore.move(to: dropPoint(0.56, 0.84, in: dropRect))
-            underscore.line(to: dropPoint(0.74, 0.84, in: dropRect))
-            underscore.lineWidth = size * 0.034
-            underscore.lineCapStyle = .round
-            NSColor.white.withAlphaComponent(0.95).setStroke()
-            underscore.stroke()
-
-            let highlight = NSBezierPath(ovalIn: NSRect(
-                x: dropRect.minX + dropRect.width * 0.18,
-                y: dropRect.minY + dropRect.height * 0.16,
-                width: dropRect.width * 0.32,
-                height: dropRect.height * 0.24
-            ))
-            NSColor.white.withAlphaComponent(0.16).setFill()
-            highlight.fill()
-        }
-
-        NSColor.white.withAlphaComponent(0.30).setStroke()
-        drop.lineWidth = max(1, size * 0.012)
-        drop.lineJoinStyle = .round
-        drop.stroke()
-    }
-
-    private static func dropPoint(_ fx: CGFloat, _ fy: CGFloat, in rect: NSRect) -> NSPoint {
-        DropletGeometry.point(CGPoint(x: fx, y: fy), in: rect)
     }
 }
