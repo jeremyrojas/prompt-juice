@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="design/assets/promptjuice-gauge-droplet-appicon-preview.png" alt="PromptJuice app icon" width="128">
+  <img src="design/assets/promptjuice-mascot-happy.png" alt="PromptJuice green droplet mascot" width="128">
   <h1>PromptJuice</h1>
   <p><strong>Make every usage window worth the squeeze.</strong></p>
   <p>A native macOS menu-bar gauge for Claude and Codex usage windows.</p>
