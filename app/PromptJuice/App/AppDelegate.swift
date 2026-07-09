@@ -30,7 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.applicationIconImage = PromptJuiceIcon.appIconImage()
+        if let appIcon = PromptJuiceIcon.appIconImage() {
+            NSApp.applicationIconImage = appIcon
+        }
         configureStatusItem()
         configureNotifications()
         observeViewModel()
