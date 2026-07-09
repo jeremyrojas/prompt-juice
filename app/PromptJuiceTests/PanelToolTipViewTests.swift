@@ -52,7 +52,7 @@ final class PanelToolTipViewTests: XCTestCase {
     }
 
     func testTooltipWindowUsesFinalFrameWithoutAnimation() {
-        let view = PanelToolTipView(text: "Read from Claude Code at 9:46")
+        let view = PanelToolTipView(text: "Read from Claude Code as of 9:46")
         let mouseLocation = NSPoint(x: 320, y: 240)
         let frame = PanelToolTipWindow.frame(for: view, mouseLocation: mouseLocation)
 
