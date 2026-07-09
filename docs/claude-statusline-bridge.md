@@ -45,7 +45,7 @@ ls -lt "$HOME/Library/Application Support/PromptJuice/ClaudeStatus"
 /usr/bin/plutil -p "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/session-"*.json
 ```
 
-Then use PromptJuice -> Refresh Usage. The Claude row should show `claudeStatusline` with `exact` confidence when a session cache contains a complete active five-hour window.
+Then open the Juice Bar from the PromptJuice menu-bar droplet. The panel refreshes its local readings when it opens, and the Claude row should show `claudeStatusline` with `exact` confidence when a session cache contains a complete active five-hour window.
 
 ## Cache Shape
 

@@ -1,151 +1,196 @@
-# PromptJuice 💧
+<div align="center">
+  <img src="design/assets/promptjuice-gauge-droplet-appicon-preview.png" alt="PromptJuice app icon" width="128">
+  <h1>PromptJuice</h1>
+  <p><strong>Make every usage window worth the squeeze.</strong></p>
+  <p>A native macOS menu-bar gauge for Claude and Codex usage windows.</p>
+</div>
 
-*Make every usage window worth the squeeze.*
+PromptJuice keeps the useful part of your AI rate limits visible: how much
+session capacity remains, when it resets, and how fresh the reading is. The
+menu-bar droplet gives you the glance; the Juice Bar gives you the details.
 
-PromptJuice is a native macOS menu-bar app that shows Claude and Codex usage windows in a compact top-center Juice Bar.
+When a reset is close and useful capacity remains, PromptJuice turns amber and
+can send one timely macOS notification. A gentle squeeze, right when it counts.
 
-It helps answer one question while you work: how much useful AI capacity is left before the current window resets?
+## Quick Start
 
-## Installation
+### Requirements
 
-PromptJuice is early preview software. Install it from source with the bundled install workflow:
+- macOS 14 Sonoma or later.
+- Git and a Swift 6 toolchain. Xcode 16 or later includes Swift 6.
+- Access to this private repository.
+- Codex or Claude Code installed for live provider readings.
+
+### Install From Source
 
 ```bash
-git clone https://github.com/jtrojas24/prompt-juice.git
+git clone https://github.com/jeremyrojas/prompt-juice.git
 cd prompt-juice
 .agents/skills/promptjuice-install/scripts/install_promptjuice.sh
 ```
 
-You can also point an AI coding agent at the repository and the install skill file:
+The installer builds `PromptJuice.app`, installs it in `/Applications` when
+writable or `~/Applications` otherwise, and opens it. Choose Claude, Codex, or
+both on first launch.
+
+If macOS blocks the preview build, right-click `PromptJuice.app`, choose
+**Open**, and approve the prompt.
+
+### Install With An AI Agent
+
+Give a coding agent this instruction:
 
 ```text
-Go to https://github.com/jtrojas24/prompt-juice, read README.md, then use the install skill at .agents/skills/promptjuice-install/SKILL.md to set up PromptJuice on this Mac.
+Clone https://github.com/jeremyrojas/prompt-juice.git, read README.md and .agents/skills/promptjuice-install/SKILL.md, then follow the skill to build, install, and open PromptJuice on this Mac.
 ```
 
-The install skill builds `PromptJuice.app`, copies it into `/Applications` when possible, falls back to `~/Applications`, and opens the app.
+The repository also includes a dedicated update skill, so future refreshes stay
+on the same well-tested path.
 
-To update later, run this from your local PromptJuice checkout:
+## What You Get
+
+- A menu-bar droplet whose fill reflects remaining session capacity.
+- A compact Juice Bar with Claude and Codex percentages and reset countdowns.
+- Clear **Live**, **Earlier**, **Estimate**, and **Not set up** confidence labels.
+- Configurable "use your juice" thresholds for time-to-reset and capacity left.
+- One merged macOS notification for providers that enter the same use-soon moment.
+- A pinnable, draggable Juice Bar that remembers its position.
+- Local caches that carry valid last-good readings through brief provider outages.
+
+Left-click the menu-bar droplet to open the Juice Bar. Right-click the droplet or
+the panel for **Pin Juicebar**, **Settings**, and **Quit PromptJuice**.
+
+## How PromptJuice Reads Usage
+
+PromptJuice reads provider state locally and normalizes it into the same compact
+view. Every row identifies the quality of its reading:
+
+| Label | Meaning |
+| --- | --- |
+| **Live** | Exact, current provider data. |
+| **Earlier** | A still-valid last-good window from the local cache. |
+| **Estimate** | A local activity-based approximation. |
+| **Not set up** | The provider or its live-reading bridge needs attention. |
+
+### Codex
+
+PromptJuice locates the local Codex executable, launches `codex app-server` over
+stdio, and calls `account/rateLimits/read`. Install and sign in to Codex, then
+PromptJuice can read the primary session window automatically. A valid secondary
+weekly window is cached for future UI.
+
+Automatic lookup checks the Codex app, Homebrew locations, and `PATH`. Set
+`PROMPTJUICE_CODEX_PATH` when the executable lives elsewhere:
+
+```bash
+export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
+```
+
+### Claude
+
+Claude Code can provide exact five-hour and seven-day usage windows through its
+status line. In PromptJuice, open **Settings -> Claude -> Set up live readings**,
+review the proposed change, and enable the bridge. Claude Code refreshes the
+local bridge every 10 seconds while a terminal session is open.
+
+The bridge adds one entry to `~/.claude/settings.json`, preserves an existing
+status-line command by wrapping it, and writes sanitized rate-limit fields to:
+
+```text
+~/Library/Application Support/PromptJuice/ClaudeStatus/
+```
+
+Claude desktop usage alone produces an **Estimate** from local Claude activity
+logs because the desktop app does not currently run Claude Code status lines.
+When all known five-hour windows expire, PromptJuice shows **Fresh window** at
+100% session remaining until Claude supplies the next window.
+
+Detailed setup and troubleshooting live in
+[Provider Integrations](docs/provider-integrations.md) and the
+[Claude Statusline Bridge guide](docs/claude-statusline-bridge.md).
+
+## Privacy
+
+PromptJuice processing and caches stay on your Mac. The app includes zero
+analytics and zero hosted backend:
+
+- Codex usage comes from the local Codex app-server process.
+- Claude exact usage comes from the local status-line bridge cache.
+- Claude estimates come from local activity metadata.
+- Cached snapshots contain normalized usage windows and update times.
+
+Codex and Claude Code continue to use their own provider connections and account
+sessions.
+
+## Update
+
+Run the update helper from a clean PromptJuice checkout:
 
 ```bash
 .agents/skills/promptjuice-update/scripts/update_promptjuice.sh
 ```
 
-Or ask your AI coding agent:
+It fetches and fast-forwards the current branch, rebuilds the app, replaces the
+installed copy, and reopens PromptJuice.
+
+An AI agent can follow the same contract:
 
 ```text
 Read .agents/skills/promptjuice-update/SKILL.md and follow it to update my installed PromptJuice app from GitHub.
 ```
 
-If macOS shows a security prompt for this preview build, right-click `PromptJuice.app`, choose **Open**, and approve the prompt.
+## Develop
 
-## Naming
-
-- **PromptJuice** is the app.
-- **Juice Bar** is the floating menu-bar window that opens from the PromptJuice droplet — pull up a stool and check your levels.
-
-## Status
-
-PromptJuice is an early open-source prototype. It currently includes:
-
-- A native macOS accessory app with a menu-bar droplet.
-- A floating Juice Bar panel with Claude and Codex rows.
-- Fixture usage data for tests and previews.
-- Live Codex rate-limit reads through the local Codex app-server.
-- Claude usage reads through a Claude Code statusline cache, with a local-log estimate fallback.
-- Source and confidence labels for exact, estimated, stale, and unavailable data.
-- Refresh, threshold, and notification controls — set the use-soon window and get one macOS banner per provider reset window.
-
-## Build And Run
-
-Build a local app bundle:
-
-```bash
-./scripts/build_app.sh
-```
-
-The build script gives preview builds a stable local code requirement based on
-the app bundle identifier. This keeps macOS notification permissions attached
-to one PromptJuice identity across repeated source builds.
-
-Distributed releases should use Apple Developer ID signing and notarization so
-macOS presents the normal trusted-app install experience.
-
-You can inspect the local signing requirement with:
-
-```bash
-codesign -d -r- build/PromptJuice.app
-```
-
-Build and open the app:
+Build and open a local app bundle:
 
 ```bash
 ./scripts/run_app.sh
 ```
 
-You can also run the test suite directly:
+Run the test suite:
 
 ```bash
 swift test
 ```
 
-## How PromptJuice Reads Usage
+Build a release-configured bundle:
 
-PromptJuice shows each provider reading with a confidence label:
-
-**Live -> Earlier -> Estimate -> Not set up**
-
-For Claude, Live readings are exact usage numbers from Claude Code's status line. That status line runs only in the Claude Code terminal CLI. PromptJuice configures Claude Code to refresh the bridge every 10 seconds while Claude Code is open, so long-running terminal workflows can update without another typed message.
-
-The Claude bridge writes one `ClaudeStatus/session-<session_id>.json` file per terminal session with both the five-hour session window and the seven-day weekly window when Claude supplies them. PromptJuice merges those session files, ignores expired windows, and uses the highest usage from matching server windows. This keeps old idle terminal sessions from replacing a newer reading.
-
-When every known five-hour window has expired, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows stay focused on the current session window at a fixed 48 pt height, and provider rows are display-only. The header subtitle shows the soonest visible reset. Header and menu-bar droplets use session remaining, matching the row percentages; weekly data is retained in the data layer for future UI.
-
-If the desktop app is your only Claude surface, PromptJuice stays on Estimate because the desktop app does not support status lines yet. The upstream Claude Code issue is [anthropics/claude-code#41456](https://github.com/anthropics/claude-code/issues/41456).
-
-To get Live readings for Claude: open **Settings -> Claude -> Set up live readings**, approve the status line bridge, then use Claude Code in the terminal.
-
-The Claude bridge uses macOS `/usr/bin/plutil` to read Claude Code's status line JSON.
-
-## Provider Integrations
-
-PromptJuice treats every provider snapshot as local state with a source and confidence label. Think of confidence as freshness: exact is fresh-squeezed, estimated is from concentrate, and stale is past its date.
-
-- `demo` with `exact` confidence powers the built-in prototype data.
-- `codexAppServer` with `exact` confidence comes from `codex app-server` and `account/rateLimits/read`.
-- `codexCache` with `stale` confidence reuses last-good Codex session and weekly windows before their reset times.
-- `claudeStatusline` with `exact` confidence comes from current Claude Code statusline session files.
-- `claudeStatusline` with `stale` confidence carries a still-valid session or weekly window forward from earlier statusline files.
-- `claudeLocalLogs` with `estimated` confidence comes from local Claude project logs.
-- `claudeCache` with `stale` confidence reuses last-good Claude session and weekly windows before their reset times.
-- `unavailable` confidence gives the UI a calm failure state with a short diagnostic.
-
-Read the setup and troubleshooting details in [docs/provider-integrations.md](docs/provider-integrations.md). Claude statusline bridge details live in [docs/claude-statusline-bridge.md](docs/claude-statusline-bridge.md).
-
-## Project Layout
-
-```text
-app/
-  PromptJuice/
-    App/          App entry points and app lifecycle
-    UI/           Juice Bar panel, menu-bar views, settings UI
-    Models/       Usage windows, snapshots, alert state
-    Providers/    Fixture, Codex, and Claude usage sources
-    Services/     Notifications and local settings
-    Resources/    Info.plist and app resources
-  PromptJuiceTests/
-design/
-  assets/         Visual references, icons, screenshots
-docs/             Public product and integration docs
-scripts/          Build, run, icon, and bridge helpers
+```bash
+CONFIGURATION=release ./scripts/build_app.sh
 ```
 
-## Docs
+The bundle is written to `build/PromptJuice.app`. GitHub Actions runs the Swift
+build and tests, shell validation, metadata checks, and app-bundle verification
+for pull requests and pushes to `main`.
 
-- Product overview: [docs/prompt-juice.md](docs/prompt-juice.md)
-- Provider integrations: [docs/provider-integrations.md](docs/provider-integrations.md)
-- Claude statusline bridge: [docs/claude-statusline-bridge.md](docs/claude-statusline-bridge.md)
-- Usage state board: [design/prompt-juice-states.html](design/prompt-juice-states.html)
+## Preview Status
 
----
+PromptJuice is early preview software distributed from source. Local builds use
+a stable ad-hoc signing requirement so notification permission survives rebuilds.
+A public release should use Apple Developer ID signing and notarization.
 
-*Down to the last drop.*
+Current boundaries:
+
+- Provider rows show the active session window at a fixed height.
+- Weekly windows are read and cached while their dedicated UI is being refined.
+- Exact Claude readings require Claude Code in a terminal session.
+
+## Project Map
+
+```text
+app/PromptJuice/       App lifecycle, UI, models, providers, and services
+app/PromptJuiceTests/  Unit, integration, and snapshot coverage
+.agents/skills/        Agent-safe install and update workflows
+design/                Product states and visual assets
+docs/                  Integration and implementation references
+scripts/               Build, run, icon, and Claude bridge helpers
+```
+
+## Documentation
+
+- [Product overview](docs/prompt-juice.md)
+- [Provider integrations](docs/provider-integrations.md)
+- [Claude statusline bridge](docs/claude-statusline-bridge.md)
+- [Usage state board](design/prompt-juice-states.html)
+
+Keep the prompts flowing. Down to the last drop.

@@ -389,7 +389,7 @@ private struct ClaudeMeasurementPopover: View {
     let onSetUpClaude: () -> Void
 
     private static let learnMoreURL = URL(
-        string: "https://github.com/jtrojas24/prompt-juice#how-promptjuice-reads-usage"
+        string: "https://github.com/jeremyrojas/prompt-juice#how-promptjuice-reads-usage"
     )!
 
     var body: some View {
