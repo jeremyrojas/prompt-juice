@@ -413,28 +413,10 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         visibleToolTipWindow?.orderOut(nil)
 
         let tooltipView = PanelToolTipView(text: text)
-        let fittingSize = tooltipView.fittingSize
-        let mouseLocation = NSEvent.mouseLocation
-        let frame = NSRect(
-            x: mouseLocation.x + 12,
-            y: mouseLocation.y - fittingSize.height - 12,
-            width: fittingSize.width,
-            height: fittingSize.height
+        let tooltipWindow = PanelToolTipWindow(
+            contentView: tooltipView,
+            mouseLocation: NSEvent.mouseLocation
         )
-        let tooltipWindow = NSWindow(
-            contentRect: frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        tooltipWindow.level = .floating
-        tooltipWindow.backgroundColor = .clear
-        tooltipWindow.isOpaque = false
-        tooltipWindow.hasShadow = true
-        tooltipWindow.ignoresMouseEvents = true
-        tooltipWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        tooltipWindow.contentView = tooltipView
-        tooltipWindow.setContentSize(fittingSize)
         tooltipWindow.orderFront(nil)
 
         visibleToolTipText = text
@@ -533,6 +515,38 @@ private final class MaterialPanelRootView: NSVisualEffectView, PanelContentRootV
     @available(*, unavailable)
     @MainActor dynamic required init?(coder: NSCoder) {
         nil
+    }
+}
+
+final class PanelToolTipWindow: NSWindow {
+    static let tooltipAnimationBehavior: NSWindow.AnimationBehavior = .none
+
+    static func frame(for tooltipView: PanelToolTipView, mouseLocation: NSPoint) -> NSRect {
+        let fittingSize = tooltipView.fittingSize
+        return NSRect(
+            x: mouseLocation.x + 12,
+            y: mouseLocation.y - fittingSize.height - 12,
+            width: fittingSize.width,
+            height: fittingSize.height
+        )
+    }
+
+    init(contentView tooltipView: PanelToolTipView, mouseLocation: NSPoint) {
+        super.init(
+            contentRect: Self.frame(for: tooltipView, mouseLocation: mouseLocation),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        level = .floating
+        animationBehavior = Self.tooltipAnimationBehavior
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        ignoresMouseEvents = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        contentView = tooltipView
     }
 }
 

@@ -51,6 +51,17 @@ final class PanelToolTipViewTests: XCTestCase {
         XCTAssertEqual(view.intrinsicContentSize, measuredSize)
     }
 
+    func testTooltipWindowUsesFinalFrameWithoutAnimation() {
+        let view = PanelToolTipView(text: "Read from Claude Code at 9:46")
+        let mouseLocation = NSPoint(x: 320, y: 240)
+        let frame = PanelToolTipWindow.frame(for: view, mouseLocation: mouseLocation)
+
+        XCTAssertEqual(PanelToolTipWindow.tooltipAnimationBehavior, NSWindow.AnimationBehavior.none)
+        XCTAssertEqual(frame.size, view.fittingSize)
+        XCTAssertEqual(frame.origin.x, mouseLocation.x + 12)
+        XCTAssertEqual(frame.origin.y, mouseLocation.y - view.fittingSize.height - 12)
+    }
+
     private func render(_ view: NSView) throws -> NSBitmapImageRep {
         let bounds = view.bounds
         let image = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: bounds))
