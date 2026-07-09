@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: macos-26
+    env:
+      PROMPTJUICE_SHELL_SCRIPTS: >-
+        scripts/build_app.sh
+        scripts/run_app.sh
+        scripts/claude-statusline-bridge.sh
+        .agents/skills/promptjuice-install/scripts/install_promptjuice.sh
+        .agents/skills/promptjuice-update/scripts/update_promptjuice.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build Swift package
+        run: swift build
+
+      - name: Run tests
+        run: swift test
+
+      - name: Check shell script syntax
+        run: |
+          set -euo pipefail
+          for script in $PROMPTJUICE_SHELL_SCRIPTS; do
+            bash -n "$script"
+          done
+
+      - name: Install ShellCheck
+        run: brew install shellcheck
+
+      - name: Run ShellCheck
+        run: shellcheck $PROMPTJUICE_SHELL_SCRIPTS
+
+      - name: Validate metadata
+        run: |
+          set -euo pipefail
+          plutil -lint app/PromptJuice/Resources/Info.plist
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: true, filename: path) }' \
+            .github/workflows/ci.yml \
+            .agents/skills/promptjuice-install/agents/openai.yaml \
+            .agents/skills/promptjuice-update/agents/openai.yaml
+
+      - name: Build and verify app bundle
+        run: |
+          set -euo pipefail
+          app_path="$(CONFIGURATION=release ./scripts/build_app.sh)"
+
+          test -d "$app_path"
+          test -x "$app_path/Contents/MacOS/PromptJuice"
+          test -x "$app_path/Contents/Resources/claude-statusline-bridge.sh"
+          test -s "$app_path/Contents/Resources/PromptJuice.icns"
+
+          plutil -lint "$app_path/Contents/Info.plist"
+          codesign --verify --deep --strict "$app_path"
