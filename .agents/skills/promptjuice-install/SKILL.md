@@ -12,7 +12,7 @@ Install PromptJuice for a Mac user from this repository checkout. Prefer the bun
 ## Workflow
 
 1. Confirm the current directory is the PromptJuice repository root or a subdirectory inside it.
-2. If the repository is missing, clone `https://github.com/jtrojas24/prompt-juice`, enter the checkout, and continue.
+2. If the repository is missing, clone `https://github.com/jeremyrojas/prompt-juice`, enter the checkout, and continue.
 3. Run the install helper:
 
 ```bash
