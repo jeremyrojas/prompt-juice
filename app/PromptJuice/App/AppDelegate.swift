@@ -61,10 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 #if DEBUG
     private func showDebugPreviewSurfaceIfRequested() {
-        guard ProcessInfo.processInfo.environment["PROMPTJUICE_CLAUDE_UI_SCENARIO"] != nil else {
+        let environment = ProcessInfo.processInfo.environment
+        let dogfoodSurface = environment["PROMPTJUICE_DOGFOOD_SURFACE"]
+        guard environment["PROMPTJUICE_CLAUDE_UI_SCENARIO"] != nil || dogfoodSurface != nil else {
             return
         }
-        let surface = ProcessInfo.processInfo.environment["PROMPTJUICE_UI_SURFACE"] ?? "panel"
+        let surface = dogfoodSurface ?? environment["PROMPTJUICE_UI_SURFACE"] ?? "panel"
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -269,6 +271,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func performHostLifecycleRefresh(reason: ClaudeRefreshReason) {
+#if DEBUG
+        if ProcessInfo.processInfo.environment["PROMPTJUICE_DOGFOOD_SURFACE"] != nil,
+           reason == .foreground {
+            return
+        }
+#endif
         let refreshDate = Date()
 
         if let lastLifecycleRefreshAt,

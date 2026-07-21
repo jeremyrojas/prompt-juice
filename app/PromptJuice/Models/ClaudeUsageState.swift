@@ -46,6 +46,55 @@ enum ClaudeAccessState: Sendable, Equatable {
             "authCheckFailed"
         }
     }
+
+    init?(persistenceFingerprint: String) {
+        switch persistenceFingerprint {
+        case "checking":
+            self = .checking
+        case "cliMissing":
+            self = .cliMissing
+        case "workspaceTrustRequired":
+            self = .workspaceTrustRequired
+        case "apiBilling":
+            self = .apiBilling
+        case "unsupportedAuth":
+            self = .unsupportedAuth
+        case "authCheckFailed":
+            self = .authCheckFailed
+        default:
+            if persistenceFingerprint.hasPrefix("subscription:") {
+                let plan = String(persistenceFingerprint.dropFirst("subscription:".count))
+                self = .subscription(plan: plan == "unknown" ? nil : plan)
+                return
+            }
+            if persistenceFingerprint.hasPrefix("signedOut:"),
+               let reason = ClaudeSignInReason(
+                   rawValue: String(persistenceFingerprint.dropFirst("signedOut:".count))
+               ) {
+                self = .signedOut(reason: reason)
+                return
+            }
+            if persistenceFingerprint.hasPrefix("external:"),
+               let provider = ClaudeExternalProvider(
+                   rawValue: String(persistenceFingerprint.dropFirst("external:".count))
+               ) {
+                self = .externalProvider(provider)
+                return
+            }
+            if persistenceFingerprint.hasPrefix("updateRequired:") {
+                let versions = persistenceFingerprint
+                    .dropFirst("updateRequired:".count)
+                    .split(separator: ":", omittingEmptySubsequences: false)
+                if versions.count == 2,
+                   let installed = ClaudeCodeVersion.parse(String(versions[0])),
+                   let minimum = ClaudeCodeVersion.parse(String(versions[1])) {
+                    self = .updateRequired(installed: installed, minimum: minimum)
+                    return
+                }
+            }
+            return nil
+        }
+    }
 }
 
 enum ClaudeProbeFailure: String, Codable, Sendable, Equatable {

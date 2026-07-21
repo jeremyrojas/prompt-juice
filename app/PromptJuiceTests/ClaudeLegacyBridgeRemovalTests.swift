@@ -47,6 +47,8 @@ final class ClaudeLegacyBridgeRemovalTests: XCTestCase {
         try remover.apply(plan)
 
         XCTAssertEqual(try Data(contentsOf: plan.backupURL), plan.originalSettingsData)
+        let backupAttributes = try FileManager.default.attributesOfItem(atPath: plan.backupURL.path)
+        XCTAssertEqual(backupAttributes[.posixPermissions] as? NSNumber, 0o600)
         XCTAssertEqual(try Data(contentsOf: remover.settingsURL), plan.restoredSettingsData)
         XCTAssertFalse(FileManager.default.fileExists(atPath: remover.installedScriptURL.path))
     }

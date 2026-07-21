@@ -131,6 +131,7 @@ struct ClaudeUsagePersistenceMetadata: Sendable, Equatable {
     let lastSuccessAt: Date?
     let nextAttemptAt: Date?
     let recentAttempts: [ClaudeUsageAttempt]
+    let authenticationFingerprint: String?
     let wasRepaired: Bool
 }
 
@@ -177,8 +178,15 @@ final class ClaudeUsagePersistence: @unchecked Sendable {
             lastSuccessAt: record.lastSuccessAt,
             nextAttemptAt: record.nextAttemptAt,
             recentAttempts: record.recentAttempts,
+            authenticationFingerprint: record.authenticationFingerprint,
             wasRepaired: loaded.wasRepaired
         )
+    }
+
+    func authenticationFingerprint() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return loadRecord().record.authenticationFingerprint
     }
 
     func recordAttempt(at date: Date, reason: ClaudeRefreshReason) {
@@ -378,7 +386,9 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         self.featureEnabled = featureEnabled
         self.legacyBridgeStatus = legacyBridgeStatus
         state = ClaudeUsageCoordinatorState(
-            access: .checking,
+            access: persistence.authenticationFingerprint().flatMap {
+                ClaudeAccessState(persistenceFingerprint: $0)
+            } ?? .checking,
             refresh: .idle,
             snapshot: cache.snapshot(now: Date(), failureDetail: nil),
             legacyBridge: legacyBridgeStatus()

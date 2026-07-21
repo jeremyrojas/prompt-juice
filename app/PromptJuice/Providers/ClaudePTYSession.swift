@@ -94,6 +94,7 @@ struct ClaudeProbeWorkspace: @unchecked Sendable {
 
 struct ClaudePTYConfiguration: Sendable, Equatable {
     let startupTimeout: TimeInterval
+    let commandReadinessDelay: TimeInterval
     let commandTimeout: TimeInterval
     let settleInterval: TimeInterval
     let terminationGrace: TimeInterval
@@ -101,7 +102,8 @@ struct ClaudePTYConfiguration: Sendable, Equatable {
     let maximumOutputBytes: Int
 
     static let production = ClaudePTYConfiguration(
-        startupTimeout: 8,
+        startupTimeout: 12,
+        commandReadinessDelay: 8,
         commandTimeout: 12,
         settleInterval: 0.75,
         terminationGrace: 0.25,
@@ -191,11 +193,13 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
                 break
             }
 
+            let visibleText = ClaudeUsageParser.visibleTerminalText(from: output)
             let queryCount = Self.occurrenceCount(
                 of: Data("\u{001B}[6n".utf8),
                 in: output
             )
-            while cursorResponsesSent < queryCount {
+            while cursorResponsesSent < queryCount,
+                  !Self.isReadyForCommand(visibleText) {
                 guard Self.writeAll(Self.cursorPositionResponse, to: master) else {
                     Self.terminateProcessGroup(
                         processIdentifier,
@@ -206,8 +210,10 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
                 }
                 cursorResponsesSent += 1
             }
+            if Self.isReadyForCommand(visibleText) {
+                cursorResponsesSent = queryCount
+            }
 
-            let visibleText = ClaudeUsageParser.visibleTerminalText(from: output)
             if Self.requiresWorkspaceTrust(visibleText) {
                 Self.terminateProcessGroup(
                     processIdentifier,
@@ -306,6 +312,7 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
         var cursorResponsesSent = 0
         var lastOutputAt = Date()
         var usageCompletedAt: Date?
+        let commandReadyAt = Date().addingTimeInterval(configuration.commandReadinessDelay)
         var deadline = Date().addingTimeInterval(configuration.startupTimeout)
 
         while true {
@@ -329,11 +336,13 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
                 break
             }
 
+            let visibleText = ClaudeUsageParser.visibleTerminalText(from: output)
             let queryCount = Self.occurrenceCount(
                 of: Data("\u{001B}[6n".utf8),
                 in: output
             )
-            while cursorResponsesSent < queryCount {
+            while cursorResponsesSent < queryCount,
+                  !Self.isReadyForCommand(visibleText) {
                 guard Self.writeAll(Self.cursorPositionResponse, to: master) else {
                     Self.terminateProcessGroup(
                         processIdentifier,
@@ -344,8 +353,10 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
                 }
                 cursorResponsesSent += 1
             }
+            if Self.isReadyForCommand(visibleText) {
+                cursorResponsesSent = queryCount
+            }
 
-            let visibleText = ClaudeUsageParser.visibleTerminalText(from: output)
             if Self.requiresWorkspaceTrust(visibleText) {
                 Self.terminateProcessGroup(
                     processIdentifier,
@@ -355,7 +366,10 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
                 return .workspaceTrustRequired
             }
 
-            if !sentUsageCommand, Self.isReadyForCommand(visibleText) {
+            if !sentUsageCommand,
+               Self.isReadyForCommand(visibleText),
+               Date() >= commandReadyAt,
+               Date().timeIntervalSince(lastOutputAt) >= configuration.settleInterval {
                 guard Self.writeAll(Self.usageCommand, to: master) else {
                     Self.terminateProcessGroup(
                         processIdentifier,
@@ -365,6 +379,7 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
                     return .processFailed
                 }
                 sentUsageCommand = true
+                PromptJuiceLog.usage.debug("Claude PTY sent the allowlisted usage command")
                 deadline = Date().addingTimeInterval(configuration.commandTimeout)
             }
 
@@ -401,6 +416,20 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
             }
 
             if Date() >= deadline {
+                if sentUsageCommand {
+                    let parsed = ClaudeUsageParser().parse(output)
+                    if parsed.reading != nil {
+                        PromptJuiceLog.usage.debug(
+                            "Claude PTY accepted a parsed usage reading at the command timeout boundary"
+                        )
+                        Self.terminateProcessGroup(
+                            processIdentifier,
+                            grace: configuration.terminationGrace,
+                            wasReaped: &processWasReaped
+                        )
+                        return .captured(output)
+                    }
+                }
                 Self.terminateProcessGroup(
                     processIdentifier,
                     grace: configuration.terminationGrace,
@@ -681,24 +710,37 @@ struct ClaudeUsageProbe: Sendable {
             )
             switch outcome {
             case .captured(let data):
-                return .parsed(parser.parse(data, now: now, calendar: calendar))
+                let parsed = parser.parse(data, now: now, calendar: calendar)
+                PromptJuiceLog.usage.debug(
+                    "Claude PTY capture parsed: reading=\(parsed.reading != nil, privacy: .public), rateLimit=\(parsed.rateLimitObserved, privacy: .public), failure=\(parsed.failure != nil, privacy: .public)"
+                )
+                return .parsed(parsed)
             case .startupOnly where attempt == 0:
+                PromptJuiceLog.usage.debug("Claude PTY returned startup-only output; retrying once")
                 continue
             case .workspaceTrustRequired:
+                PromptJuiceLog.usage.debug("Claude PTY stopped at workspace trust")
                 return .workspaceTrustRequired
             case .ineligible(let reason):
+                PromptJuiceLog.usage.debug("Claude PTY probe was ineligible: \(String(describing: reason), privacy: .public)")
                 return .ineligible(reason)
             case .startupOnly:
+                PromptJuiceLog.usage.debug("Claude PTY returned startup-only output after retry")
                 return .startupOnly
             case .timedOut:
+                PromptJuiceLog.usage.debug("Claude PTY timed out before the command-ready prompt")
                 return .timedOut
             case .cancelled:
+                PromptJuiceLog.usage.debug("Claude PTY probe was cancelled")
                 return .cancelled
             case .outputTooLarge:
+                PromptJuiceLog.usage.debug("Claude PTY output exceeded its bound")
                 return .outputTooLarge
             case .launchFailed:
+                PromptJuiceLog.usage.debug("Claude PTY failed to launch")
                 return .launchFailed
             case .processFailed:
+                PromptJuiceLog.usage.debug("Claude PTY process failed before usage completed")
                 return .processFailed
             }
         }

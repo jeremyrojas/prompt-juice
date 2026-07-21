@@ -107,6 +107,10 @@ struct ClaudeLegacyBridgeRemoval: @unchecked Sendable {
         }
 
         try plan.originalSettingsData.write(to: plan.backupURL, options: [.atomic])
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: plan.backupURL.path
+        )
         try plan.restoredSettingsData.write(to: settingsURL, options: [.atomic])
         try fileManager.removeItem(at: installedScriptURL)
     }

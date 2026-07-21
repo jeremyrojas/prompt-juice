@@ -136,6 +136,10 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         )
 
         XCTAssertFalse(persistence.updateAuthenticationFingerprint("subscription:max"))
+        XCTAssertEqual(
+            persistence.metadata(now: now).authenticationFingerprint,
+            "subscription:max"
+        )
         XCTAssertTrue(persistence.updateAuthenticationFingerprint("signedOut:initial"))
         XCTAssertNil(persistence.metadata(now: now).nextAttemptAt)
         XCTAssertEqual(
@@ -374,6 +378,22 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(
             duringCooldown.refresh,
+            .backingOff(nextAttemptAt: now.addingTimeInterval(5 * 60))
+        )
+        XCTAssertEqual(probe.callCount, 1)
+
+        let relaunched = makeCoordinator(
+            fixture: fixture,
+            access: .subscription(plan: nil),
+            probe: probe
+        )
+        let relaunchedDuringCooldown = await relaunched.snapshot(
+            now: now.addingTimeInterval(60),
+            reason: .launch
+        )
+        XCTAssertEqual(relaunchedDuringCooldown.access, .subscription(plan: nil))
+        XCTAssertEqual(
+            relaunchedDuringCooldown.refresh,
             .backingOff(nextAttemptAt: now.addingTimeInterval(5 * 60))
         )
         XCTAssertEqual(probe.callCount, 1)

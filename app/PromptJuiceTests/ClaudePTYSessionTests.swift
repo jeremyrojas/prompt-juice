@@ -231,6 +231,34 @@ final class ClaudePTYSessionTests: XCTestCase {
         )
     }
 
+    func testParsedUsageWithoutLegacyCompletionMarkersIsAcceptedAtCommandTimeout() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let script = try makeScript(
+            in: fixture.root,
+            body: """
+            stty raw -echo
+            printf 'Claude Code ready\r\n$\r\n'
+            dd bs=1 count=7 of=/dev/null 2>/dev/null
+            printf '\r\nUsage\r\nCurrent session\r\n42%% used\r\nResets at 3:14 PM\r\n'
+            sleep 10
+            """
+        )
+
+        let outcome = session().captureUsage(
+            executableURL: script,
+            version: .supported(.minimumUsageVersion),
+            authentication: .subscription(plan: nil),
+            workspaceURL: fixture.workspace,
+            environment: testEnvironment()
+        )
+
+        guard case .captured(let output) = outcome else {
+            return XCTFail("Expected captured output, received \(outcome)")
+        }
+        XCTAssertEqual(ClaudeUsageParser().parse(output).reading?.session.usedPercent, 42)
+    }
+
     func testTimeoutAndCancellationKillDescendantProcesses() throws {
         try assertDescendantCleanup(expectedOutcome: .timedOut, cancellationDelay: nil)
         try assertDescendantCleanup(expectedOutcome: .cancelled, cancellationDelay: 0.05)
@@ -323,6 +351,7 @@ final class ClaudePTYSessionTests: XCTestCase {
     private func testConfiguration(maximumOutputBytes: Int = 32 * 1_024) -> ClaudePTYConfiguration {
         ClaudePTYConfiguration(
             startupTimeout: 0.8,
+            commandReadinessDelay: 0.08,
             commandTimeout: 0.4,
             settleInterval: 0.04,
             terminationGrace: 0.1,
