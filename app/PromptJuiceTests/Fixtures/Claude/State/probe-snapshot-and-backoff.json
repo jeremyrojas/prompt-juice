@@ -1,0 +1,15 @@
+{
+  "snapshot": {
+    "source": "claudeUsageCLI",
+    "updatedAt": "2026-07-21T13:15:00-04:00",
+    "session": {
+      "usedPercent": 42,
+      "resetsAt": "2026-07-21T15:14:00-04:00"
+    }
+  },
+  "backoff": {
+    "reason": "rateLimited",
+    "nextAttemptAt": "2026-07-21T13:45:00-04:00",
+    "stepMinutes": 5
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "id": "native",
+      "resolvedPath": "/Users/fixture/.local/share/claude/versions/2.1.211/claude",
+      "invokedPath": "/Users/fixture/.local/bin/claude"
+    },
+    {
+      "id": "homebrew-apple-silicon",
+      "resolvedPath": "/opt/homebrew/Caskroom/claude-code/2.1.211/claude",
+      "invokedPath": "/opt/homebrew/bin/claude"
+    },
+    {
+      "id": "homebrew-intel",
+      "resolvedPath": "/usr/local/Caskroom/claude-code/2.1.211/claude",
+      "invokedPath": "/usr/local/bin/claude"
+    },
+    {
+      "id": "npm-global",
+      "resolvedPath": "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+      "invokedPath": "/usr/local/bin/claude"
+    },
+    {
+      "id": "custom-symlink",
+      "resolvedPath": "/srv/claude/2.1.211/claude",
+      "invokedPath": "/opt/tools/bin/claude"
+    },
+    {
+      "id": "unknown",
+      "resolvedPath": "/Applications/DeveloperTools/claude",
+      "invokedPath": "/Applications/DeveloperTools/claude"
+    }
+  ]
+}

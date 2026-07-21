@@ -1,0 +1,9 @@
+Usage
+Last known usage
+
+Current session
+████░░░░░░ 42% used
+Resets at 3:14 PM
+
+As of Jul 21, 2026 at 9:15 AM EDT
+Usage checks are temporarily rate limited.

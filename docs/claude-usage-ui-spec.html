@@ -1,0 +1,368 @@
+<meta charset="utf-8">
+<title>PromptJuice · Claude /usage UI and copy spec (v7, adjudicated)</title>
+<style>
+:root{
+  --paper:#faf8f4; --panel:#fffdfa; --ink:#1c1a17; --muted:#78716a;
+  --rule:#e6e0d6; --accent:#b45c19; --good:#3f7a2e; --chip:#f1ece2;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{--paper:#161618;--panel:#1d1d20;--ink:#eceae7;--muted:#98938c;--rule:#2c2c31;--accent:#e8944f;--good:#7ed957;--chip:#26262a;}
+}
+:root[data-theme="dark"]{--paper:#161618;--panel:#1d1d20;--ink:#eceae7;--muted:#98938c;--rule:#2c2c31;--accent:#e8944f;--good:#7ed957;--chip:#26262a;}
+:root[data-theme="light"]{--paper:#faf8f4;--panel:#fffdfa;--ink:#1c1a17;--muted:#78716a;--rule:#e6e0d6;--accent:#b45c19;--good:#3f7a2e;--chip:#f1ece2;}
+.pg{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;padding:56px 24px 96px;}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:44px;}
+h1{font-size:32px;font-weight:600;letter-spacing:-.02em;margin:0;text-wrap:balance;}
+h2{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px;text-wrap:balance;}
+h3{font-size:15px;font-weight:600;margin:22px 0 8px;}
+p{margin:0 0 12px;max-width:68ch;}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;}
+.lede{font-size:16.5px;max-width:66ch;}
+.meta{font-family:var(--mono);font-size:12px;color:var(--muted);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:10px 0;display:flex;flex-wrap:wrap;gap:6px 22px;}
+section{border-top:1px solid var(--rule);padding-top:26px;}
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--panel);}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:500;padding:10px 12px;border-bottom:1px solid var(--rule);white-space:nowrap;}
+td{padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top;}
+tr:last-child td{border-bottom:0;}
+td.st{font-weight:500;white-space:nowrap;}
+.s{font-family:var(--mono);font-size:11.5px;background:var(--chip);border-radius:4px;padding:1.5px 5px;}
+.s.old{color:var(--muted);}
+.n{color:var(--muted);}
+ul{margin:0 0 12px;padding-left:20px;max-width:68ch;}
+li{margin-bottom:5px;}
+.plate{background:#141416;border-radius:14px;padding:20px;display:flex;flex-wrap:wrap;gap:18px;justify-content:center;}
+.note{font-size:12.5px;color:var(--muted);margin-top:8px;}
+.pj{background:#232327;border:.5px solid rgba(255,255,255,.08);border-radius:16px;padding:14px 12px;width:400px;max-width:100%;box-sizing:border-box;}
+.pjrow{display:flex;align-items:center;gap:8px;background:#2e2e33;border-radius:11px;padding:9px 11px;}
+.nm{font-size:13.5px;font-weight:500;color:#f2f2f4;}
+.dim .nm{color:#b9b9c0;}
+.dot{width:8px;height:8px;border-radius:50%;background:#e8833a;flex:none;}
+.dot.cx{background:#3fc2d4;}
+.dim .dot{opacity:.55;}
+.sp{flex:1;}
+.pct{font-size:12.5px;color:#9a9aa2;}
+.rst{font-size:12.5px;font-weight:500;color:#e8e8ec;}
+.stt{font-size:12.5px;color:#9a9aa2;}
+.bar{height:6px;border-radius:3px;background:#44444b;margin-top:8px;}
+.bar span{display:block;height:6px;border-radius:3px;background:linear-gradient(90deg,#b4e04a,#5cbf4a);}
+.bar.empty{background:#3a3a40;}
+.cap{margin:3px 8px 0;font-size:11px;color:#6f6f78;}
+.lbl{margin:12px 4px 4px;font-size:11px;color:#7f7f88;}
+.lbl:first-child{margin-top:2px;}
+.pill{font-size:11px;color:#f0a06a;background:rgba(232,131,58,.16);border:.5px solid rgba(232,131,58,.4);border-radius:999px;padding:2px 10px;}
+.win{background:#28282c;border:.5px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;width:430px;max-width:100%;box-sizing:border-box;}
+.wbody{padding:16px;}
+.sec{margin:0 0 8px 2px;font-size:15px;font-weight:500;color:#f2f2f4;}
+.card{background:#333338;border-radius:12px;}
+.srow{display:flex;align-items:center;gap:10px;padding:12px 14px;}
+.st1{margin:0;font-size:14px;font-weight:500;color:#f2f2f4;}
+.st2{margin:2px 0 0;font-size:12px;color:#9a9aa2;}
+.tog{width:38px;height:22px;border-radius:11px;background:#3d6ef2;position:relative;flex:none;}
+.tog b{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:#fff;}
+.btn{font-size:12px;color:#f2f2f4;background:#4a4a52;border-radius:7px;padding:4px 12px;flex:none;white-space:nowrap;}
+.btn.pri{background:#3d6ef2;color:#fff;}
+.hair{height:.5px;background:rgba(255,255,255,.07);margin-left:33px;}
+.fnote{margin:9px 14px 12px;padding-top:9px;border-top:.5px solid rgba(255,255,255,.07);font-size:12px;color:#8a8a92;line-height:1.5;}
+.sheet{background:#2e2e33;border:.5px solid rgba(255,255,255,.09);border-radius:14px;padding:16px;width:368px;max-width:100%;box-sizing:border-box;}
+.sh1{margin:0;font-size:15px;font-weight:500;color:#f2f2f4;}
+.sh2{margin:6px 0 0;font-size:12px;color:#9a9aa2;line-height:1.5;}
+.step{display:flex;gap:9px;margin-top:9px;}
+.num{width:18px;height:18px;border-radius:50%;background:#45454c;color:#e8e8ec;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none;}
+.stx{margin:0;font-size:12.5px;color:#d5d5da;line-height:1.5;}
+.cmd{font-family:var(--mono);font-size:11px;background:#3a3a40;border-radius:4px;padding:1px 6px;color:#e8e8ec;white-space:nowrap;}
+.cmdblk{background:#26262a;border-radius:6px;padding:8px 10px;margin:7px 0 0 27px;display:flex;gap:8px;align-items:flex-start;}
+.cmdblk b{flex:1;min-width:0;font-family:var(--mono);font-size:11px;font-weight:400;color:#8fd0a0;line-height:1.5;word-break:break-all;}
+.cmdblk i{flex:none;font-style:normal;font-size:12px;color:#9a9aa2;}
+.expl{margin:12px 0 0;padding-top:11px;border-top:.5px solid rgba(255,255,255,.08);font-size:12px;color:#9a9aa2;line-height:1.5;}
+.acts{display:flex;gap:8px;align-items:center;margin-top:12px;}
+.warncard{background:#3a342a;border:.5px solid rgba(232,180,88,.25);border-radius:12px;padding:12px 14px;}
+.wc1{margin:0;font-size:13px;font-weight:500;color:#e8c87a;}
+.wc2{margin:3px 0 9px;font-size:12px;color:#c2ae82;line-height:1.5;}
+.gate{border:1px solid var(--accent);border-radius:10px;padding:12px 16px;background:var(--panel);}
+</style>
+
+<div class="pg"><div class="wrap">
+
+<header>
+<p class="eyebrow">Design spec v7 · adjudicated with Codex · decisions resolved · design ready · awaiting implementation start</p>
+<h1>Claude <span style="font-family:var(--mono);font-size:.82em">/usage</span> migration: UI states and copy</h1>
+<p class="lede">PromptJuice replaces the Claude status-line bridge with Claude Code's built-in <span class="s">/usage</span> command. This is the final adjudicated spec: every user-visible string, state, action, and gate, reconciled across four review rounds with the implementing agent.</p>
+<div class="meta"><span>Worktree · claude-usage</span><span>Minimum CLI · 2.1.208 (approved)</span><span>Catalog · 13 states / 22 scenarios</span><span>Status · B1 B2 B3 approved · B5 deferred/optional</span></div>
+</header>
+
+<section>
+<p class="eyebrow">01 · Recommendation</p>
+<h2>What ships and why</h2>
+<ul>
+<li><strong>Model:</strong> three independent axes replace the bridge-era enum: <span class="s">ClaudeAccessState</span> (checking, cliMissing, updateRequired, signedOut(reason: initial | reauthenticationRequired), subscription, apiBilling, externalProvider, unsupportedAuth, authCheckFailed) × <span class="s">ClaudeRefreshState</span> (idle, refreshing, backingOff(nextAttemptAt), failed) × the snapshot (source, confidence, updatedAt, windows). <span class="s">LegacyBridgeStatus</span> is a fourth, independent migration axis.</li>
+<li><strong>One freshness vocabulary:</strong> <span class="s">Updated just now</span> → <span class="s">Updated 12 min ago</span> → <span class="s">Updated at 3:14 PM</span> → <span class="s">Updated yesterday at 3:14 PM</span> → <span class="s">Updated Jul 18 at 3:14 PM</span>. Exact, stale, cached, and earlier never render; they survive internally for cache logic.</li>
+<li><strong>Backoff is client-owned:</strong> the coordinator's 5→15→30→60-minute ladder always yields a valid <span class="s">nextAttemptAt</span>, so copy is always <span class="s">next check at 3:45 PM</span> and no unknown-retry state exists. "Rate limited" appears nowhere on rows.</li>
+<li><strong>2.1.208 cached bars are a saved reading:</strong> when the usage endpoint is rate-limited, Claude Code renders last-known bars with an "as of" time. That parses as a saved snapshot with the real measurement timestamp, never as a failed probe.</li>
+<li><strong>Three action journeys</strong>, journey-labeled everywhere: Install / Sign in / Update. "Set up" survives only as an umbrella concept, never as an action label.</li>
+<li><strong>Five auth categories:</strong> subscription · first-party Console/API · external provider (Bedrock, Vertex, Foundry, gateway) · signed out · unknown. <span class="s">/usage</span> runs only for confirmed subscription. Neutral categories get visible, severity-excluded rows.</li>
+<li><strong>Fresh window retired for Claude</strong> (no signal exists under /usage); Codex keeps its app-server fresh-window signal, provider-gated so Claude data can never trigger the copy.</li>
+<li><strong>Advanced pickers deferred out of v1.</strong> Smart cadence runs automatically. A future cadence control would be labeled "Refresh Claude usage".</li>
+<li><strong>One release gate:</strong> the privacy copy is target copy gated on an estimator refactor (G1–G4). The Anthropic clarification (B5) is deferred as an optional courtesy — not a gate — with the passive-data fallback ready.</li>
+</ul>
+</section>
+
+<section>
+<p class="eyebrow">02 · Juice Bar</p>
+<h2>Row states</h2>
+<div class="plate">
+<div class="pj">
+<p class="lbl">Current reading</p>
+<div class="pjrow"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="pct">42% left</span><span class="n">·</span><span class="rst">resets in 2h 30m</span></div>
+<div class="bar"><span style="width:42%"></span></div>
+<p class="cap">tooltip · “From Claude Code · updated just now”</p>
+<p class="lbl">Saved reading, coordinator backing off (incl. 2.1.208 cached bars)</p>
+<div class="pjrow"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="pct">◷ 42% left</span><span class="n">·</span><span class="rst">resets in 2h 30m</span></div>
+<div class="bar"><span style="width:42%"></span></div>
+<p class="cap">tooltip · “From Claude Code · updated at 3:14 PM · next check at 3:45 PM”</p>
+<p class="lbl">Local estimate</p>
+<div class="pjrow"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="pct">~42% left</span><span class="n">·</span><span class="rst">resets in 2h 30m</span></div>
+<div class="bar"><span style="width:42%;opacity:.7"></span></div>
+<p class="cap">tooltip · “Estimated from Claude Code's activity logs on this Mac”</p>
+<p class="lbl">Backing off, no reading</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">Next check 3:45 PM</span></div>
+<div class="bar empty"></div>
+<p class="cap">tooltip · “Usage check paused · next check at 3:45 PM”</p>
+<p class="lbl">0% used — never “Fresh window”</p>
+<div class="pjrow"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="pct">100% left</span><span class="n">·</span><span class="rst">resets in 4h 58m</span></div>
+<div class="bar"><span style="width:100%"></span></div>
+<p class="cap">tooltip · “From Claude Code · updated just now”</p>
+<p class="lbl">Trouble checking, nothing saved</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">Having trouble checking</span></div>
+<div class="bar empty"></div>
+<p class="cap">tooltip · “Couldn't check usage with Claude Code · trying again automatically”</p>
+</div>
+<div class="pj">
+<p class="lbl">CLI missing, no reading</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">Claude Code needed</span><span class="pill">Install</span></div>
+<div class="bar empty"></div>
+<p class="cap">tooltip · “Install Claude Code to read your plan usage”</p>
+<p class="lbl">Signed out, no reading</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">Sign in needed</span><span class="pill">Sign in</span></div>
+<div class="bar empty"></div>
+<p class="cap">tooltip · “Sign in to Claude Code to read your plan usage”</p>
+<p class="lbl">Below minimum 2.1.208</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">Update needed</span><span class="pill">Update</span></div>
+<div class="bar empty"></div>
+<p class="cap">tooltip · “Update Claude Code to read your plan usage”</p>
+<p class="lbl">API billing (first-party) — visible neutral row</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">API billing</span></div>
+<p class="cap">tooltip · “Claude Code is using API billing · plan quota unavailable”</p>
+<p class="lbl">External provider</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">External provider</span></div>
+<p class="cap">tooltip · “Claude Code uses Amazon Bedrock · plan quota unavailable” (named when detected)</p>
+<p class="lbl">Unknown or unsupported auth</p>
+<div class="pjrow dim"><span class="dot"></span><span class="nm">Claude</span><span class="sp"></span><span class="stt">Usage unavailable</span></div>
+<p class="cap">tooltip · “This Claude Code setup isn't supported yet”</p>
+<p class="lbl">Sole neutral provider — header</p>
+<p style="margin:2px 4px 0;font-size:13.5px;font-weight:500;color:#f2f2f4;">Claude plan usage unavailable</p>
+<p style="margin:1px 4px 0;font-size:11.5px;color:#9a9aa2;">Claude Code is using API billing</p>
+<p class="cap">muted droplet, no percentage badge, never reads healthy or 100% · with Codex connected, Codex alone drives percentage, glyph, severity, alerts</p>
+</div>
+</div>
+<p class="note">Estimate variants of the three journeys show <span class="s">~42% left</span> in place of the state phrase; the capsule appears only when there is no reading. Journey capsules are real accessible buttons (label “Install Claude Code” etc., hint “Opens PromptJuice Settings”), replacing the bridge-era Text-with-routed-click.</p>
+</section>
+
+<section>
+<p class="eyebrow">03 · Settings</p>
+<h2>Window and conditional rows</h2>
+<div class="plate">
+<div class="win">
+<div class="wbody">
+<p class="sec">Providers</p>
+<div class="card">
+<div class="srow"><span class="dot"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Updated at 3:14 PM ⓘ</p></div><span class="tog"><b></b></span></div>
+<div class="hair"></div>
+<div class="srow"><span class="dot cx"></span><div class="sp"><p class="st1">Codex</p><p class="st2">Live · resets in 119h 38m</p></div><span class="tog"><b></b></span></div>
+</div>
+<p class="sec" style="margin-top:15px">Use the juice</p>
+<div class="card">
+<div class="srow" style="justify-content:space-between"><span style="font-size:13px;color:#e8e8ec">When reset is within</span><span class="btn">60 minutes</span></div>
+<div class="hair" style="margin-left:14px"></div>
+<div class="srow" style="justify-content:space-between"><span style="font-size:13px;color:#e8e8ec">and I still have at least</span><span class="btn">40%</span></div>
+</div>
+<div class="card" style="margin-top:14px"><div class="srow"><div class="sp"><p class="st1">Notify me</p><p class="st2">Sends a macOS notification to use your juice</p></div><span class="tog"><b></b></span></div></div>
+<div class="card" style="margin-top:14px;padding:13px 15px">
+<p style="margin:0 0 6px;font-size:10.5px;color:#7f7f88;letter-spacing:.03em;text-transform:uppercase">Anchored popover · opens on ⓘ click · drawn flat here</p>
+<p class="st1" style="font-size:13px">How this number is measured</p>
+<p class="st2" style="line-height:1.55;margin-top:6px">PromptJuice reads your Claude plan usage with Claude Code's built-in /usage command. These are the same numbers Claude shows you. Claude Desktop, Claude.ai, and Claude Code share one plan allowance, so this covers all of them.</p>
+<p class="st2" style="line-height:1.55;margin-top:6px">PromptJuice asks Claude Code for your plan usage about every 15 minutes and sends no model prompt. When an estimate is needed, it scans local Claude Code activity records and extracts usage totals and timestamps. It does not store, display, or transmit conversation text.</p>
+<p class="st2" style="margin-top:6px">Right now it's current, read a moment ago.</p>
+<p style="margin:8px 0 0;font-size:12px;color:#6ea8ff">Learn more</p>
+</div>
+</div>
+</div>
+<div style="width:430px;max-width:100%;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;">
+<div class="card">
+<div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Claude Code not installed · showing local estimate</p></div><span class="btn">Install…</span></div>
+<p class="fnote">This is an estimate from Claude Code's activity logs on this Mac. Install Claude Code and sign in, and PromptJuice switches to direct readings automatically.</p>
+</div>
+<div class="card"><div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Signed out of Claude Code</p></div><span class="btn">Sign In…</span></div></div>
+<div class="card"><div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Signed out of Claude Code · sign in again</p></div><span class="btn">Sign In…</span></div></div>
+<div class="card">
+<div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Signed out of Claude Code · sign in again · showing local estimate</p></div><span class="btn">Sign In…</span></div>
+<p class="fnote">This is an estimate from Claude Code's activity logs on this Mac. Sign in to Claude Code again and PromptJuice switches back to direct readings automatically.</p>
+</div>
+<div class="card"><div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Update Claude Code to track plan usage</p></div><span class="btn">Update…</span></div></div>
+<div class="card"><div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude ⓘ</p><p class="st2">API billing · Claude Console tracks spend</p></div><span class="tog"><b></b></span></div></div>
+<div class="card"><div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Amazon Bedrock · plan quota unavailable</p></div></div></div>
+<div class="card"><div class="srow"><span class="dot" style="opacity:.5"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Account type not recognized · usage not tracked</p></div></div></div>
+<div class="card"><div class="srow"><span class="dot"></span><div class="sp"><p class="st1">Claude</p><p class="st2">Having trouble updating · showing 3:14 PM reading</p></div><span class="btn">Retry</span></div></div>
+<div class="warncard"><p class="wc1">Legacy bridge detected</p><p class="wc2">PromptJuice's old status-line bridge is still in ~/.claude/settings.json. It's no longer needed.</p><span class="btn">Remove…</span></div>
+<p class="note" style="margin-top:2px">Bridge confirmed never shipped beyond the author's own machines, so the "needs review" card and its Review… flow are dropped. On the rare install where ownership can't be proven by content hash, PromptJuice leaves the config untouched and shows nothing. Only the ownership-verified <span class="s">Remove…</span> path above ships.</p>
+</div>
+</div>
+<p class="note">Window stays 430×494. The info icon is a click-opened button (was hover). Backoff subtitle: <span class="s">Updated at 3:14 PM · next check at 3:45 PM</span> or <span class="s">Next check at 3:45 PM</span> with no reading. The API popover keeps the subscription sign-in close; external and unknown popovers do not (an override survives a new login under policy D).</p>
+</section>
+
+<section>
+<p class="eyebrow">04 · Sheets</p>
+<h2>Three journeys, one pattern</h2>
+<div class="plate">
+<div class="sheet">
+<p class="sh1">Install Claude Code</p>
+<p class="sh2">One-time setup. Claude Desktop, Claude.ai, and Claude Code share the same plan allowance.</p>
+<div class="step"><span class="num">1</span><p class="stx">Get Claude Code at claude.com/claude-code, or run:</p></div>
+<div class="cmdblk"><b>curl -fsSL https://claude.ai/install.sh | bash</b><i>⧉</i></div>
+<div class="step"><span class="num">2</span><p class="stx">Once installed, sign in with your Claude account</p></div>
+<p class="expl">PromptJuice will copy the command and open Terminal. Paste it, press Return, then come back here. PromptJuice will check again automatically.</p>
+<div class="acts"><span class="btn" style="white-space:nowrap">Check Again</span><span class="sp"></span><span class="btn">Done</span><span class="btn pri">Copy and Open Terminal</span></div>
+</div>
+<div class="sheet">
+<p class="sh1">Sign in to Claude Code</p>
+<p class="sh2">Use the same Claude account you use in Claude Desktop or Claude.ai.</p>
+<div class="step"><span class="num">1</span><p class="stx">Run the sign-in command:</p></div>
+<div class="cmdblk"><b>claude auth login</b><i>⧉</i></div>
+<div class="step"><span class="num">2</span><p class="stx">Complete the browser prompts, then return to PromptJuice. (Already inside Claude Code? Type <span class="cmd">/login</span> instead.)</p></div>
+<p class="expl">PromptJuice will copy the command and open Terminal. Paste it, press Return, then follow the browser prompts. PromptJuice will check again automatically.</p>
+<div class="acts"><span class="btn" style="white-space:nowrap">Check Again</span><span class="sp"></span><span class="btn">Done</span><span class="btn pri">Copy and Open Terminal</span></div>
+</div>
+<div class="sheet">
+<p class="sh1">Update Claude Code</p>
+<p class="sh2">PromptJuice needs Claude Code 2.1.208 or newer to read plan usage.</p>
+<div class="step"><span class="num">1</span><p class="stx">Run the update command <span style="color:#8a8a92">(native install shown; Homebrew and npm get their own command via provenance detection)</span>:</p></div>
+<div class="cmdblk"><b>claude update</b><i>⧉</i></div>
+<div class="step"><span class="num">2</span><p class="stx">PromptJuice picks up the new version automatically.</p></div>
+<p class="expl">PromptJuice will copy the command and open Terminal. Paste it, press Return, then come back here. PromptJuice will check again automatically.</p>
+<p style="margin:10px 0 0;font-size:12px;color:#9a9aa2">● Current version 2.0.14 · required 2.1.208</p>
+<div class="acts"><span class="btn" style="white-space:nowrap">Check Again</span><span class="sp"></span><span class="btn">Done</span><span class="btn pri">Copy and Open Terminal</span></div>
+</div>
+<div class="sheet">
+<p class="sh1">Update Claude Code</p>
+<p class="sh2">Unknown-provenance variant. PromptJuice found Claude Code at a path it doesn't recognize, so it won't guess your update command.</p>
+<p class="sh2" style="color:#c2c2c8;margin-top:10px">Claude Code is at:</p>
+<div class="cmdblk" style="margin-left:0"><b>/opt/tools/bin/claude</b></div>
+<p class="sh2" style="margin-top:10px">Run the command that matches how you installed it:</p>
+<p class="sh2" style="margin-top:8px;color:#c2c2c8">Native install</p>
+<div class="cmdblk" style="margin-left:0"><b>claude update</b><i>⧉</i></div>
+<p class="sh2" style="margin-top:8px;color:#c2c2c8">Homebrew</p>
+<div class="cmdblk" style="margin-left:0"><b>brew upgrade claude-code</b><i>⧉</i></div>
+<p class="sh2" style="margin-top:8px;color:#c2c2c8">npm</p>
+<div class="cmdblk" style="margin-left:0"><b>npm install -g @anthropic-ai/claude-code@latest</b><i>⧉</i></div>
+<p class="expl">PromptJuice will open Terminal. Copy the command that matches your install, paste it, press Return, then come back here. PromptJuice will check again automatically.</p>
+<div class="acts"><span class="btn" style="white-space:nowrap">Check Again</span><span class="sp"></span><span class="btn">Done</span><span class="btn pri">Open Terminal</span></div>
+</div>
+<div class="sheet">
+<p class="sh1">Remove the legacy bridge</p>
+<p class="sh2">PromptJuice no longer needs this. Your previous status line comes back exactly as it was.</p>
+<p class="sh2" style="color:#c2c2c8;margin-top:10px">PromptJuice restores statusLine.command in ~/.claude/settings.json to:</p>
+<div style="background:#26262a;border:.5px solid rgba(255,255,255,.08);border-radius:8px;padding:9px 11px;margin-top:6px"><p style="margin:0;font-family:var(--mono);font-size:11px;color:#8fd0a0;line-height:1.5;word-break:break-all">bash ~/.claude/statusline-command.sh</p></div>
+<p class="sh2" style="margin-top:8px">▪︎ Your command, restored &nbsp; ▫︎ PromptJuice bridge, removed</p>
+<div class="acts"><span class="sp"></span><span class="btn">Cancel</span><span class="btn pri">Remove Bridge</span></div>
+</div>
+</div>
+<p class="note"><strong>Journey-scoped rechecks</strong> (Check Again and the ≥30s-debounced app-activation re-probe; neither ever invokes <span class="s">/usage</span> — usage refresh belongs to the coordinator): CLI missing → locator + version + auth · Update required → version + auth · Signed out → auth only. <strong>Install → Sign in transition:</strong> when the open Install sheet's recheck finds the CLI present but signed out, the sheet advances to the Sign In journey in place — a two-stage flow, never a dead end. Copy and Open Terminal copies the command and launches macOS's built-in Terminal.app (<span class="s">com.apple.Terminal</span> by bundle id; may activate an existing window — copy promises only "opens Terminal"); the command is also on the clipboard for iTerm/Warp users. Long commands sit in a contained block that wraps inside the sheet; Check Again and every button stay one line; the sheet footer also gets native SwiftUI snapshots at minimum macOS text size and with accessibility text enlargement. Commands verified against the official docs (setup, cli-reference): install <span class="s">curl -fsSL https://claude.ai/install.sh | bash</span>; sign in <span class="s">claude auth login</span> (documented shell sign-in; flags <span class="s">--email</span>/<span class="s">--sso</span>/<span class="s">--console</span>; <span class="s">/login</span> is the in-TUI alternative); update chosen by executable provenance — native <span class="s">claude update</span>, Homebrew <span class="s">brew upgrade claude-code</span>, npm <span class="s">npm install -g @anthropic-ai/claude-code@latest</span>, unknown provenance → the sheet shows the resolved executable path plus native, Homebrew, and npm alternatives as three separate full-width command blocks each with its own copy affordance, and the primary action becomes <span class="s">Open Terminal</span>, copying nothing automatically (<span class="s">Copy and Open Terminal</span> is reserved for a known provenance with one selected command); never copy a guess. Reauthentication (expired or revoked OAuth) reuses the Sign In sheet unchanged with the subtitle <span class="s">Signed out of Claude Code · sign in again</span>. Advanced pickers remain deferred from v1 (annotation only — the note no longer appears inside the Settings window mockup). No live polling or auto-flipping footer in v1.</p>
+</section>
+
+<section>
+<p class="eyebrow">05 · Catalog</p>
+<h2>13 presentation states, 22 test scenarios</h2>
+<p>A presentation test catalog, not a state machine. LegacyBridgeStatus is an independent dimension (+1 Settings scenario — the ownership-verified Remove path; the needs-review path is dropped since the bridge never shipped externally).</p>
+<div class="tw"><table>
+<tr><th>#</th><th>State</th><th>Variants</th><th>Rows</th><th>Key strings</th></tr>
+<tr><td>1</td><td class="st">Checking</td><td>no reading / cached shown</td><td>2</td><td><span class="s">Checking…</span> · tooltip <span class="s">Checking usage with Claude Code</span></td></tr>
+<tr><td>2</td><td class="st">Connected, current</td><td>—</td><td>1</td><td><span class="s">Updated just now</span> · popover <span class="s">Right now it's current, read a moment ago.</span></td></tr>
+<tr><td>3</td><td class="st">Connected, saved</td><td>—</td><td>1</td><td><span class="s">Updated at 3:14 PM</span> · clock icon · includes 2.1.208 cached-bars output (values + "as of" time = saved reading, never a failure)</td></tr>
+<tr><td>4</td><td class="st">Connected, out of quota</td><td>0% left</td><td>1</td><td><span class="s">Claude is out until reset · updated at 3:14 PM</span></td></tr>
+<tr><td>5</td><td class="st">Backing off</td><td>cached / none</td><td>2</td><td><span class="s">· next check at 3:45 PM</span> / row <span class="s">Next check 3:45 PM</span> · popover <span class="s">The last usage check was rate limited. PromptJuice tries again at 3:45 PM.</span> (+ <span class="s">Showing your 3:14 PM reading in the meantime.</span>)</td></tr>
+<tr><td>6</td><td class="st">CLI missing</td><td>estimate / none</td><td>2</td><td>row <span class="s">Claude Code needed</span> + Install capsule · subtitle <span class="s">Claude Code not installed</span> (+ <span class="s">· showing local estimate</span>)</td></tr>
+<tr><td>7</td><td class="st">Signed out</td><td>initial+est / initial+none / reauth+est / reauth+none</td><td>4</td><td>reason × estimate are independent axes. Row <span class="s">~42% left</span> (est) or <span class="s">Sign in needed</span> + Sign in capsule (none). Subtitles: <span class="s">Estimate · signed out of Claude Code</span> / <span class="s">Signed out of Claude Code</span> / <span class="s">Signed out of Claude Code · sign in again · showing local estimate</span> / <span class="s">Signed out of Claude Code · sign in again</span>. Popover: initial <span class="s">Sign in once and PromptJuice takes it from there.</span>; reauth <span class="s">Claude Code's sign-in has expired. Sign in again and PromptJuice takes it from there.</span> Same sheet and button for both causes.</td></tr>
+<tr><td>8</td><td class="st">Update required (&lt; 2.1.208)</td><td>cached-or-estimate / none</td><td>2</td><td>row <span class="s">Update needed</span> + Update capsule · subtitle <span class="s">Update Claude Code to track plan usage</span></td></tr>
+<tr><td>9</td><td class="st">API billing (first-party)</td><td>neutral</td><td>1</td><td>row <span class="s">API billing</span> · subtitle <span class="s">API billing · Claude Console tracks spend</span> · popover keeps subscription sign-in close</td></tr>
+<tr><td>10</td><td class="st">External provider</td><td>neutral</td><td>1</td><td>row <span class="s">External provider</span> · subtitle <span class="s">{Provider} · plan quota unavailable</span> · no sign-in close</td></tr>
+<tr><td>11</td><td class="st">Unknown/unsupported auth</td><td>neutral</td><td>1</td><td>row <span class="s">Usage unavailable</span> · subtitle <span class="s">Account type not recognized · usage not tracked</span></td></tr>
+<tr><td>12</td><td class="st">Probe/auth/parse failure</td><td>cached / estimate / neither</td><td>3</td><td><span class="s">Having trouble updating · showing 3:14 PM reading</span> + Retry / row <span class="s">Having trouble checking</span> · authCheckFailed, unsupported output, parse failure, and process failure all feed here</td></tr>
+<tr><td>13</td><td class="st">Provider off</td><td>—</td><td>1</td><td>row hidden · subtitle <span class="s">Off</span></td></tr>
+</table></div>
+<h3>Deleted states</h3>
+<p><span class="s old">Fresh window (Claude)</span> — no signal under /usage; <span class="s">isFreshSessionWindow</span> becomes provider-evidence-gated so Claude at 0% used can never produce it anywhere, including <span class="s">manualSubtitle</span>. Codex behavior unchanged. <span class="s old">Rate limited, retry unknown</span> — nextAttemptAt is client-owned, always valid; corrupt persistence is repaired by the coordinator, not shown. <span class="s old">Update recommended (advisory)</span> — PromptJuice has no newer-version signal; only below-minimum update-required exists.</p>
+<h3>Aggregate rules</h3>
+<p>Only quota-bearing snapshots (subscription readings including estimates, and Codex) feed aggregate severity, menu-bar percentage, glyph, and notifications. Neutral rows are enabled, visible, non-quota-bearing. With no quota-bearing snapshot anywhere: muted droplet, no percentage badge, header <span class="s">Claude plan usage unavailable</span> with the category detail — never healthy, never 100%. With Codex connected, Codex alone drives everything aggregate.</p>
+</section>
+
+<section>
+<p class="eyebrow">06 · Gates</p>
+<h2>One release gate, the optional B5 note, and the auth rule</h2>
+<div class="gate">
+<h3 style="margin-top:0">Privacy-copy gate (G1–G4)</h3>
+<p>The popover privacy paragraph is TARGET copy. The shipping estimator uses JSONSerialization over bounded JSONL records with nested dictionary access. The copy ships only when: <strong>G1</strong> the estimator is refactored to narrow typed decoding (or an equivalent extraction boundary) that immediately discards conversation-bearing fields, retaining only timestamps, request/message identifiers for deduplication, sidechain state, and token totals; <strong>G2</strong> raw JSONL records and conversation fields can never enter logs, caches, errors, fixtures, analytics, or UI state; <strong>G3</strong> tests prove persisted snapshots contain only derived usage information; <strong>G4</strong> a repository-wide logging review passes.</p>
+<h3>Optional B5 compliance note (deferred, not a gate)</h3>
+<p>Product-risk analysis, not legal advice: PromptJuice contains no Claude HTTP client and receives no Claude credential; it launches the user-installed Claude Code locally; Claude Code may make its own authenticated request to Anthropic's usage endpoint when /usage runs; PromptJuice parses the resulting terminal screen; the estimator performs local file reads and sends no log content anywhere. Comparable Claude-usage tools ship without formal clarification, and this approach is more conservative than most (no credentials, no model calls), so a hard gate is stricter than the ecosystem norm. Decision: the clarification is an OPTIONAL courtesy, not a blocker. Local, dogfood, and limited use proceed freely. For a broad public launch, optionally send the note, or ship with the passive-data fallback (estimator-only, no PromptJuice-initiated /usage) ready as a backstop. Not being pursued now.</p>
+</div>
+<h3>Credential policy D (strengthened — B1 approved)</h3>
+<p>No environment mutation. Classification runs against the exact child process PromptJuice launches, enumerating the known documented billing-affecting sources for supported Claude Code versions (future releases may add sources; unknown combinations fail closed): app-visible env (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_BASE_URL, provider flags, gateway/proxy vars), settings.json (apiKeyHelper, env block, provider/base-URL settings), managed settings, and <span class="s">claude auth status</span> as corroborating evidence, never sole proof. Subscription requires auth status agreement AND no overriding credential source. Forward-compatible rule: additive unrelated JSON fields are ignored; unknown values of billing-relevant discriminators (authMethod, apiProvider, subscriptionType) and missing required billing evidence fail closed to unknown/unsupported, which skips /usage. No separate /status probe in v1; in-band plan labels on the /usage screen serve as confirmation when present.</p>
+</section>
+
+<section>
+<p class="eyebrow">07 · Conventions and accessibility</p>
+<h2>Copy rules</h2>
+<ul>
+<li>Freshness: the five-tier Updated formatter, relative under an hour. Backoff: <span class="s">next check at {time}</span>. Failure: <span class="s">having trouble {updating | checking}</span>. Estimate keeps <span class="s">~</span> and the word Estimate.</li>
+<li>Rows say what; tooltips add when and why in one line with <span class="s">·</span>; the popover gets full sentences; footnotes are the only multi-line explanations outside it.</li>
+<li>"Claude Code" is the CLI, "Claude" the account. No bridge, statusline, PTY, or terminal-dependency language; /usage only in the popover body. Buttons Title Case with spelled-out "and"; prose and phrase-like menu items sentence case; no em dashes; SF Symbols only (info.circle, clock, doc.on.doc).</li>
+<li>The withdrawn claims, banned everywhere: <span class="s old">Nothing is sent to Claude</span> · <span class="s old">Your Claude quota is fine.</span> · <span class="s old">never reads your conversation text</span> · <span class="s old">PromptJuice itself makes no network calls</span>.</li>
+</ul>
+<h3>Accessibility</h3>
+<div class="tw"><table>
+<tr><th>Element</th><th>Spec</th></tr>
+<tr><td class="st">Row value</td><td>mirrors state: <span class="s">42% left, updated at 3:14 PM, resets in 2h 30m</span> · <span class="s">Claude Code needed</span> · <span class="s">Next check at 3:45 PM</span> etc.</td></tr>
+<tr><td class="st">Clock icon</td><td>label <span class="s">Updated at 3:14 PM</span> (replaces <span class="s old">Reading from 3:14 PM</span>)</td></tr>
+<tr><td class="st">Journey capsule</td><td>real button: label <span class="s">Install Claude Code</span> / <span class="s">Sign in to Claude Code</span> / <span class="s">Update Claude Code</span>, hint <span class="s">Opens PromptJuice Settings</span></td></tr>
+<tr><td class="st">Info icon</td><td>button, click-opened, label <span class="s">How this number is measured</span></td></tr>
+<tr><td class="st">Removal disclosure</td><td>hint <span class="s">Shows the exact change PromptJuice makes to your Claude settings.</span></td></tr>
+</table></div>
+</section>
+
+<section>
+<p class="eyebrow">08 · Fixtures and sequence</p>
+<h2>Fixture plan and implementation order</h2>
+<p><strong>Category 1, synthetic (authorable now):</strong> flat /usage screens (session only, session+weekly, 0% used, ANSI residue, truncated, malformed), cached-bars set F-RL1–F-RL4 plus "as of" timestamp variants (12-hour, 24-hour locale, timezone/DST transition, ANSI residue inside the timestamp, malformed), auth status permutations (additive harmless fields, missing required fields, unknown discriminator values, expired/revoked-OAuth reauth shape), version strings, locator/provenance outcomes (native, Homebrew Apple Silicon, Homebrew Intel, npm, custom symlink, unknown), corrupt persisted nextAttemptAt. Probe results can carry BOTH a usable snapshot and the backoff signal. <strong>Category 2, sanitized OSS:</strong> CodexBar fixtures with provenance and license recorded. <strong>Category 3, live:</strong> Codex prepares the capture harness but never executes it and never invokes Claude Code; Jeremy runs the approved read-only captures (subscription /usage, auth status, version) after reviewing the script. The harness uses an owner-only (0700) scratch directory containing a dedicated empty working directory — every Claude Code capture process runs from that controlled cwd — with owner-readable (0600) raw files; redacts emails, org/account IDs, UUIDs, usernames, and absolute paths; and preserves the lexical timestamp format, timezone shape, ANSI structure, and surrounding parser-relevant text — it never normalizes away the syntax a fixture is meant to prove. Jeremy inspects sanitized output before anything enters the repository. Console login changes and genuine rate-limit captures remain separately approved future work; the auth classifier and its expected field names (loggedIn, authMethod, apiProvider, subscriptionType) stay provisional until Jeremy's capture confirms them.</p>
+<h3>Sequence (binding — B1/B2/B3 approved, B5 deferred · design ready, execution awaits Jeremy's explicit start instruction)</h3>
+<p>0 consolidate this spec into the worktree + banner claude-usage-plan.md → 1 synthetic fixtures, OSS evaluation, capture harness PREPARED, then a hard stop: Codex reports the fixture inventory, CodexBar license verdict, harness location, and Jeremy's review/run instructions, and Jeremy decides when to run the captures (Codex never executes the harness) → 2 locator, version gate, provenance detection, fail-closed auth classification (provisional until the capture) → 3 flat PTY transport with fixed command allowlist + pure /usage parser → 4 access/refresh state, client-owned cooldown, cache, coordinator, source ladder behind the dogfood switch (bridge stays hidden fallback) → 5 G1–G4 estimator privacy refactor → 6 presentation layer per this spec, incl. journey-scoped rechecks, the Install→Sign in transition, and native snapshots of the sheet footer at minimum text size and with accessibility enlargement → 7 dogfood; remove Jeremy's verified bridge via the Remove path → 8 delete the fallback bridge subsystem + repo-wide string sweep → 9 optional, unscheduled: the B5 note if a broad public launch approaches.</p>
+</section>
+
+<section>
+<p class="eyebrow">09 · Decisions</p>
+<h2>Resolved</h2>
+<ul>
+<li><strong>B1 — APPROVED.</strong> Credential policy D as strengthened.</li>
+<li><strong>B2 — APPROVED.</strong> Minimum Claude Code 2.1.208 and the update-journey behavior.</li>
+<li><strong>B3 — APPROVED (read-only captures).</strong> Capture and commit sanitized real output for the parser/classifier tests; each capture approved individually, login-state captures need a written isolation and recovery plan first.</li>
+<li><strong>B5 — DEFERRED / OPTIONAL.</strong> The Anthropic clarification is a courtesy, not a blocker: comparable tools ship without it and PromptJuice is more conservative (no credentials, no model calls). Ship dogfood and limited use freely. For a broad public launch, optionally send the clarification, or ship with the passive-data (estimate-only) fallback ready. Not doing now.</li>
+<li><strong>Bridge — RESOLVED.</strong> Never shipped externally; needs-review path dropped, ownership-verified Remove ships for the author's own machine.</li>
+<li><strong>Ampersand — RESOLVED.</strong> Keep "Copy and Open Terminal" (Apple Style Guide spells out "and" for action buttons; "&" is for two-noun category names).</li>
+</ul>
+</section>
+
+<footer style="border-top:1px solid var(--rule);padding-top:20px;color:var(--muted);font-size:13px">
+<p>v7 · adjudicated across four review rounds with the implementing agent. Ledger D1–D19 resolved; journey tooltips normalized editorially to match D18 verbs (Install/Sign in/Update). Supersedes all earlier versions of this document.</p>
+</footer>
+
+</div></div>

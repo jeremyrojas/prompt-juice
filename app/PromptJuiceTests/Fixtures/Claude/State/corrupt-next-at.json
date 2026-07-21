@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "backoffStep": 0,
+      "nextAttemptAt": "definitely-not-a-date"
+    },
+    {
+      "backoffStep": 2,
+      "nextAttemptAt": 17
+    },
+    {
+      "backoffStep": 3,
+      "nextAttemptAt": null
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "loggedIn": true,
+  "authMethod": "quantumPass",
+  "apiProvider": "firstParty",
+  "subscriptionType": "max"
+}

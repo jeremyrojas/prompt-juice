@@ -1,0 +1,10 @@
+Usage
+Plan: Max
+
+Current session
+████░░░░░░ 42% used
+Resets at 3:14 PM
+
+Current week
+██████░░░░ 61% used
+Resets Nov 7 at 12:00 AM

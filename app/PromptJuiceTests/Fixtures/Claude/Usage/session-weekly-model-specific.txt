@@ -1,0 +1,14 @@
+Usage
+Plan: Max
+
+Current session
+██░░░░░░░░ 22% used
+Resets at 6:45 PM
+
+Current week (all models)
+████░░░░░░ 47% used
+Resets Nov 7 at 12:00 AM
+
+Current week (Sonnet)
+███████░░░ 73% used
+Resets Nov 7 at 12:00 AM

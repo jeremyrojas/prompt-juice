@@ -1,0 +1,4 @@
+Usage
+Current session
+████░░░░░░ 42% used
+Resets

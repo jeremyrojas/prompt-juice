@@ -30,6 +30,9 @@ jobs:
       - name: Run tests
         run: swift test
 
+      - name: Test Claude capture sanitizer and fixtures
+        run: python3 -m unittest discover -s scripts/claude-usage-capture/tests -p 'test_*.py'
+
       - name: Check shell script syntax
         run: |
           set -euo pipefail

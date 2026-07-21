@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-07-21",
+  "claudeCodeVersion": "2.1.214",
+  "fixtureSource": "PromptJuice sanitized real captures",
+  "thirdPartyMaterialImported": false,
+  "commands": [
+    "claude --version",
+    "claude auth status",
+    "claude --safe-mode --ax-screen-reader --allowed-tools '' (PTY input: /usage)"
+  ],
+  "usageWorkingDirectoryPolicy": "explicit-trusted-fixture-exception",
+  "redactionCategories": [
+    "absolute-path",
+    "account-and-organization-fields",
+    "email",
+    "mcp-name",
+    "opaque-value",
+    "username"
+  ],
+  "rawOutputCommitted": false
+}
