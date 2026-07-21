@@ -14,6 +14,15 @@ enum ClaudeLocalEstimatePolicy: Sendable, Equatable {
     case invalidStatuslineOnly
 }
 
+enum ClaudeUsagePrivacyBoundary {
+    static func safeDescription(for error: Error, fallback: String) -> String {
+        guard let usageError = error as? ClaudeUsageError else {
+            return fallback
+        }
+        return usageError.localizedDescription
+    }
+}
+
 struct ClaudeProviderClient: UsageProviderClient {
     let source: SnapshotSource = .claudeStatusline
 
@@ -47,7 +56,10 @@ struct ClaudeProviderClient: UsageProviderClient {
             PromptJuiceLog.usage.debug("Claude provider read finished with exact statusline")
             return snapshot
         } catch {
-            let statuslineDetail = error.localizedDescription
+            let statuslineDetail = ClaudeUsagePrivacyBoundary.safeDescription(
+                for: error,
+                fallback: "Claude statusline unavailable"
+            )
 
             if error as? ClaudeUsageError == .statuslineCacheStale {
                 return localEstimateOrUnavailable(
@@ -91,8 +103,12 @@ struct ClaudeProviderClient: UsageProviderClient {
             PromptJuiceLog.usage.debug("Claude provider read finished with local estimate")
             return snapshot
         } catch {
+            let estimateDetail = ClaudeUsagePrivacyBoundary.safeDescription(
+                for: error,
+                fallback: "Claude local estimate unavailable"
+            )
             PromptJuiceLog.usage.notice(
-                "Claude local estimate failed: \(error.localizedDescription, privacy: .public); statusline: \(fallbackDetail, privacy: .public)"
+                "Claude local estimate failed: \(estimateDetail, privacy: .public); statusline: \(fallbackDetail, privacy: .public)"
             )
             return unavailableSnapshot(
                 now: now,
@@ -816,21 +832,23 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
     static func parseLine(_ line: String) -> ClaudeUsageLogEntry? {
         guard line.contains(#""usage""#),
               line.contains(#""assistant""#),
-              let data = line.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["type"] as? String == "assistant",
-              let timestampText = object["timestamp"] as? String,
+              let record = try? JSONDecoder().decode(
+                ClaudeUsageJSONLRecord.self,
+                from: Data(line.utf8)
+              ),
+              record.type == "assistant",
+              let timestampText = record.timestamp,
               let timestamp = ClaudeStatuslineSnapshotReader.parseResetDate(timestampText),
-              let message = object["message"] as? [String: Any],
-              let usage = message["usage"] as? [String: Any] else {
+              let message = record.message,
+              let usage = message.usage else {
             return nil
         }
 
         let tokens = ClaudeTokenUsage(
-            input: Self.intValue(usage["input_tokens"]),
-            cacheCreation: Self.intValue(usage["cache_creation_input_tokens"]),
-            cacheRead: Self.intValue(usage["cache_read_input_tokens"]),
-            output: Self.intValue(usage["output_tokens"])
+            input: max(0, usage.inputTokens ?? 0),
+            cacheCreation: max(0, usage.cacheCreationInputTokens ?? 0),
+            cacheRead: max(0, usage.cacheReadInputTokens ?? 0),
+            output: max(0, usage.outputTokens ?? 0)
         )
 
         guard tokens.total > 0 else {
@@ -839,10 +857,10 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
 
         return ClaudeUsageLogEntry(
             timestamp: timestamp,
-            messageID: message["id"] as? String,
-            requestID: object["requestId"] as? String,
+            messageID: message.id,
+            requestID: record.requestID,
             tokens: tokens,
-            isSidechain: (object["isSidechain"] as? Bool) == true
+            isSidechain: record.isSidechain == true
         )
     }
 
@@ -881,14 +899,6 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
         return Date(timeIntervalSince1970: seconds)
     }
 
-    private static func intValue(_ value: Any?) -> Int {
-        if let number = value as? NSNumber {
-            return max(0, number.intValue)
-        }
-
-        return 0
-    }
-
     private static func expandHome(in path: String, homeDirectory: URL) -> URL {
         if path == "~" {
             return homeDirectory
@@ -899,6 +909,41 @@ struct ClaudeLocalLogUsageReader: ClaudeLocalUsageReading, @unchecked Sendable {
         }
 
         return URL(fileURLWithPath: path)
+    }
+}
+
+private struct ClaudeUsageJSONLRecord: Decodable {
+    let type: String?
+    let timestamp: String?
+    let message: Message?
+    let requestID: String?
+    let isSidechain: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case timestamp
+        case message
+        case requestID = "requestId"
+        case isSidechain
+    }
+
+    struct Message: Decodable {
+        let id: String?
+        let usage: TokenUsage?
+    }
+
+    struct TokenUsage: Decodable {
+        let inputTokens: Int?
+        let cacheCreationInputTokens: Int?
+        let cacheReadInputTokens: Int?
+        let outputTokens: Int?
+
+        private enum CodingKeys: String, CodingKey {
+            case inputTokens = "input_tokens"
+            case cacheCreationInputTokens = "cache_creation_input_tokens"
+            case cacheReadInputTokens = "cache_read_input_tokens"
+            case outputTokens = "output_tokens"
+        }
     }
 }
 
@@ -935,7 +980,14 @@ struct ClaudeTokenUsage: Equatable {
     let output: Int
 
     var total: Int {
-        input + cacheCreation + cacheRead + output
+        [input, cacheCreation, cacheRead, output].reduce(0, Self.saturatingAdd)
+    }
+
+    private static func saturatingAdd(_ partial: Int, _ value: Int) -> Int {
+        if value > Int.max - partial {
+            return Int.max
+        }
+        return partial + value
     }
 }
 
@@ -948,7 +1000,12 @@ struct ClaudeUsageBlock: Equatable {
     }
 
     var totalTokens: Int {
-        entries.reduce(0) { $0 + $1.totalTokens }
+        entries.reduce(0) { partial, entry in
+            if entry.totalTokens > Int.max - partial {
+                return Int.max
+            }
+            return partial + entry.totalTokens
+        }
     }
 
     func isActive(at now: Date) -> Bool {

@@ -168,7 +168,7 @@ struct ClaudeBridgeInstaller {
             PromptJuiceLog.usage.debug("Claude bridge script sync passed: \(reason, privacy: .public)")
         } catch {
             PromptJuiceLog.usage.notice(
-                "Claude bridge script sync failed: \(reason, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                "Claude bridge script sync failed: \(reason, privacy: .public)"
             )
         }
     }
