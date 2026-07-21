@@ -1,5 +1,9 @@
 # Claude /usage UI implementation spec — v7 (adjudicated)
 
+Implementation status (2026-07-21): **required phases 0–8 complete**. The shipping path uses
+Claude Code `/usage`; bridge-era code and bundled assets were retired after validated migration.
+Bridge references below remain as the historical migration contract and decision record.
+
 Companion to `claude-usage-ui-spec.html` (mockups + catalog). This version folds in all four
 adjudication rounds with Codex (ledger D1–D19). It supersedes every earlier version.
 

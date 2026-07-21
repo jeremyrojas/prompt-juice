@@ -114,16 +114,10 @@ enum ClaudeRefreshState: Sendable, Equatable {
     case failed(ClaudeProbeFailure)
 }
 
-enum LegacyBridgeStatus: Sendable, Equatable {
-    case none
-    case removable
-}
-
 struct ClaudeUsageCoordinatorState: Sendable, Equatable {
     let access: ClaudeAccessState
     let refresh: ClaudeRefreshState
     let snapshot: ProviderSnapshot?
-    let legacyBridge: LegacyBridgeStatus
 }
 
 struct ClaudeAggregatePolicy {

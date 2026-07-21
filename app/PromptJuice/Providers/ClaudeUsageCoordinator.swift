@@ -111,21 +111,6 @@ protocol ClaudeUsageSnapshotProviding: Sendable {
     ) async -> ClaudeUsageCoordinatorState
 }
 
-struct ClaudeUsageDogfoodSwitch {
-    static let environmentKey = "PROMPTJUICE_CLAUDE_USAGE_DOGFOOD"
-    static let defaultsKey = "claudeUsageDogfoodEnabled"
-
-    static func isEnabled(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard
-    ) -> Bool {
-        if let value = environment[environmentKey]?.lowercased() {
-            return ["1", "true", "yes", "on"].contains(value)
-        }
-        return defaults.bool(forKey: defaultsKey)
-    }
-}
-
 struct ClaudeUsagePersistenceMetadata: Sendable, Equatable {
     let lastAttemptAt: Date?
     let lastSuccessAt: Date?
@@ -298,20 +283,12 @@ final class ClaudeUsagePersistence: @unchecked Sendable {
 struct ClaudeExactSourceLadder {
     static func resolve(
         primary: ProviderSnapshot?,
-        bridgeReader: any ClaudeStatuslineSnapshotReading,
         cache: any ClaudeExactUsageCaching,
         estimateReader: any ClaudeLocalUsageReading,
         now: Date
     ) -> ProviderSnapshot? {
         if let primary, isUsable(primary, now: now) {
             return primary
-        }
-
-        if let bridge = try? bridgeReader.snapshot(now: now),
-           bridge.source == .claudeStatusline,
-           bridge.confidence == .exact,
-           isUsable(bridge, now: now) {
-            return bridge
         }
 
         if let cached = cache.snapshot(now: now, failureDetail: nil),
@@ -346,14 +323,12 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
     private let usageProbe: any ClaudeUsageProbing
     private let workspace: ClaudeProbeWorkspace
     private let cache: any ClaudeExactUsageCaching
-    private let bridgeReader: any ClaudeStatuslineSnapshotReading
     private let estimateReader: any ClaudeLocalUsageReading
     private let persistence: ClaudeUsagePersistence
     private let schedule: ClaudeUsageSchedule
     private let environment: [String: String]
     private let calendar: Calendar
     private let featureEnabled: Bool
-    private let legacyBridgeStatus: @Sendable () -> LegacyBridgeStatus
 
     private var state: ClaudeUsageCoordinatorState
     private var inFlight: (id: UUID, task: Task<Execution, Never>)?
@@ -364,34 +339,29 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         usageProbe: any ClaudeUsageProbing = ClaudeUsageProbe(),
         workspace: ClaudeProbeWorkspace = ClaudeProbeWorkspace(),
         cache: any ClaudeExactUsageCaching = ClaudeSnapshotCache.shared,
-        bridgeReader: any ClaudeStatuslineSnapshotReading = ClaudeStatuslineSnapshotReader(),
         estimateReader: any ClaudeLocalUsageReading = ClaudeLocalLogUsageReader(),
         persistence: ClaudeUsagePersistence = ClaudeUsagePersistence(),
         schedule: ClaudeUsageSchedule = ClaudeUsageSchedule(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
         calendar: Calendar = Calendar(identifier: .gregorian),
-        featureEnabled: Bool = ClaudeUsageDogfoodSwitch.isEnabled(),
-        legacyBridgeStatus: @escaping @Sendable () -> LegacyBridgeStatus = { .none }
+        featureEnabled: Bool = true
     ) {
         self.prerequisiteChecker = prerequisiteChecker
         self.usageProbe = usageProbe
         self.workspace = workspace
         self.cache = cache
-        self.bridgeReader = bridgeReader
         self.estimateReader = estimateReader
         self.persistence = persistence
         self.schedule = schedule
         self.environment = environment
         self.calendar = calendar
         self.featureEnabled = featureEnabled
-        self.legacyBridgeStatus = legacyBridgeStatus
         state = ClaudeUsageCoordinatorState(
             access: persistence.authenticationFingerprint().flatMap {
                 ClaudeAccessState(persistenceFingerprint: $0)
             } ?? .checking,
             refresh: .idle,
-            snapshot: cache.snapshot(now: Date(), failureDetail: nil),
-            legacyBridge: legacyBridgeStatus()
+            snapshot: cache.snapshot(now: Date(), failureDetail: nil)
         )
     }
 
@@ -417,8 +387,7 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             state = ClaudeUsageCoordinatorState(
                 access: state.access,
                 refresh: .idle,
-                snapshot: fallbackSnapshot(primary: nil, now: now),
-                legacyBridge: legacyBridgeStatus()
+                snapshot: fallbackSnapshot(primary: nil, now: now)
             )
             return state
         }
@@ -451,8 +420,7 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             state = ClaudeUsageCoordinatorState(
                 access: state.access,
                 refresh: .failed(.workspace),
-                snapshot: fallbackSnapshot(primary: nil, now: now),
-                legacyBridge: legacyBridgeStatus()
+                snapshot: fallbackSnapshot(primary: nil, now: now)
             )
             return state
         }
@@ -461,8 +429,7 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         state = ClaudeUsageCoordinatorState(
             access: state.access,
             refresh: .refreshing,
-            snapshot: state.snapshot,
-            legacyBridge: legacyBridgeStatus()
+            snapshot: state.snapshot
         )
 
         let prerequisiteChecker = prerequisiteChecker
@@ -520,8 +487,7 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             state = ClaudeUsageCoordinatorState(
                 access: execution.prerequisites.access,
                 refresh: .idle,
-                snapshot: fallbackSnapshot(primary: nil, now: now),
-                legacyBridge: legacyBridgeStatus()
+                snapshot: fallbackSnapshot(primary: nil, now: now)
             )
             return
         }
@@ -555,31 +521,27 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
                 state = ClaudeUsageCoordinatorState(
                     access: access,
                     refresh: .backingOff(nextAttemptAt: nextAttemptAt),
-                    snapshot: snapshot,
-                    legacyBridge: legacyBridgeStatus()
+                    snapshot: snapshot
                 )
             } else if result.failure != nil || parsedSnapshot == nil {
                 state = ClaudeUsageCoordinatorState(
                     access: access,
                     refresh: .failed(.parse),
-                    snapshot: snapshot,
-                    legacyBridge: legacyBridgeStatus()
+                    snapshot: snapshot
                 )
             } else {
                 persistence.recordSuccess(at: now)
                 state = ClaudeUsageCoordinatorState(
                     access: access,
                     refresh: .idle,
-                    snapshot: snapshot,
-                    legacyBridge: legacyBridgeStatus()
+                    snapshot: snapshot
                 )
             }
         case .workspaceTrustRequired:
             state = ClaudeUsageCoordinatorState(
                 access: .workspaceTrustRequired,
                 refresh: .idle,
-                snapshot: fallbackSnapshot(primary: nil, now: now),
-                legacyBridge: legacyBridgeStatus()
+                snapshot: fallbackSnapshot(primary: nil, now: now)
             )
         case .timedOut:
             setFailure(.timeout, access: prerequisiteAccess, now: now)
@@ -608,8 +570,7 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         state = ClaudeUsageCoordinatorState(
             access: access,
             refresh: .failed(failure),
-            snapshot: fallbackSnapshot(primary: nil, now: now),
-            legacyBridge: legacyBridgeStatus()
+            snapshot: fallbackSnapshot(primary: nil, now: now)
         )
     }
 
@@ -630,15 +591,13 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         return ClaudeUsageCoordinatorState(
             access: state.access,
             refresh: refresh,
-            snapshot: fallbackSnapshot(primary: state.snapshot, now: now),
-            legacyBridge: legacyBridgeStatus()
+            snapshot: fallbackSnapshot(primary: state.snapshot, now: now)
         )
     }
 
     private func fallbackSnapshot(primary: ProviderSnapshot?, now: Date) -> ProviderSnapshot? {
         ClaudeExactSourceLadder.resolve(
             primary: primary,
-            bridgeReader: bridgeReader,
             cache: cache,
             estimateReader: estimateReader,
             now: now

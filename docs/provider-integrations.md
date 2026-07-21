@@ -1,23 +1,19 @@
 # Provider Integrations
 
-PromptJuice uses local provider adapters that return normalized snapshots for the UI and alert engine. Each snapshot includes the provider identity, rate window, source, confidence, update time, and optional status detail.
+PromptJuice uses local provider adapters that return normalized snapshots for the UI and alert engine. Each snapshot includes provider identity, rate windows, source, confidence, update time, and optional status detail.
 
 ## Codex
 
-PromptJuice reads Codex usage through the local Codex app-server.
-
-Current path:
+PromptJuice reads Codex usage through the local Codex app-server:
 
 1. Locate the Codex executable.
 2. Launch `codex app-server` over stdio.
-3. Send `initialize` with PromptJuice client metadata and experimental API capability.
-4. Send `initialized`.
-5. Call `account/rateLimits/read`.
-6. Decode the preferred Codex bucket from `rateLimitsByLimitId["codex"]`, then `rateLimits`.
-7. Map the primary rate-limit window into the session `rateWindow`.
-8. Map a valid secondary rate-limit window into `weeklyWindow` when the response includes one.
+3. Complete the initialization handshake.
+4. Call `account/rateLimits/read`.
+5. Prefer `rateLimitsByLimitId["codex"]`, with `rateLimits` as the compatible fallback.
+6. Map the primary window to the visible session and retain a valid secondary weekly window.
 
-PromptJuice looks for Codex in this order:
+Executable lookup order:
 
 1. `PROMPTJUICE_CODEX_PATH`
 2. `/Applications/Codex.app/Contents/Resources/codex`
@@ -25,26 +21,11 @@ PromptJuice looks for Codex in this order:
 4. `/usr/local/bin/codex`
 5. `which codex`
 
-### Codex Source Labels
+### Codex source labels
 
-- `codexAppServer` + `exact`: `account/rateLimits/read` returned a complete primary window and may include a weekly secondary window.
-- `codexCache` + `stale`: live read failed and a last-good session or weekly window is still before reset.
-- `codexAppServer` + `unavailable`: the executable, launch, initialization, read, timeout, or parser step failed.
-
-### Codex Troubleshooting
-
-Check that Codex is installed and reachable:
-
-```bash
-codex --help
-codex app-server --help
-```
-
-Run Codex diagnostics:
-
-```bash
-codex doctor
-```
+- `codexAppServer` + `exact`: a complete current primary window.
+- `codexCache` + `stale`: a valid last-good window carried through a read failure.
+- `codexAppServer` + `unavailable`: executable, launch, handshake, timeout, server, or parser failure.
 
 Set an explicit executable path when automatic lookup misses Codex:
 
@@ -52,98 +33,62 @@ Set an explicit executable path when automatic lookup misses Codex:
 export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
 ```
 
-The app detail line includes the source and confidence label. Unavailable Codex reads include a short status detail such as launch failure, timeout, server error, or unreadable rate-limit response.
-
-Rows show session usage at a fixed 48 pt height with a grouped trailing cluster, such as `85% · resets in 4h 33m`. Provider rows are display-only. Single-bucket responses leave `weeklyWindow` empty. The Codex cache keeps session and weekly windows independently until each reset time; weekly data is retained for future UI.
-
 ## Claude
 
-PromptJuice reads Claude usage through a confidence ladder:
+PromptJuice reads Claude plan usage through Claude Code's built-in `/usage` screen. The production ladder is:
 
-1. Claude Code per-session statusline cache.
-2. Last-good Claude statusline cache before each window's reset.
-3. Local Claude project-log estimate.
-4. Unavailable snapshot.
+1. Current exact `/usage` reading.
+2. Valid last-good exact reading from the derived-only cache.
+3. Local Claude Code activity estimate.
+4. Unavailable state with a guided recovery action when applicable.
 
-### Claude Code Statusline Cache
+### Prerequisites
 
-The cache directory is:
+PromptJuice locates Claude Code through known native, Homebrew, npm, and user-local paths. It then runs bounded noninteractive version and authentication probes. Direct readings require:
 
-```text
-~/Library/Application Support/PromptJuice/ClaudeStatus/
-```
+- Claude Code at the supported minimum version or newer;
+- subscription authentication;
+- one-time trust for PromptJuice's dedicated empty probe workspace when Claude requests it.
 
-The bridge script at `scripts/claude-statusline-bridge.sh` reads Claude Code statusline JSON from stdin, writes sanitized per-session rate-limit fields to the PromptJuice cache, then delegates to the user's existing statusline command when configured. PromptJuice sets Claude Code's `statusLine.refreshInterval` to `10`, which refreshes the bridge every 10 seconds while Claude Code is open.
+Settings exposes guided Install, Sign In, Update, and Workspace Trust journeys. Each journey shows the exact command, supports copy/open-in-Terminal actions where appropriate, and rechecks the relevant prerequisite.
 
-New builds read flat `session-*.json` files first:
+### `/usage` transport
 
-```text
-ClaudeStatus/session-<session_id>.json
-```
+The usage probe launches Claude Code in a pseudo-terminal with a fixed allowlist of arguments and environment values. It waits for command readiness, sends the exact `/usage` command, answers only the allowlisted terminal cursor-position query, parses quota rows, and terminates the process group within bounded time and output limits.
 
-Expected per-session cache shape:
+The probe sends zero model prompts. PromptJuice logs lifecycle milestones and typed outcomes only. Raw terminal output stays inside the transient parser boundary.
 
-```json
-{
-  "observed_at": "2026-07-02T12:38:45Z",
-  "session_id": "c0df7847-af35-48ab-a021-bac2dcdeee88",
-  "rate_limits": {
-    "five_hour": {
-      "used_percentage": 12.5,
-      "resets_at": "1800001800",
-      "duration_minutes": 300
-    },
-    "seven_day": {
-      "used_percentage": 33,
-      "resets_at": "1800345600",
-      "duration_minutes": 10080
-    }
-  }
-}
-```
+### Scheduling and cooldown
 
-The bridge also writes legacy `latest.json` with the five-hour window only so older PromptJuice builds keep working. New builds fall back to `latest.json` when no session files exist.
+PromptJuice checks Claude on launch, activation, wake, panel open, reset boundaries, and a bounded timer schedule. Refreshes coalesce while a probe is active. The scheduler enforces freshness, debounce, hourly attempt-budget, provider-enabled, awake, and online gates.
 
-`resets_at` may be an epoch timestamp string or an ISO-8601 timestamp.
+When Claude returns its usage endpoint rate limit, PromptJuice preserves the last usable reading and advances through persisted 5, 15, 30, and 60 minute cooldowns. Relaunching during cooldown restores the account category, cached reading, and next-attempt time without starting another probe.
 
-PromptJuice merges session files by dropping expired windows, choosing the greatest surviving `resets_at`, grouping reset times within 90 seconds, then picking the highest `used_percentage` in that group. This makes old idle Claude Code sessions harmless even when they keep rewriting expired windows.
+### Local estimate
 
-When every known five-hour window has expired while rate-limit history remains, Claude shows **Fresh window** at 100% session remaining with no reset countdown. Rows show session usage at a fixed 48 pt height with a grouped trailing cluster, such as `85% · resets in 4h 33m`. Provider rows are display-only. Weekly readings stay in the reader/cache layer for future UI. After all cached Claude windows pass reset, PromptJuice returns to the waiting/setup path so a broken bridge is visible.
-
-Setup details live in [claude-statusline-bridge.md](claude-statusline-bridge.md).
-
-### Claude Local-Log Estimate
-
-When the statusline cache is unavailable, PromptJuice scans local Claude project logs from:
+When a direct reading is unavailable, PromptJuice can scan bounded recent Claude project logs from:
 
 - `CLAUDE_CONFIG_DIR`
 - `~/.config/claude/projects`
 - `~/.claude/projects`
 
-The reader groups assistant messages into five-hour blocks, deduplicates repeated usage entries when message and request ids are present, and estimates the active block's used percentage from local token counts. The UI labels this path as `claudeLocalLogs` with `estimated` confidence.
+The reader decodes a narrow usage-only projection, deduplicates repeated usage entries, groups activity into five-hour blocks, and derives an active-block estimate. Conversation fields disappear at the typed decode boundary. The UI labels this source `claudeLocalLogs` with `estimated` confidence.
 
-### Claude Source Labels
+### Claude source labels
 
-- `claudeStatusline` + `exact`: statusline cache contains a complete active five-hour window.
-- `claudeStatusline` + `stale`: statusline cache contains a valid carry-forward window from an earlier file mtime.
-- `claudeCache` + `stale`: statusline read failed and a last-good session or weekly window is still before reset.
-- `claudeLocalLogs` + `estimated`: local logs produced an active five-hour block estimate.
-- `claudeStatusline` + `unavailable`: statusline cache and local-log estimate both failed. This is the waiting-for-terminal path when the bridge is installed and no rate-limit data has ever been seen.
+- `claudeUsageCLI` + `exact`: current plan usage parsed from `/usage`.
+- `claudeUsageCLI` + `stale`: a saved reading reported by Claude Code.
+- `claudeCache` + `stale`: a valid last-good exact window.
+- `claudeLocalLogs` + `estimated`: a bounded local activity estimate.
+- `claudeUsageCLI` + `unavailable`: no usable direct, cached, or estimated reading.
 
-### Claude Troubleshooting
+### Troubleshooting
 
-Verify the bridge cache exists:
-
-```bash
-ls -lt "$HOME/Library/Application Support/PromptJuice/ClaudeStatus"
-/usr/bin/plutil -p "$HOME/Library/Application Support/PromptJuice/ClaudeStatus/session-"*.json
-```
-
-Check the statusline bridge directly with sample input:
+Verify the local CLI and authentication state:
 
 ```bash
-printf '%s\n' '{"session_id":"demo","rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":"1800001800","duration_minutes":300},"seven_day":{"used_percentage":33,"resets_at":"1800345600","duration_minutes":10080}}}' \
-  | bash scripts/claude-statusline-bridge.sh
+claude --version
+claude auth status
 ```
 
-Then refresh PromptJuice from the menu-bar item.
+PromptJuice Settings reports the current category and offers the matching guided action. A rate-limit state includes the next automatic check time. A workspace-trust state opens the dedicated workspace in Terminal for one-time approval.

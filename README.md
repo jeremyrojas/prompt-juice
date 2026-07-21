@@ -57,7 +57,7 @@ on the same well-tested path.
 
 - A menu-bar droplet whose fill reflects remaining session capacity.
 - A compact Juice Bar with Claude and Codex percentages and reset countdowns.
-- Clear **Live**, **Earlier**, **Estimate**, and **Not set up** confidence labels.
+- Clear **Live**, **Earlier**, **Estimate**, and prerequisite-aware unavailable states.
 - Configurable time-to-reset and remaining-capacity thresholds for the orange cue.
 - One merged macOS notification for providers that enter the same use-soon moment.
 - A pinnable, draggable Juice Bar that remembers its position.
@@ -76,7 +76,7 @@ view. Every row identifies the quality of its reading:
 | **Live** | Exact, current provider data. |
 | **Earlier** | A still-valid last-good window from the local cache. |
 | **Estimate** | A local activity-based approximation. |
-| **Not set up** | The provider or its live-reading bridge needs attention. |
+| **Unavailable** | PromptJuice needs installation, sign-in, update, trust, or retry attention. |
 
 ### Codex
 
@@ -94,26 +94,22 @@ export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
 
 ### Claude
 
-Claude Code can provide exact five-hour and seven-day usage windows through its
-status line. In PromptJuice, open **Settings -> Claude -> Set up live readings**,
-review the proposed change, and enable the bridge. Claude Code refreshes the
-local bridge every 10 seconds while a terminal session is open.
+PromptJuice locates Claude Code, verifies a supported version and subscription
+sign-in, then opens Claude Code in a dedicated empty workspace and reads the
+built-in `/usage` screen. The command sends zero model prompts and returns the
+same plan-usage windows shown in Claude Code.
 
-The bridge adds one entry to `~/.claude/settings.json`, preserves an existing
-status-line command by wrapping it, and writes sanitized rate-limit fields to:
+PromptJuice checks on launch, activation, wake, panel open, reset boundaries,
+and a bounded background schedule. Rate-limit responses trigger a persisted
+5/15/30/60-minute cooldown. Valid exact readings stay available from a local
+derived-only cache until their reset time.
 
-```text
-~/Library/Application Support/PromptJuice/ClaudeStatus/
-```
+When a direct reading is temporarily unavailable, PromptJuice can show an
+**Estimate** derived from local Claude Code usage metadata. Settings provides
+guided Install, Sign In, Update, and Workspace Trust journeys when needed.
 
-Claude desktop usage alone produces an **Estimate** from local Claude activity
-logs because the desktop app does not currently run Claude Code status lines.
-When all known five-hour windows expire, PromptJuice shows **Fresh window** at
-100% session remaining until Claude supplies the next window.
-
-Detailed setup and troubleshooting live in
-[Provider Integrations](docs/provider-integrations.md) and the
-[Claude Statusline Bridge guide](docs/claude-statusline-bridge.md).
+Detailed behavior and troubleshooting live in
+[Provider Integrations](docs/provider-integrations.md).
 
 ## Privacy
 
@@ -121,7 +117,7 @@ PromptJuice processing and caches stay on your Mac. The app includes zero
 analytics and zero hosted backend:
 
 - Codex usage comes from the local Codex app-server process.
-- Claude exact usage comes from the local status-line bridge cache.
+- Claude exact usage comes from Claude Code's built-in `/usage` screen.
 - Claude estimates come from local activity metadata.
 - Cached snapshots contain normalized usage windows and update times.
 
@@ -179,7 +175,7 @@ Current boundaries:
 
 - Provider rows show the active session window at a fixed height.
 - Weekly windows are read and cached while their dedicated UI is being refined.
-- Exact Claude readings require Claude Code in a terminal session.
+- Exact Claude readings require a supported Claude Code installation and subscription sign-in.
 
 ## Project Map
 
@@ -189,14 +185,14 @@ app/PromptJuiceTests/  Unit, integration, and snapshot coverage
 .agents/skills/        Agent-safe install and update workflows
 design/                Product states and visual assets
 docs/                  Integration and implementation references
-scripts/               Build, run, icon, and Claude bridge helpers
+scripts/               Build, run, icon, and Claude capture helpers
 ```
 
 ## Documentation
 
 - [Product overview](docs/prompt-juice.md)
 - [Provider integrations](docs/provider-integrations.md)
-- [Claude statusline bridge](docs/claude-statusline-bridge.md)
+- [Claude `/usage` UI implementation](docs/claude-usage-ui-implementation.md)
 - [Usage state board](design/prompt-juice-states.html)
 
 ## License

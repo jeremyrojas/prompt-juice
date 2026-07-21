@@ -130,7 +130,7 @@ final class ClaudeEstimatorPrivacyTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let cache = ClaudeSnapshotCache(defaults: defaults)
-        let storageKey = "lastGoodClaudeStatuslineSnapshot"
+        let storageKey = "lastGoodClaudeUsageSnapshot"
         let canary = UUID().uuidString
 
         cache.save(snapshot(source: .claudeLocalLogs, statusDetail: canary))

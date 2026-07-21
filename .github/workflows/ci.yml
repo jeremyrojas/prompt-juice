@@ -15,7 +15,6 @@ jobs:
       PROMPTJUICE_SHELL_SCRIPTS: >-
         scripts/build_app.sh
         scripts/run_app.sh
-        scripts/claude-statusline-bridge.sh
         .agents/skills/promptjuice-install/scripts/install_promptjuice.sh
         .agents/skills/promptjuice-update/scripts/update_promptjuice.sh
     steps:
@@ -62,7 +61,6 @@ jobs:
 
           test -d "$app_path"
           test -x "$app_path/Contents/MacOS/PromptJuice"
-          test -x "$app_path/Contents/Resources/claude-statusline-bridge.sh"
           test -s "$app_path/Contents/Resources/PromptJuice.icns"
 
           plutil -lint "$app_path/Contents/Info.plist"

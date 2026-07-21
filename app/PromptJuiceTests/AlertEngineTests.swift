@@ -101,7 +101,7 @@ final class AlertEngineTests: XCTestCase {
         let freshClaude = ProviderSnapshot(
             identity: .claude,
             rateWindow: .unavailable,
-            source: .claudeStatusline,
+            source: .claudeUsageCLI,
             confidence: .exact,
             updatedAt: now.addingTimeInterval(-2 * 60 * 60),
             statusDetail: "Fresh window",

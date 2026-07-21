@@ -5,8 +5,6 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let viewModel = PromptJuiceViewModel.makeAppViewModel()
-    private let claudeBridgeInstaller = ClaudeBridgeInstaller()
-    private let claudeStatusCachePoller = ClaudeStatusCachePoller()
     private let notificationService = PromptJuiceNotificationService()
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: viewModel,
@@ -42,10 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureNotifications()
         observeViewModel()
         observeHostLifecycle()
-        syncClaudeBridgeScript(reason: "launch")
         viewModel.refreshUsageQuietly(reason: .launch)
         startTicker()
-        startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
 
 #if DEBUG
@@ -146,7 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         ticker?.invalidate()
-        claudeStatusCachePoller.stop()
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -176,12 +171,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.updateStatusItemGlyph()
                 self?.processUseSoonNotifications()
             }
-        }
-    }
-
-    private func startClaudeStatusCacheMonitor() {
-        claudeStatusCachePoller.start { [weak self] in
-            self?.viewModel.refreshClaudeAfterStatusCacheChange(reason: "cache watcher")
         }
     }
 
@@ -262,7 +251,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func refreshAfterWake() {
-        syncClaudeBridgeScript(reason: "wake")
         performHostLifecycleRefresh(reason: .wake)
     }
 
@@ -285,16 +273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         lastLifecycleRefreshAt = refreshDate
-        startClaudeStatusCacheMonitor()
-        viewModel.refreshClaudeStatusCacheNow(reason: "host lifecycle")
         viewModel.refreshUsageQuietly(reason: reason)
         updateStatusItemGlyph(force: true)
         processUseSoonNotifications()
-    }
-
-    private func syncClaudeBridgeScript(reason: String) {
-        claudeBridgeInstaller.ensureInstalledBridgeCurrent(reason: reason)
-        viewModel.refreshClaudeBridgeState()
     }
 
     /// Redraws the menu-bar droplet from the current aggregate. The fill is the

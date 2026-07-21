@@ -11,7 +11,6 @@ final class SettingsWindowState: ObservableObject {
     @Published var mode: SettingsWindowMode = .settings
     @Published var isClaudeSetupPresented = false
     @Published var claudeGuidanceJourney: ClaudeGuidanceJourney?
-    @Published var isLegacyBridgeRemovalPresented = false
     @Published var firstRunEnabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases)
 }
 
@@ -37,8 +36,6 @@ final class SettingsWindowController: NSWindowController {
     }
 
     func show(presentingClaudeSetup: Bool = false) {
-        viewModel.refreshClaudeBridgeState()
-        viewModel.refreshClaudeStatusCacheNow(reason: "settings open")
         viewModel.refreshUsageQuietly(reason: .panelOpen)
 
         let window = ensureWindow()
@@ -62,8 +59,6 @@ final class SettingsWindowController: NSWindowController {
     }
 
     func showFirstRun() {
-        viewModel.refreshClaudeBridgeState()
-        viewModel.refreshClaudeStatusCacheNow(reason: "first-run settings open")
         viewModel.refreshUsageQuietly(reason: .panelOpen)
 
         let window = ensureWindow()

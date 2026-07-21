@@ -238,7 +238,6 @@ private struct ProviderUsageRow: View {
             if showsReading {
                 CapacityBar(remainingPercent: snapshot.sessionRemainingPercent, color: severityColor)
             } else if snapshot.provider == .claude,
-                      viewModel.usesClaudeUsagePresentation,
                       viewModel.claudePresentation.isNeutral {
                 EmptyView()
             } else {
@@ -262,7 +261,7 @@ private struct ProviderUsageRow: View {
 
     @ViewBuilder
     private var trailing: some View {
-        if snapshot.provider == .claude, viewModel.usesClaudeUsagePresentation {
+        if snapshot.provider == .claude {
             if showsReading {
                 resetCluster
             } else if let rowStatus = viewModel.claudePresentation.rowStatus {
@@ -285,10 +284,6 @@ private struct ProviderUsageRow: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.4))
 
-            if snapshot.provider == .claude,
-               viewModel.claudeRowOffersSetup {
-                setUpCue
-            }
         }
     }
 
@@ -301,26 +296,7 @@ private struct ProviderUsageRow: View {
             return "Checking…"
         }
 
-        if snapshot.provider == .claude,
-           viewModel.claudeLiveUpgrade == .awaitingSession {
-            return "Waiting for terminal"
-        }
-
         return "Not measured yet"
-    }
-
-    private var setUpCue: some View {
-        Text("Set up")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.85))
-            .padding(.horizontal, 9)
-            .frame(height: 20)
-            .background(
-                Capsule(style: .continuous).fill(Color.white.opacity(0.10))
-            )
-            .overlay(
-                Capsule(style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1)
-            )
     }
 
     private func journeyButton(_ journey: ClaudeGuidanceJourney) -> some View {
@@ -358,19 +334,9 @@ private struct ProviderUsageRow: View {
     }
 
     private var providerName: some View {
-        HStack(spacing: 5) {
-            Text(snapshot.displayName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(showsReading ? 0.88 : 0.6))
-
-            if !viewModel.usesClaudeUsagePresentation,
-               let staleReadingLabel = viewModel.staleReadingIndicatorAccessibilityLabel(for: snapshot) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.46))
-                    .accessibilityLabel(staleReadingLabel)
-            }
-        }
+        Text(snapshot.displayName)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white.opacity(showsReading ? 0.88 : 0.6))
     }
 
     private var providerColor: Color {
@@ -382,7 +348,7 @@ private struct ProviderUsageRow: View {
     }
 
     private var showsReading: Bool {
-        if snapshot.provider == .claude, viewModel.usesClaudeUsagePresentation {
+        if snapshot.provider == .claude {
             return viewModel.claudePresentation.showsReading
         }
         return snapshot.isAvailable
@@ -405,7 +371,6 @@ private struct ProviderUsageRow: View {
     private var resetCluster: some View {
         HStack(spacing: 5) {
             if snapshot.provider == .claude,
-               viewModel.usesClaudeUsagePresentation,
                viewModel.claudePresentation.showsClock,
                let clockLabel = viewModel.claudeFreshnessAccessibilityLabel(for: snapshot) {
                 Image(systemName: "clock")
@@ -454,7 +419,7 @@ private struct ProviderUsageRow: View {
     }
 
     private var accessibilityValue: String {
-        if snapshot.provider == .claude, viewModel.usesClaudeUsagePresentation {
+        if snapshot.provider == .claude {
             if showsReading {
                 let freshness = viewModel.claudeFreshnessAccessibilityLabel(for: snapshot)
                     .map { label in

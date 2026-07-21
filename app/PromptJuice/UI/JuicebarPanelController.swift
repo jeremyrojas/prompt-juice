@@ -782,7 +782,6 @@ final class JuicebarPanelController: NSObject {
     }
 
     func show() {
-        viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
         viewModel.refreshUsageQuietly(reason: .panelOpen)
         let panel = ensurePanel()
         setPanelMode(.anchored)
@@ -791,7 +790,6 @@ final class JuicebarPanelController: NSObject {
     }
 
     func pin() {
-        viewModel.refreshClaudeStatusCacheNow(reason: "panel pin")
         let panel = ensurePanel()
         let size = panelSize
         let origin = pinnedOrigin(for: panel, size: size)
@@ -929,10 +927,8 @@ final class JuicebarPanelController: NSObject {
             dismissSurface()
         case .provider(let provider):
             if provider == .claude,
-               (viewModel.usesClaudeUsagePresentation
-                    ? (!viewModel.claudePresentation.showsReading
-                        && viewModel.claudePresentation.guidanceJourney != nil)
-                    : viewModel.claudeRowOffersSetup) {
+               !viewModel.claudePresentation.showsReading,
+               viewModel.claudePresentation.guidanceJourney != nil {
                 dismissSurface()
                 onClaudeSettingsRequested(true)
                 return

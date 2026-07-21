@@ -13,8 +13,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
         let initialHeight = PromptJuicePanelMetrics.height(
@@ -79,8 +78,9 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { false }
+            initialClaudeAccessState: .cliMissing,
+            initialClaudeRefreshState: .idle,
+            now: { Self.fixedNow }
         )
         var settingsRequests: [Bool] = []
         let controller = JuicebarPanelController(
@@ -95,7 +95,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
             controller.panelFrameForTesting != nil
         }
 
-        XCTAssertTrue(viewModel.claudeRowOffersSetup)
+        XCTAssertEqual(viewModel.claudePresentation.guidanceJourney, .install)
 
         let target = try providerTarget(row: 0, controller: controller, viewModel: viewModel)
         XCTAssertEqual(target, .provider(.claude))
@@ -115,8 +115,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         var settingsRequests: [Bool] = []
         let controller = JuicebarPanelController(
@@ -154,8 +153,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -212,8 +210,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -260,8 +257,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -294,8 +290,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -329,8 +324,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
 
@@ -468,10 +462,10 @@ final class JuicebarPanelControllerTests: XCTestCase {
         ProviderSnapshot(
             identity: .claude,
             rateWindow: .unavailable,
-            source: .claudeStatusline,
+            source: .claudeUsageCLI,
             confidence: .unavailable,
             updatedAt: fixedNow,
-            statusDetail: "Claude statusline and local usage unavailable"
+            statusDetail: "Claude usage unavailable"
         ),
         ProviderSnapshot(
             identity: .codex,

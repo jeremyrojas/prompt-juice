@@ -9,7 +9,7 @@
 > binding access/refresh/snapshot/migration axes and the capture and reference policies recorded
 > in that specification.
 
-Status: implementation plan only  
+Status: required phases 0–8 completed on 2026-07-21; retained as the migration record
 Worktree: `/Users/jeremyrojas/worktrees/prompt-juice/claude-usage`  
 Branch: `codex/claude-usage`  
 Base: `origin/main` at `4d349d1`  

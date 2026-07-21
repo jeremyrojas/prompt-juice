@@ -33,9 +33,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 cp "$BINARY_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT_DIR/app/PromptJuice/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
-cp "$ROOT_DIR/scripts/claude-statusline-bridge.sh" "$APP_DIR/Contents/Resources/claude-statusline-bridge.sh"
 cp "$MASCOT_ICON_SOURCE" "$APP_DIR/Contents/Resources/PromptJuiceMascot.png"
-chmod +x "$APP_DIR/Contents/Resources/claude-statusline-bridge.sh"
 swift "$ROOT_DIR/scripts/generate_app_icon.swift" \
     "$MASCOT_ICON_SOURCE" \
     "$APP_DIR/Contents/Resources/PromptJuice.icns" >&2

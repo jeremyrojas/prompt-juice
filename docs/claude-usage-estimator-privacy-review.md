@@ -36,7 +36,7 @@ boundary and remain absent from the resulting snapshot.
 
 ## G3 — persisted snapshot schema
 
-`ClaudeSnapshotCache` eligibility is limited to exact Claude sources. Those snapshots persist
+`ClaudeSnapshotCache` eligibility is limited to `claudeUsageCLI` snapshots. Those snapshots persist
 the following window keys through `ProviderWindowSnapshotCache`:
 
 - `session` and optional `weekly`;
@@ -58,10 +58,10 @@ Production app logs contain fixed lifecycle messages plus these allowlisted deri
 
 - provider, source, confidence, and availability enum values;
 - internal refresh reasons and outcomes;
-- bridge lifecycle reasons supplied by app-owned call sites.
+- Claude probe milestones and typed outcome booleans.
 
 The logging schema is limited to the allowlisted derived values above. The Claude provider maps
-unknown error descriptions to fixed safe copy. Bridge sync logging records its app-owned reason.
+unknown error descriptions to fixed safe copy. PTY output and parsed terminal text stay outside logs.
 
 The Phase 1 capture utilities write raw data directly to owner-only files and print structured
 execution or sanitizer status. Raw capture payloads stay in those owner-only files. Sanitized

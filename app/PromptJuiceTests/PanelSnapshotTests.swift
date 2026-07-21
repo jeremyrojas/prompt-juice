@@ -110,90 +110,7 @@ final class PanelSnapshotTests: XCTestCase {
         )
     }
 
-    func testRenderClaudeAwaitingSessionUXSnapshots() throws {
-        try XCTSkipUnless(
-            ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
-            "Set PROMPTJUICE_SNAPSHOT=1 to render awaiting-session snapshots."
-        )
-
-        let viewModel = awaitingSessionViewModel()
-        let unavailableViewModel = awaitingSessionUnavailableViewModel()
-
-        try renderView(
-            "settings-awaiting",
-            content: SettingsProviderRowPreviewShell(viewModel: viewModel)
-                .environment(\.colorScheme, .dark)
-        )
-        try renderView(
-            "popover-awaiting",
-            content: ClaudeMeasurementPopoverPreviewShell(viewModel: viewModel)
-                .environment(\.colorScheme, .dark)
-        )
-        try renderView(
-            "popover-awaiting-unavailable",
-            content: ClaudeMeasurementPopoverPreviewShell(viewModel: unavailableViewModel)
-                .environment(\.colorScheme, .dark)
-        )
-        try renderView(
-            "tooltip-awaiting",
-            content: AwaitingTooltipPreview(
-                text: tooltipText(from: viewModel)
-            )
-            .environment(\.colorScheme, .dark)
-        )
-        try renderView(
-            "tooltip-awaiting-unavailable",
-            content: AwaitingTooltipPreview(
-                text: tooltipText(from: unavailableViewModel)
-            )
-            .environment(\.colorScheme, .dark)
-        )
-        try renderAwaitingSessionPanel(viewModel: viewModel)
-
-        try renderView(
-            "settings-claude-disabled",
-            content: SettingsProviderRowPreviewShell(
-                viewModel: setupAvailableViewModel(),
-                isEnabled: false
-            )
-                .environment(\.colorScheme, .dark)
-        )
-    }
-
-    func testRenderStaleClaudeIndicatorSnapshots() throws {
-        try XCTSkipUnless(
-            ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
-            "Set PROMPTJUICE_SNAPSHOT=1 to render stale Claude snapshots."
-        )
-
-        let viewModel = staleClaudeViewModel()
-        let panelHeight = PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count
-        )
-        let content = ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.12, blue: 0.16),
-                    Color(red: 0.04, green: 0.05, blue: 0.08)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            PromptJuicePanelView(viewModel: viewModel, onClose: {})
-                .padding(40)
-        }
-        .frame(width: 464, height: panelHeight + 80)
-
-        try renderView("panel-stale-claude", content: content)
-        try renderView(
-            "tooltip-stale-claude",
-            content: AwaitingTooltipPreview(text: tooltipText(from: viewModel))
-                .environment(\.colorScheme, .dark)
-        )
-    }
-
-    private func render(
+        private func render(
         _ name: String,
         _ client: any UsageProviderClient,
         enabledProviders: Set<UsageProvider>? = nil
@@ -271,98 +188,7 @@ final class PanelSnapshotTests: XCTestCase {
         print("wrote \(url.path)")
     }
 
-    private func renderAwaitingSessionPanel(viewModel: PromptJuiceViewModel) throws {
-        let panelHeight = PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count
-        )
-        let content = ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.12, blue: 0.16),
-                    Color(red: 0.04, green: 0.05, blue: 0.08)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            PromptJuicePanelView(viewModel: viewModel, onClose: {})
-                .padding(40)
-        }
-        .frame(width: 464, height: panelHeight + 80)
-
-        try renderView("panel-awaiting", content: content)
-    }
-
-    private func awaitingSessionViewModel() -> PromptJuiceViewModel {
-        let suiteName = "PanelSnapshotTests.awaiting-session.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-
-        let store = PromptJuiceSettingsStore(defaults: defaults)
-        let viewModel = PromptJuiceViewModel(
-            settingsStore: store,
-            providerClient: EstimateFixtureClient(),
-            now: { self.now },
-            isClaudeBridgeCurrent: { true }
-        )
-        viewModel.showManualCheck()
-        return viewModel
-    }
-
-    private func awaitingSessionUnavailableViewModel() -> PromptJuiceViewModel {
-        let suiteName = "PanelSnapshotTests.awaiting-session-unavailable.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-
-        let store = PromptJuiceSettingsStore(defaults: defaults)
-        let viewModel = PromptJuiceViewModel(
-            settingsStore: store,
-            providerClient: NotMeasuredFixtureClient(),
-            now: { self.now },
-            isClaudeBridgeCurrent: { true }
-        )
-        viewModel.showManualCheck()
-        return viewModel
-    }
-
-    private func tooltipText(from viewModel: PromptJuiceViewModel) -> String {
-        let claude = viewModel.snapshots.first { $0.provider == .claude }!
-        return viewModel.sourceTooltip(for: claude)
-    }
-
-    private func setupAvailableViewModel() -> PromptJuiceViewModel {
-        let suiteName = "PanelSnapshotTests.setup-available.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-
-        let store = PromptJuiceSettingsStore(defaults: defaults)
-        let viewModel = PromptJuiceViewModel(
-            settingsStore: store,
-            providerClient: NotMeasuredFixtureClient(),
-            now: { self.now },
-            isClaudeBridgeCurrent: { false }
-        )
-        viewModel.showManualCheck()
-        return viewModel
-    }
-
-    private func staleClaudeViewModel() -> PromptJuiceViewModel {
-        let suiteName = "PanelSnapshotTests.stale-claude.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-
-        let store = PromptJuiceSettingsStore(defaults: defaults)
-        let viewModel = PromptJuiceViewModel(
-            settingsStore: store,
-            providerClient: StaleClaudeFixtureClient(),
-            now: { self.now },
-            isClaudeBridgeCurrent: { true }
-        )
-        viewModel.showManualCheck()
-        return viewModel
-    }
-
-    private func guidanceViewModel(
+        private func guidanceViewModel(
         access: ClaudeAccessState,
         executable: ClaudeExecutableLocation?
     ) -> PromptJuiceViewModel {
@@ -380,36 +206,15 @@ final class PanelSnapshotTests: XCTestCase {
         return PromptJuiceViewModel(
             settingsStore: store,
             providerClient: NotMeasuredFixtureClient(),
-            claudeUsageDogfoodEnabled: true,
             claudeExecutableLocator: { executable },
             initialSnapshots: [claude, codexExact(now)],
             initialClaudeAccessState: access,
             initialClaudeRefreshState: .idle,
-            now: { self.now },
-            isClaudeBridgeCurrent: { false }
+            now: { self.now }
         )
     }
 }
 
-private struct AwaitingTooltipPreview: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.white.opacity(0.88))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(width: 330, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(NSColor.controlBackgroundColor))
-            )
-            .padding(18)
-            .background(Color(NSColor.windowBackgroundColor))
-    }
-}
 
 private func codexExact(_ now: Date, usedPercent: Double = 1) -> ProviderSnapshot {
     ProviderSnapshot(
@@ -509,17 +314,17 @@ private struct StaleClaudeFixtureClient: UsageProviderClient {
 }
 
 private struct NotMeasuredFixtureClient: UsageProviderClient {
-    let source: SnapshotSource = .claudeStatusline
+    let source: SnapshotSource = .claudeUsageCLI
 
     func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
         [
             ProviderSnapshot(
                 identity: .claude,
                 rateWindow: .unavailable,
-                source: .claudeStatusline,
+                source: .claudeUsageCLI,
                 confidence: .unavailable,
                 updatedAt: now,
-                statusDetail: "Claude statusline and local usage unavailable"
+                statusDetail: "Claude usage unavailable"
             ),
             codexExact(now)
         ]
@@ -534,7 +339,7 @@ private struct CheckingFixtureClient: UsageProviderClient {
             ProviderSnapshot(
                 identity: .claude,
                 rateWindow: .unavailable,
-                source: .claudeStatusline,
+                source: .claudeUsageCLI,
                 confidence: .unavailable,
                 updatedAt: now,
                 statusDetail: "Refreshing usage"
@@ -614,17 +419,17 @@ private struct CodexOnlyFixtureClient: UsageProviderClient {
 }
 
 private struct ClaudeOnlyNotMeasuredFixtureClient: UsageProviderClient {
-    let source: SnapshotSource = .claudeStatusline
+    let source: SnapshotSource = .claudeUsageCLI
 
     func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
         [
             ProviderSnapshot(
                 identity: .claude,
                 rateWindow: .unavailable,
-                source: .claudeStatusline,
+                source: .claudeUsageCLI,
                 confidence: .unavailable,
                 updatedAt: now,
-                statusDetail: "Claude statusline and local usage unavailable"
+                statusDetail: "Claude usage unavailable"
             ),
             ProviderSnapshot(
                 identity: .codex,

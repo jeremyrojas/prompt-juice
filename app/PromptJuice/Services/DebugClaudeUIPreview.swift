@@ -25,7 +25,6 @@ enum ClaudeUIPreviewScenario: String, CaseIterable {
     case failureNone = "failure-none"
     case providerOff = "provider-off"
     case workspaceTrust = "workspace-trust"
-    case legacyBridge = "legacy-bridge"
 
     var fixture: ClaudeUIPreviewFixture {
         let now = Date()
@@ -98,13 +97,6 @@ enum ClaudeUIPreviewScenario: String, CaseIterable {
             return fixture(.subscription(plan: "Max"), .idle, current, enabledProviders: [.codex])
         case .workspaceTrust:
             return fixture(.workspaceTrustRequired, .idle, unavailable)
-        case .legacyBridge:
-            return fixture(
-                .subscription(plan: "Max"),
-                .idle,
-                current,
-                legacyBridge: .removable
-            )
         }
     }
 
@@ -113,16 +105,14 @@ enum ClaudeUIPreviewScenario: String, CaseIterable {
         _ refresh: ClaudeRefreshState,
         _ claude: ProviderSnapshot,
         executable: ClaudeExecutableLocation? = nativeExecutable,
-        enabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases),
-        legacyBridge: LegacyBridgeStatus = .none
+        enabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases)
     ) -> ClaudeUIPreviewFixture {
         ClaudeUIPreviewFixture(
             access: access,
             refresh: refresh,
             claudeSnapshot: claude,
             executable: executable,
-            enabledProviders: enabledProviders,
-            legacyBridge: legacyBridge
+            enabledProviders: enabledProviders
         )
     }
 
@@ -178,13 +168,11 @@ struct ClaudeUIPreviewFixture {
     let claudeSnapshot: ProviderSnapshot
     let executable: ClaudeExecutableLocation?
     let enabledProviders: Set<UsageProvider>
-    let legacyBridge: LegacyBridgeStatus
 
     @MainActor
     func makeViewModel() -> PromptJuiceViewModel {
         let defaults = UserDefaults(suiteName: "PromptJuice.ClaudeUIPreview")!
         defaults.set(enabledProviders.map(\.rawValue), forKey: "enabledProviders")
-        defaults.set(false, forKey: ClaudeUsageDogfoodSwitch.defaultsKey)
         let store = PromptJuiceSettingsStore(defaults: defaults)
         let codex = ProviderSnapshot(
             identity: .codex,
@@ -200,10 +188,8 @@ struct ClaudeUIPreviewFixture {
         let state = ClaudeUsageCoordinatorState(
             access: access,
             refresh: refresh,
-            snapshot: claudeSnapshot,
-            legacyBridge: legacyBridge
+            snapshot: claudeSnapshot
         )
-        let legacyRemover = makeLegacyPreviewRemover()
         let recheckAccess: ClaudeAccessState = switch access {
         case .cliMissing:
             .signedOut(reason: .initial)
@@ -217,64 +203,15 @@ struct ClaudeUIPreviewFixture {
             liveClaudeProviderClient: ClaudeUIPreviewProviderClient(snapshot: claudeSnapshot),
             liveCodexProviderClient: ClaudeUIPreviewProviderClient(snapshot: codex),
             claudeUsageCoordinator: ClaudeUIPreviewCoordinator(state: state),
-            claudeUsageDogfoodEnabled: true,
             claudeGuidanceChecker: ClaudeUIPreviewGuidanceChecker(result: ClaudeGuidanceCheckResult(
                 access: recheckAccess,
                 location: executable
             )),
             claudeExecutableLocator: { executable },
-            claudeLegacyBridgeRemoval: legacyRemover,
             initialSnapshots: [claudeSnapshot, codex],
             initialClaudeAccessState: access,
-            initialClaudeRefreshState: refresh,
-            initialLegacyBridgeStatus: legacyBridge,
-            isClaudeBridgeCurrent: { legacyRemover.makePlan() != nil }
+            initialClaudeRefreshState: refresh
         )
-    }
-
-    private func makeLegacyPreviewRemover() -> ClaudeLegacyBridgeRemoval {
-        guard legacyBridge == .removable else {
-            return ClaudeLegacyBridgeRemoval(
-                homeDirectory: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("PromptJuiceNoLegacyPreview", isDirectory: true),
-                bundledScriptURL: nil
-            )
-        }
-
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PromptJuiceLegacyUIPreview-\(UUID().uuidString)", isDirectory: true)
-        let home = root.appendingPathComponent("home", isDirectory: true)
-        let bundled = root.appendingPathComponent("claude-statusline-bridge.sh")
-        let remover = ClaudeLegacyBridgeRemoval(
-            homeDirectory: home,
-            bundledScriptURL: bundled
-        )
-        let script = Data("#!/usr/bin/env bash\nprintf preview\n".utf8)
-        try? FileManager.default.createDirectory(
-            at: remover.installedScriptURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try? script.write(to: bundled)
-        try? script.write(to: remover.installedScriptURL)
-        try? FileManager.default.createDirectory(
-            at: remover.settingsURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let previous = "bash ~/.claude/statusline-command.sh"
-        let settings: [String: Any] = [
-            "statusLine": [
-                "type": "command",
-                "command": "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(previous)' bash '\(remover.installedScriptURL.path)'",
-                "refreshInterval": 10,
-            ],
-        ]
-        if let data = try? JSONSerialization.data(
-            withJSONObject: settings,
-            options: [.prettyPrinted, .sortedKeys]
-        ) {
-            try? data.write(to: remover.settingsURL)
-        }
-        return remover
     }
 }
 

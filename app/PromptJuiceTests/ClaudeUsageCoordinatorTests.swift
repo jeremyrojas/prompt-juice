@@ -200,10 +200,9 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertNotNil(weeklyOnly.weeklyWindow)
     }
 
-    func testSourceLadderPrefersCLIThenFreshBridgeThenCacheThenEstimate() {
+    func testSourceLadderPrefersCLIThenCacheThenEstimate() {
         let now = date(2026, 7, 21, 14, 0)
         let cli = snapshot(source: .claudeUsageCLI, confidence: .exact, updatedAt: now)
-        let bridge = snapshot(source: .claudeStatusline, confidence: .exact, usedPercent: 35, updatedAt: now)
         let cached = snapshot(source: .claudeCache, confidence: .stale, usedPercent: 45, updatedAt: now)
         let estimate = snapshot(source: .claudeLocalLogs, confidence: .estimated, usedPercent: 55, updatedAt: now)
         let cache = MemoryClaudeUsageCache(snapshot: cached)
@@ -211,7 +210,6 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             ClaudeExactSourceLadder.resolve(
                 primary: cli,
-                bridgeReader: FixedClaudeReader(.snapshot(bridge)),
                 cache: cache,
                 estimateReader: FixedClaudeReader(.snapshot(estimate)),
                 now: now
@@ -221,17 +219,6 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             ClaudeExactSourceLadder.resolve(
                 primary: nil,
-                bridgeReader: FixedClaudeReader(.snapshot(bridge)),
-                cache: cache,
-                estimateReader: FixedClaudeReader(.snapshot(estimate)),
-                now: now
-            )?.source,
-            .claudeStatusline
-        )
-        XCTAssertEqual(
-            ClaudeExactSourceLadder.resolve(
-                primary: nil,
-                bridgeReader: FixedClaudeReader(.failure),
                 cache: cache,
                 estimateReader: FixedClaudeReader(.snapshot(estimate)),
                 now: now
@@ -242,7 +229,6 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             ClaudeExactSourceLadder.resolve(
                 primary: nil,
-                bridgeReader: FixedClaudeReader(.failure),
                 cache: cache,
                 estimateReader: FixedClaudeReader(.snapshot(estimate)),
                 now: now
@@ -552,7 +538,6 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             usageProbe: probe,
             workspace: fixture.workspace,
             cache: cache,
-            bridgeReader: FixedClaudeReader(.failure),
             estimateReader: estimateReader,
             persistence: ClaudeUsagePersistence(
                 defaults: fixture.defaults,
@@ -717,7 +702,7 @@ private enum FixedClaudeRead: Sendable {
     case failure
 }
 
-private struct FixedClaudeReader: ClaudeStatuslineSnapshotReading, ClaudeLocalUsageReading {
+private struct FixedClaudeReader: ClaudeLocalUsageReading {
     let result: FixedClaudeRead
 
     init(_ result: FixedClaudeRead) {
@@ -729,7 +714,7 @@ private struct FixedClaudeReader: ClaudeStatuslineSnapshotReading, ClaudeLocalUs
         case .snapshot(let snapshot):
             snapshot
         case .failure:
-            throw ClaudeUsageError.statuslineCacheUnavailable
+            throw ClaudeUsageError.localLogActiveBlockUnavailable
         }
     }
 }
