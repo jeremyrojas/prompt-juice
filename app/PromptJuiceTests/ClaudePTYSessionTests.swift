@@ -96,6 +96,52 @@ final class ClaudePTYSessionTests: XCTestCase {
         XCTAssertTrue(input.isEmpty)
     }
 
+    func testWorkspaceTrustReadinessProbeNeverSendsUsage() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let inputURL = fixture.root.appendingPathComponent("trust-readiness-input")
+        let script = try makeScript(
+            in: fixture.root,
+            body: """
+            stty raw -echo
+            dd bs=1 count=7 of="$PROMPTJUICE_TEST_INPUT" 2>/dev/null &
+            printf 'Claude Code v2.1.214\r\nDo you trust the files in this folder?\r\n$\r\n'
+            wait
+            """
+        )
+
+        let outcome = session().checkWorkspaceTrust(
+            executableURL: script,
+            workspaceURL: fixture.workspace,
+            environment: testEnvironment(["PROMPTJUICE_TEST_INPUT": inputURL.path])
+        )
+
+        XCTAssertEqual(outcome, .trustRequired)
+        XCTAssertTrue(((try? Data(contentsOf: inputURL)) ?? Data()).isEmpty)
+    }
+
+    func testWorkspaceTrustReadinessReturnsReadyAtCommandPrompt() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let script = try makeScript(
+            in: fixture.root,
+            body: """
+            stty raw -echo
+            printf 'Claude Code ready\r\n$\r\n'
+            sleep 10
+            """
+        )
+
+        XCTAssertEqual(
+            session().checkWorkspaceTrust(
+                executableURL: script,
+                workspaceURL: fixture.workspace,
+                environment: testEnvironment()
+            ),
+            .ready
+        )
+    }
+
     func testIneligibleVersionAndAuthenticationNeverLaunch() throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
@@ -276,7 +322,7 @@ final class ClaudePTYSessionTests: XCTestCase {
 
     private func testConfiguration(maximumOutputBytes: Int = 32 * 1_024) -> ClaudePTYConfiguration {
         ClaudePTYConfiguration(
-            startupTimeout: 0.3,
+            startupTimeout: 0.8,
             commandTimeout: 0.4,
             settleInterval: 0.04,
             terminationGrace: 0.1,

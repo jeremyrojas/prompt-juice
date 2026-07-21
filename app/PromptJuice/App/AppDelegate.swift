@@ -1,9 +1,10 @@
 import AppKit
 import Combine
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let viewModel = PromptJuiceViewModel()
+    private let viewModel = PromptJuiceViewModel.makeAppViewModel()
     private let claudeBridgeInstaller = ClaudeBridgeInstaller()
     private let claudeStatusCachePoller = ClaudeStatusCachePoller()
     private let notificationService = PromptJuiceNotificationService()
@@ -28,6 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastGlyphKey: String?
     private var lastLifecycleRefreshAt: Date?
     private var cancellables = Set<AnyCancellable>()
+#if DEBUG
+    private var debugPanelWindow: NSWindow?
+    private var debugToolTipWindow: NSWindow?
+#endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let appIcon = PromptJuiceIcon.appIconImage() {
@@ -43,12 +48,99 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
 
+#if DEBUG
+        showDebugPreviewSurfaceIfRequested()
+#endif
+
         if viewModel.isFirstRun {
             DispatchQueue.main.async { [weak self] in
                 self?.settingsWindowController.showFirstRun()
             }
         }
     }
+
+#if DEBUG
+    private func showDebugPreviewSurfaceIfRequested() {
+        guard ProcessInfo.processInfo.environment["PROMPTJUICE_CLAUDE_UI_SCENARIO"] != nil else {
+            return
+        }
+        let surface = ProcessInfo.processInfo.environment["PROMPTJUICE_UI_SURFACE"] ?? "panel"
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                return
+            }
+            switch surface {
+            case "settings":
+                self.settingsWindowController.show()
+            case "guidance":
+                self.settingsWindowController.show(presentingClaudeSetup: true)
+            case "tooltip":
+                self.showDebugToolTipPreview()
+            default:
+                self.showDebugPanelPreview()
+            }
+        }
+    }
+
+    private func showDebugPanelPreview() {
+        let height = PromptJuicePanelMetrics.height(
+            rowCount: viewModel.visibleSnapshots.count,
+            showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
+        )
+        let window = NSWindow(
+            contentRect: NSRect(
+                origin: .zero,
+                size: NSSize(width: PromptJuicePanelMetrics.width, height: height)
+            ),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "PromptJuice Juicebar Preview"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(
+            rootView: PromptJuicePanelView(
+                viewModel: viewModel,
+                onClose: { [weak window] in
+                    window?.close()
+                },
+                onClaudeJourney: { [weak self, weak window] _ in
+                    window?.close()
+                    self?.settingsWindowController.show(presentingClaudeSetup: true)
+                }
+            )
+        )
+        window.center()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        debugPanelWindow = window
+    }
+
+    private func showDebugToolTipPreview() {
+        guard let snapshot = viewModel.visibleSnapshots.first(where: { $0.provider == .claude }) else {
+            return
+        }
+
+        let tooltipView = PanelToolTipView(text: viewModel.sourceTooltip(for: snapshot))
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: tooltipView.fittingSize),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "PromptJuice Tooltip Preview"
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        window.contentView = tooltipView
+        window.center()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        debugToolTipWindow = window
+    }
+#endif
 
     func applicationWillTerminate(_ notification: Notification) {
         ticker?.invalidate()
@@ -222,7 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         image?.size = NSSize(width: 18, height: 18)
         button.image = image
-        button.setAccessibilityLabel("PromptJuice: \(percent)% left")
+        button.setAccessibilityLabel(viewModel.menuBarAccessibilityLabel)
     }
 
     private func preparePanelAfterLaunch() {

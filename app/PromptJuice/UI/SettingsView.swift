@@ -21,10 +21,22 @@ struct SettingsView: View {
             }
         }
         .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
-        .sheet(isPresented: $state.isClaudeSetupPresented) {
-            ClaudeSetupConsentView(
+        .sheet(item: $state.claudeGuidanceJourney) { journey in
+            ClaudeGuidanceSheetView(
                 viewModel: viewModel,
-                isPresented: $state.isClaudeSetupPresented
+                initialJourney: journey,
+                onDone: {
+                    state.claudeGuidanceJourney = nil
+                }
+            )
+        }
+        .sheet(isPresented: $state.isLegacyBridgeRemovalPresented) {
+            ClaudeLegacyBridgeRemovalSheet(
+                viewModel: viewModel,
+                remover: viewModel.claudeLegacyBridgeRemoval,
+                onDone: {
+                    state.isLegacyBridgeRemovalPresented = false
+                }
             )
         }
     }
@@ -97,10 +109,15 @@ struct SettingsView: View {
                     viewModel: viewModel,
                     isEnabled: settingsProviderBinding(for: provider),
                     isToggleDisabled: isLastEnabledProvider(provider),
-                    onSetUpClaude: {
-                        state.isClaudeSetupPresented = true
-                    }
+                    onClaudeAction: handleClaudeAction
                 )
+            }
+
+            if viewModel.usesClaudeUsagePresentation,
+               viewModel.legacyBridgeStatus == .removable {
+                ClaudeLegacyBridgeCard {
+                    state.isLegacyBridgeRemovalPresented = true
+                }
             }
         } header: {
             Text("Providers")
@@ -115,9 +132,7 @@ struct SettingsView: View {
                     viewModel: viewModel,
                     isEnabled: firstRunProviderBinding(for: provider),
                     isToggleDisabled: isFirstRunLastEnabledProvider(provider),
-                    onSetUpClaude: {
-                        state.isClaudeSetupPresented = true
-                    }
+                    onClaudeAction: handleClaudeAction
                 )
             }
         }
@@ -193,6 +208,144 @@ struct SettingsView: View {
         state.firstRunEnabledProviders.count == 1
             && state.firstRunEnabledProviders.contains(provider)
     }
+
+    private func handleClaudeAction(_ action: ClaudeSettingsAction) {
+        switch action {
+        case .journey(let journey):
+            state.claudeGuidanceJourney = journey
+        case .retry:
+            viewModel.refreshUsage()
+        }
+    }
+}
+
+private struct ClaudeLegacyBridgeCard: View {
+    let onRemove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Legacy bridge detected")
+                .font(.callout.weight(.semibold))
+
+            Text("PromptJuice's old status-line bridge is still in ~/.claude/settings.json. It's no longer needed.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Remove…", action: onRemove)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+private struct ClaudeLegacyBridgeRemovalSheet: View {
+    @ObservedObject var viewModel: PromptJuiceViewModel
+    let remover: ClaudeLegacyBridgeRemoval
+    let onDone: () -> Void
+
+    @State private var plan: ClaudeLegacyBridgeRemoval.Plan?
+    @State private var errorMessage: String?
+    @State private var isRemoving = false
+    @State private var didRemove = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if didRemove {
+                Label("Bridge removed", systemImage: "checkmark.circle.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.green)
+
+                Text("Your Claude settings are back to normal. Usage now comes from Claude Code's /usage.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Spacer()
+                    Button("Done", action: onDone)
+                        .keyboardShortcut(.defaultAction)
+                }
+            } else {
+                Text("Remove the legacy bridge")
+                    .font(.title3.weight(.semibold))
+
+                Text("PromptJuice no longer needs this. Your previous status line comes back exactly as it was.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let plan {
+                    Text("PromptJuice restores statusLine.command in ~/.claude/settings.json to:")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
+                    Text(plan.restoredCommand ?? "No status line")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.green)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.secondary.opacity(0.10))
+                        )
+
+                    Text("▪︎ Your command, restored   ▫︎ PromptJuice bridge, removed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if errorMessage == nil {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Cancel", action: onDone)
+                    Button("Remove Bridge", action: applyRemoval)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(plan == nil || isRemoving)
+                }
+            }
+        }
+        .padding(22)
+        .frame(width: 430)
+        .onAppear(perform: loadPlan)
+    }
+
+    private func loadPlan() {
+        guard plan == nil, errorMessage == nil else {
+            return
+        }
+        guard let removalPlan = remover.makePlan() else {
+            errorMessage = "PromptJuice couldn't verify ownership of this bridge, so it left your Claude settings untouched."
+            return
+        }
+        plan = removalPlan
+    }
+
+    private func applyRemoval() {
+        guard let plan else {
+            return
+        }
+        isRemoving = true
+        do {
+            try remover.apply(plan)
+            viewModel.refreshClaudeBridgeState()
+            didRemove = true
+        } catch {
+            errorMessage = error.localizedDescription
+            isRemoving = false
+        }
+    }
 }
 
 private struct ProviderSettingsRow: View {
@@ -200,172 +353,102 @@ private struct ProviderSettingsRow: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
     let isEnabled: Binding<Bool>
     let isToggleDisabled: Bool
-    let onSetUpClaude: () -> Void
+    let onClaudeAction: (ClaudeSettingsAction) -> Void
     var usesPreviewToggle = false
     @State private var isClaudeInfoPresented = false
-    @State private var isClaudeInfoHovering = false
-    @State private var closeClaudeInfoTask: Task<Void, Never>?
-
-    private var claudeInfoPresentation: Binding<Bool> {
-        Binding {
-            isClaudeInfoPresented
-        } set: { isPresented in
-            if !isPresented {
-                closeClaudeInfoTask?.cancel()
-                closeClaudeInfoTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 50_000_000)
-                    if !isClaudeInfoHovering {
-                        isClaudeInfoPresented = false
-                    }
-                }
-                return
-            }
-
-            isClaudeInfoPresented = isPresented
-        }
-    }
 
     var body: some View {
         let isProviderEnabled = isEnabled.wrappedValue
 
-        HStack(spacing: 10) {
-            Circle()
-                .fill(provider == .claude ? Color.orange : Color.cyan)
-                .frame(width: 9, height: 9)
-                .opacity(isProviderEnabled ? 1 : 0.35)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(provider == .claude ? Color.orange : Color.cyan)
+                    .frame(width: 9, height: 9)
+                    .opacity(isProviderEnabled ? 1 : 0.35)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(provider.rawValue)
-                    .font(.body)
-                    .foregroundStyle(isProviderEnabled ? .primary : .tertiary)
-                HStack(spacing: 4) {
-                    Text(isProviderEnabled ? viewModel.settingsStatusText(for: provider) : "Off")
-                        .font(.caption)
-                        .foregroundStyle(isProviderEnabled ? .secondary : .tertiary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(provider.rawValue)
+                        .font(.body)
+                        .foregroundStyle(isProviderEnabled ? .primary : .tertiary)
+                    HStack(spacing: 4) {
+                        Text(isProviderEnabled ? viewModel.settingsStatusText(for: provider) : "Off")
+                            .font(.caption)
+                            .foregroundStyle(isProviderEnabled ? .secondary : .tertiary)
 
-                    if isProviderEnabled,
-                       provider == .claude,
-                       viewModel.shouldShowClaudeMeasurementInfo {
-                        ZStack {
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            HoverTrackingView { isHovering in
-                                handleClaudeInfoHover(isHovering)
+                        if isProviderEnabled,
+                           provider == .claude,
+                           viewModel.shouldShowClaudeMeasurementInfo {
+                            Button {
+                                isClaudeInfoPresented = true
+                            } label: {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 18, height: 18)
                             }
-                        }
-                            .frame(width: 18, height: 18)
-                            .accessibilityElement(children: .ignore)
+                            .buttonStyle(.plain)
                             .accessibilityLabel("How this number is measured")
-                            .popover(isPresented: claudeInfoPresentation, arrowEdge: .trailing) {
+                            .popover(isPresented: $isClaudeInfoPresented, arrowEdge: .trailing) {
                                 ClaudeMeasurementPopover(
                                     viewModel: viewModel,
-                                    onSetUpClaude: {
+                                    onClaudeAction: { action in
                                         isClaudeInfoPresented = false
-                                        onSetUpClaude()
+                                        onClaudeAction(action)
                                     }
                                 )
-                                .onHover { isHovering in
-                                    handleClaudeInfoHover(isHovering)
-                                }
-                                .interactiveDismissDisabled(true)
                             }
+                        }
                     }
                 }
-            }
-            .opacity(isProviderEnabled ? 1 : 0.55)
+                .opacity(isProviderEnabled ? 1 : 0.55)
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 12)
+
+                if isProviderEnabled,
+                   provider == .claude,
+                   let action = viewModel.claudePresentation.settingsAction,
+                   viewModel.usesClaudeUsagePresentation {
+                    Button(action.title) {
+                        onClaudeAction(action)
+                    }
+                    .controlSize(.small)
+                } else if isProviderEnabled,
+                          provider == .claude,
+                          let title = viewModel.claudeSetupButtonTitle {
+                    Button(title) {
+                        onClaudeAction(.journey(.install))
+                    }
+                    .controlSize(.small)
+                }
+
+                if usesPreviewToggle {
+                    PreviewSwitch(isOn: isProviderEnabled)
+                } else {
+                    Toggle("", isOn: isEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .disabled(isToggleDisabled)
+                }
+            }
 
             if isProviderEnabled,
                provider == .claude,
-               let title = viewModel.claudeSetupButtonTitle {
-                Button(title, action: onSetUpClaude)
-                    .controlSize(.small)
-            }
-
-            if usesPreviewToggle {
-                PreviewSwitch(isOn: isProviderEnabled)
-            } else {
-                Toggle("", isOn: isEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .disabled(isToggleDisabled)
+               viewModel.usesClaudeUsagePresentation,
+               let footnote = viewModel.claudePresentation.estimateFootnote {
+                Text(footnote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 19)
             }
         }
         .padding(.vertical, 2)
-        .onDisappear {
-            closeClaudeInfoTask?.cancel()
-        }
         .onChange(of: isProviderEnabled) { _, isEnabled in
             if !isEnabled {
-                closeClaudeInfoTask?.cancel()
                 isClaudeInfoPresented = false
             }
         }
-    }
-
-    private func handleClaudeInfoHover(_ isHovering: Bool) {
-        isClaudeInfoHovering = isHovering
-        closeClaudeInfoTask?.cancel()
-
-        if isHovering {
-            isClaudeInfoPresented = true
-            return
-        }
-
-        closeClaudeInfoTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            isClaudeInfoPresented = false
-        }
-    }
-}
-
-private struct HoverTrackingView: NSViewRepresentable {
-    let onHoverChanged: (Bool) -> Void
-
-    func makeNSView(context: Context) -> TrackingView {
-        let view = TrackingView()
-        view.onHoverChanged = onHoverChanged
-        return view
-    }
-
-    func updateNSView(_ nsView: TrackingView, context: Context) {
-        nsView.onHoverChanged = onHoverChanged
-    }
-
-    final class TrackingView: NSView {
-        var onHoverChanged: ((Bool) -> Void)?
-
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-
-            trackingAreas.forEach(removeTrackingArea)
-            addTrackingArea(
-                NSTrackingArea(
-                    rect: bounds,
-                    options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                    owner: self,
-                    userInfo: nil
-                )
-            )
-        }
-
-        override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-            true
-        }
-
-        override func mouseEntered(with event: NSEvent) {
-            onHoverChanged?(true)
-        }
-
-        override func mouseExited(with event: NSEvent) {
-            onHoverChanged?(false)
-        }
-
-        override func mouseDown(with event: NSEvent) {}
-
-        override func mouseUp(with event: NSEvent) {}
     }
 }
 
@@ -386,7 +469,7 @@ private struct PreviewSwitch: View {
 
 private struct ClaudeMeasurementPopover: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
-    let onSetUpClaude: () -> Void
+    let onClaudeAction: (ClaudeSettingsAction) -> Void
 
     private static let learnMoreURL = URL(
         string: "https://github.com/jeremyrojas/prompt-juice#how-promptjuice-reads-usage"
@@ -397,7 +480,11 @@ private struct ClaudeMeasurementPopover: View {
             Text("How this number is measured")
                 .font(.headline)
 
-            Text("PromptJuice reads Claude's exact usage from Claude Code's status line, which runs only in the terminal — not the desktop app yet. Otherwise it estimates from your local activity.")
+            Text("PromptJuice reads your Claude plan usage with Claude Code's built-in /usage command. These are the same numbers Claude shows you. Claude Desktop, Claude.ai, and Claude Code share one plan allowance, so this covers all of them.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("PromptJuice asks Claude Code for your plan usage about every 15 minutes and sends no model prompt. When an estimate is needed, it scans local Claude Code activity records and extracts usage totals and timestamps. It does not store, display, or transmit conversation text.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -412,8 +499,11 @@ private struct ClaudeMeasurementPopover: View {
 
                 Spacer()
 
-                if let title = viewModel.claudeSetupButtonTitle {
-                    Button(title, action: onSetUpClaude)
+                if viewModel.usesClaudeUsagePresentation,
+                   let action = viewModel.claudePresentation.popoverAction {
+                    Button("Sign In") {
+                        onClaudeAction(action)
+                    }
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -900,7 +990,7 @@ struct ClaudeMeasurementPopoverPreviewShell: View {
     }
 
     var body: some View {
-        ClaudeMeasurementPopover(viewModel: viewModel, onSetUpClaude: {})
+        ClaudeMeasurementPopover(viewModel: viewModel, onClaudeAction: { _ in })
             .background(Color(NSColor.windowBackgroundColor))
     }
 }
@@ -920,7 +1010,7 @@ struct SettingsProviderRowPreviewShell: View {
             viewModel: viewModel,
             isEnabled: $isEnabled,
             isToggleDisabled: false,
-            onSetUpClaude: {},
+            onClaudeAction: { _ in },
             usesPreviewToggle: true
         )
         .padding(12)
@@ -975,33 +1065,4 @@ private enum ClaudeSetupPreviewPlans {
     }
 }
 
-#Preview("Claude setup — wrapping") {
-    ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.wrapping()
-    )
-}
-
-#Preview("Claude setup — no status line") {
-    ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.additive()
-    )
-}
-
-#Preview("Claude setup — wrapping expanded") {
-    ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.wrapping(),
-        showsCommand: true
-    )
-}
-
-#Preview("Claude setup — no status line expanded") {
-    ClaudeSetupPlanPreviewShell(
-        plan: ClaudeSetupPreviewPlans.additive(),
-        showsCommand: true
-    )
-}
-
-#Preview("Claude setup — success") {
-    ClaudeSetupSuccessPreviewShell()
-}
 #endif

@@ -10,6 +10,8 @@ enum SettingsWindowMode {
 final class SettingsWindowState: ObservableObject {
     @Published var mode: SettingsWindowMode = .settings
     @Published var isClaudeSetupPresented = false
+    @Published var claudeGuidanceJourney: ClaudeGuidanceJourney?
+    @Published var isLegacyBridgeRemovalPresented = false
     @Published var firstRunEnabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases)
 }
 
@@ -52,9 +54,9 @@ final class SettingsWindowController: NSWindowController {
         window.makeKeyAndOrderFront(nil)
 
         if presentingClaudeSetup {
-            state.isClaudeSetupPresented = false
+            state.claudeGuidanceJourney = nil
             DispatchQueue.main.async { [weak self] in
-                self?.state.isClaudeSetupPresented = true
+                self?.state.claudeGuidanceJourney = self?.viewModel.claudePresentation.guidanceJourney
             }
         }
     }
@@ -106,15 +108,24 @@ final class SettingsWindowController: NSWindowController {
         window.setAccessibilityElement(true)
         window.setAccessibilityRole(.window)
         window.setAccessibilityLabel("PromptJuice Settings")
-        window.contentView = NSHostingView(
-            rootView: SettingsView(
-                viewModel: viewModel,
-                state: state,
-                onFirstRunContinue: { [weak self] in
-                    self?.finishFirstRun()
-                }
-            )
+        let settingsView = SettingsView(
+            viewModel: viewModel,
+            state: state,
+            onFirstRunContinue: { [weak self] in
+                self?.finishFirstRun()
+            }
         )
+#if DEBUG
+        let rootView: AnyView
+        if ProcessInfo.processInfo.environment["PROMPTJUICE_UI_TEXT_SIZE"] == "enlarged" {
+            rootView = AnyView(settingsView.environment(\.dynamicTypeSize, .xxxLarge))
+        } else {
+            rootView = AnyView(settingsView)
+        }
+#else
+        let rootView = AnyView(settingsView)
+#endif
+        window.contentView = NSHostingView(rootView: rootView)
         self.window = window
         return window
     }

@@ -4,294 +4,437 @@ import XCTest
 @MainActor
 final class ClaudePresentationMatrixTests: XCTestCase {
     private let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
-    private let staleUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000 - 10 * 60)
 
-    func testClaudePresentationMatrix() {
-        let staleTime = clockTime(staleUpdatedAt)
+    func testTwentyTwoScenarioPresentationCatalog() {
+        let formatter = ClaudeFreshnessFormatter()
+        let savedAt = fixedNow.addingTimeInterval(-2 * 60 * 60)
+        let savedTime = formatter.clockTime(savedAt)
+        let nextAttemptAt = fixedNow.addingTimeInterval(45 * 60)
+        let nextTime = formatter.clockTime(nextAttemptAt)
+        let estimate = snapshot(confidence: .estimated)
+        let cached = snapshot(source: .claudeCache, confidence: .stale, updatedAt: savedAt)
+        let unavailable = unavailableSnapshot()
         let cases: [Case] = [
             Case(
-                name: "exact statusline",
-                claudeSnapshot: claudeSnapshot(
-                    source: .claudeStatusline,
-                    confidence: .exact
-                ),
-                bridgeCurrent: false,
-                liveUpgrade: .live,
-                settingsStatus: "Live",
-                setupButtonTitle: nil,
-                tooltip: "Read from Claude Code",
-                popover: "Right now it's exact, current as of your last terminal session.",
-                displayPercent: "42%",
-                headerDetailIncludes: ["Claude resets in 2h 30m"],
-                headerDetailExcludes: ["Claude 42%", "Codex 80%", "Claude ~42%"],
-                claudeSeverity: .healthy,
-                aggregateSeverity: .healthy,
-                headerRemainingPercent: 42,
-                setupWouldOpen: false
+                name: "checking without reading",
+                access: .subscription(plan: "Max"),
+                refresh: .refreshing,
+                snapshot: unavailable,
+                expectedState: .checking,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "Checking…",
+                tooltip: "Checking usage with Claude Code",
+                settingsSubtitle: "Checking…",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Checking usage with Claude Code now.",
+                neutral: false
             ),
             Case(
-                name: "estimate with bridge missing",
-                claudeSnapshot: claudeSnapshot(
-                    source: .claudeLocalLogs,
-                    confidence: .estimated
-                ),
-                bridgeCurrent: false,
-                liveUpgrade: .setupAvailable,
-                settingsStatus: "Estimate",
-                setupButtonTitle: "Set up live readings",
-                tooltip: "Estimated from local Claude Code activity · open Settings to set up live",
-                popover: "Right now it's estimating. Set up live readings, then use Claude Code in the terminal for exact numbers.",
-                displayPercent: "~42%",
-                headerDetailIncludes: ["Claude resets in 2h 30m"],
-                headerDetailExcludes: ["Claude ~42%", "Codex 80%", "Claude 42%"],
-                claudeSeverity: .healthy,
-                aggregateSeverity: .healthy,
-                headerRemainingPercent: 42,
-                setupWouldOpen: true
+                name: "checking with cached reading",
+                access: .subscription(plan: "Max"),
+                refresh: .refreshing,
+                snapshot: cached,
+                expectedState: .checking,
+                showsReading: true,
+                showsClock: false,
+                rowStatus: nil,
+                tooltip: "Checking usage with Claude Code",
+                settingsSubtitle: "Checking…",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Checking usage with Claude Code now.",
+                neutral: false
             ),
             Case(
-                name: "estimate with bridge current",
-                claudeSnapshot: claudeSnapshot(
-                    source: .claudeLocalLogs,
-                    confidence: .estimated
-                ),
-                bridgeCurrent: true,
-                liveUpgrade: .awaitingSession,
-                settingsStatus: "Estimate",
-                setupButtonTitle: nil,
-                tooltip: "Estimated from local Claude Code activity",
-                popover: "Showing a local Claude Code estimate. Exact usage replaces it when Claude Code sends a current rate-limit window.",
-                displayPercent: "~42%",
-                headerDetailIncludes: ["Claude resets in 2h 30m"],
-                headerDetailExcludes: ["Claude ~42%", "Codex 80%", "Claude 42%"],
-                claudeSeverity: .healthy,
-                aggregateSeverity: .healthy,
-                headerRemainingPercent: 42,
-                setupWouldOpen: false
+                name: "connected current",
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: snapshot(),
+                expectedState: .current,
+                showsReading: true,
+                showsClock: false,
+                rowStatus: nil,
+                tooltip: "From Claude Code · updated just now",
+                settingsSubtitle: "Updated just now",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Right now it's current, read a moment ago.",
+                neutral: false
             ),
             Case(
-                name: "stale last exact reading",
-                claudeSnapshot: claudeSnapshot(
-                    source: .claudeCache,
-                    confidence: .stale,
-                    updatedAt: staleUpdatedAt
-                ),
-                bridgeCurrent: false,
-                liveUpgrade: .setupAvailable,
-                settingsStatus: "Read earlier · \(staleTime)",
-                setupButtonTitle: "Set up live readings",
-                tooltip: "Read from Claude Code as of \(staleTime) · send any message in Claude Code to refresh",
-                popover: "Right now it's showing your last exact reading from \(staleTime). Claude Code will replace it when the statusline sends a current window.",
-                displayPercent: "42%",
-                headerDetailIncludes: ["Claude resets in 2h 30m"],
-                headerDetailExcludes: ["Claude 42%", "Codex 80%", "Claude ~42%"],
-                claudeSeverity: .healthy,
-                aggregateSeverity: .healthy,
-                headerRemainingPercent: 42,
-                setupWouldOpen: true
+                name: "connected saved",
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: cached,
+                expectedState: .saved,
+                showsReading: true,
+                showsClock: true,
+                rowStatus: nil,
+                tooltip: "From Claude Code · updated at \(savedTime)",
+                settingsSubtitle: "Updated at \(savedTime)",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Showing your last reading from \(savedTime). PromptJuice refreshes it automatically.",
+                neutral: false
             ),
             Case(
-                name: "unavailable with bridge missing",
-                claudeSnapshot: unavailableClaudeSnapshot(),
-                bridgeCurrent: false,
-                liveUpgrade: .setupAvailable,
-                settingsStatus: "Not set up yet",
-                setupButtonTitle: "Set Up…",
-                tooltip: "Not measured yet",
-                popover: "It's not set up yet. Set it up, then use Claude Code in the terminal for exact numbers.",
-                displayPercent: "n/a",
-                headerDetailIncludes: ["Codex resets in 3h 0m"],
-                headerDetailExcludes: ["Claude not set up", "Codex 80%", "Claude ~", "Claude 0%"],
-                claudeSeverity: .unavailable,
-                aggregateSeverity: .healthy,
-                headerRemainingPercent: 80,
-                setupWouldOpen: true
+                name: "out of quota",
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: snapshot(usedPercent: 100, updatedAt: savedAt),
+                expectedState: .outOfQuota,
+                showsReading: true,
+                showsClock: true,
+                rowStatus: nil,
+                tooltip: "Claude is out until reset · updated at \(savedTime)",
+                settingsSubtitle: "Updated at \(savedTime)",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Showing your last reading from \(savedTime). PromptJuice refreshes it automatically.",
+                neutral: false
             ),
             Case(
-                name: "unavailable with bridge current",
-                claudeSnapshot: unavailableClaudeSnapshot(),
-                bridgeCurrent: true,
-                liveUpgrade: .awaitingSession,
-                settingsStatus: "Waiting for Claude statusline",
-                setupButtonTitle: nil,
-                tooltip: "You're set up · waiting for Claude Code usage",
-                popover: "You're set up. PromptJuice is waiting for Claude Code's next statusline window.",
-                displayPercent: "n/a",
-                headerDetailIncludes: ["Codex resets in 3h 0m"],
-                headerDetailExcludes: ["Claude waiting for terminal", "Codex 80%", "Claude not set up", "Claude ~", "Claude 0%"],
-                claudeSeverity: .unavailable,
-                aggregateSeverity: .healthy,
-                headerRemainingPercent: 80,
-                setupWouldOpen: false
-            )
+                name: "backing off with cached reading",
+                access: .subscription(plan: "Max"),
+                refresh: .backingOff(nextAttemptAt: nextAttemptAt),
+                snapshot: cached,
+                expectedState: .backingOff,
+                showsReading: true,
+                showsClock: true,
+                rowStatus: nil,
+                tooltip: "From Claude Code · updated at \(savedTime) · next check at \(nextTime)",
+                settingsSubtitle: "Updated at \(savedTime) · next check at \(nextTime)",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "The last usage check was rate limited. PromptJuice tries again at \(nextTime). Showing your \(savedTime) reading in the meantime.",
+                neutral: false
+            ),
+            Case(
+                name: "backing off without reading",
+                access: .subscription(plan: "Max"),
+                refresh: .backingOff(nextAttemptAt: nextAttemptAt),
+                snapshot: unavailable,
+                expectedState: .backingOff,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "Next check \(nextTime)",
+                tooltip: "Usage check paused · next check at \(nextTime)",
+                settingsSubtitle: "Next check at \(nextTime)",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "The last usage check was rate limited. PromptJuice tries again at \(nextTime).",
+                neutral: false
+            ),
+            Case(
+                name: "CLI missing with estimate",
+                access: .cliMissing,
+                refresh: .idle,
+                snapshot: estimate,
+                expectedState: .cliMissing,
+                showsReading: true,
+                showsClock: false,
+                rowStatus: nil,
+                tooltip: "Estimated from Claude Code's activity logs on this Mac",
+                settingsSubtitle: "Claude Code not installed · showing local estimate",
+                settingsAction: .journey(.install),
+                footnote: "This is an estimate from Claude Code's activity logs on this Mac. Install Claude Code and sign in, and PromptJuice switches to direct readings automatically.",
+                popover: "Claude Code isn't installed yet. Install it and sign in once. Claude Desktop, Claude.ai, and Claude Code share the same plan usage.",
+                neutral: false
+            ),
+            Case(
+                name: "CLI missing without reading",
+                access: .cliMissing,
+                refresh: .idle,
+                snapshot: unavailable,
+                expectedState: .cliMissing,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "Claude Code needed",
+                tooltip: "Install Claude Code to read your plan usage",
+                settingsSubtitle: "Claude Code not installed",
+                settingsAction: .journey(.install),
+                footnote: nil,
+                popover: "Claude Code isn't installed yet. Install it and sign in once. Claude Desktop, Claude.ai, and Claude Code share the same plan usage.",
+                neutral: false
+            ),
+            signedOutCase(reason: .initial, estimate: true),
+            signedOutCase(reason: .initial, estimate: false),
+            signedOutCase(reason: .reauthenticationRequired, estimate: true),
+            signedOutCase(reason: .reauthenticationRequired, estimate: false),
+            Case(
+                name: "update required with reading",
+                access: updateRequiredAccess,
+                refresh: .idle,
+                snapshot: estimate,
+                expectedState: .updateRequired,
+                showsReading: true,
+                showsClock: false,
+                rowStatus: nil,
+                tooltip: "Estimated from Claude Code's activity logs on this Mac",
+                settingsSubtitle: "Update Claude Code to track plan usage · showing local estimate",
+                settingsAction: .journey(.update),
+                footnote: "This is an estimate from Claude Code's activity logs on this Mac. Update Claude Code and PromptJuice switches to direct readings automatically.",
+                popover: "PromptJuice needs Claude Code 2.1.208 or newer to read plan usage.",
+                neutral: false
+            ),
+            Case(
+                name: "update required without reading",
+                access: updateRequiredAccess,
+                refresh: .idle,
+                snapshot: unavailable,
+                expectedState: .updateRequired,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "Update needed",
+                tooltip: "Update Claude Code to read your plan usage",
+                settingsSubtitle: "Update Claude Code to track plan usage",
+                settingsAction: .journey(.update),
+                footnote: nil,
+                popover: "PromptJuice needs Claude Code 2.1.208 or newer to read plan usage.",
+                neutral: false
+            ),
+            Case(
+                name: "API billing",
+                access: .apiBilling,
+                refresh: .idle,
+                snapshot: unavailable,
+                expectedState: .apiBilling,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "API billing",
+                tooltip: "Claude Code is using API billing · plan quota unavailable",
+                settingsSubtitle: "API billing · Claude Console tracks spend",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Claude Code is using first-party API billing, which Claude Console tracks as spend. Plan quota doesn't apply, so there's no juice bar to fill.",
+                neutral: true,
+                popoverAction: .journey(.signIn)
+            ),
+            Case(
+                name: "external provider",
+                access: .externalProvider(.bedrock),
+                refresh: .idle,
+                snapshot: unavailable,
+                expectedState: .externalProvider(.bedrock),
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "External provider",
+                tooltip: "Claude Code uses Amazon Bedrock · plan quota unavailable",
+                settingsSubtitle: "Amazon Bedrock · plan quota unavailable",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Claude Code is set up to use Amazon Bedrock, which bills through your cloud account. Plan quota doesn't apply, so there's no juice bar to fill.",
+                neutral: true
+            ),
+            Case(
+                name: "unknown authentication",
+                access: .unsupportedAuth,
+                refresh: .idle,
+                snapshot: unavailable,
+                expectedState: .unsupportedAuth,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "Usage unavailable",
+                tooltip: "This Claude Code setup isn't supported yet",
+                settingsSubtitle: "Account type not recognized · usage not tracked",
+                settingsAction: nil,
+                footnote: nil,
+                popover: "Claude Code is signed in with an account type PromptJuice doesn't recognize yet, so usage tracking is off for it. A future update may add support.",
+                neutral: true
+            ),
+            Case(
+                name: "failure with cached reading",
+                access: .subscription(plan: "Max"),
+                refresh: .failed(.timeout),
+                snapshot: cached,
+                expectedState: .failure,
+                showsReading: true,
+                showsClock: true,
+                rowStatus: nil,
+                tooltip: "From Claude Code · updated at \(savedTime) · having trouble updating",
+                settingsSubtitle: "Having trouble updating · showing \(savedTime) reading",
+                settingsAction: .retry,
+                footnote: nil,
+                popover: "PromptJuice couldn't get a new reading from Claude Code. It's showing your \(savedTime) reading and will keep trying.",
+                neutral: false
+            ),
+            Case(
+                name: "failure with estimate",
+                access: .subscription(plan: "Max"),
+                refresh: .failed(.parse),
+                snapshot: estimate,
+                expectedState: .failure,
+                showsReading: true,
+                showsClock: false,
+                rowStatus: nil,
+                tooltip: "Couldn't check usage with Claude Code · trying again automatically",
+                settingsSubtitle: "Estimate · having trouble reading Claude Code",
+                settingsAction: .retry,
+                footnote: "This is an estimate from Claude Code's activity logs on this Mac. PromptJuice checks about every 15 minutes and switches back automatically.",
+                popover: "PromptJuice couldn't get a new reading from Claude Code. It's showing a local estimate and will keep trying automatically.",
+                neutral: false
+            ),
+            Case(
+                name: "failure without reading",
+                access: .authCheckFailed,
+                refresh: .failed(.process),
+                snapshot: unavailable,
+                expectedState: .failure,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: "Having trouble checking",
+                tooltip: "Couldn't check usage with Claude Code · trying again automatically",
+                settingsSubtitle: "Having trouble checking usage",
+                settingsAction: .retry,
+                footnote: nil,
+                popover: "PromptJuice couldn't check usage with Claude Code. It will keep trying automatically.",
+                neutral: false
+            ),
+            Case(
+                name: "provider off",
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: snapshot(),
+                isEnabled: false,
+                expectedState: .off,
+                showsReading: false,
+                showsClock: false,
+                rowStatus: nil,
+                tooltip: nil,
+                settingsSubtitle: "Off",
+                settingsAction: nil,
+                footnote: nil,
+                popover: nil,
+                neutral: false
+            ),
         ]
 
+        XCTAssertEqual(cases.count, 22)
         for testCase in cases {
-            let viewModel = makeViewModel(
-                claudeSnapshot: testCase.claudeSnapshot,
-                bridgeCurrent: testCase.bridgeCurrent
+            let presentation = ClaudeUsagePresentation.resolve(
+                access: testCase.access,
+                refresh: testCase.refresh,
+                snapshot: testCase.snapshot,
+                isEnabled: testCase.isEnabled,
+                now: fixedNow
             )
-            viewModel.showManualCheck()
-            let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
-            XCTAssertEqual(viewModel.claudeLiveUpgrade, testCase.liveUpgrade, testCase.name)
-            XCTAssertEqual(viewModel.settingsStatusText(for: .claude), testCase.settingsStatus, testCase.name)
-            XCTAssertEqual(viewModel.claudeSetupButtonTitle, testCase.setupButtonTitle, testCase.name)
-            XCTAssertEqual(viewModel.sourceTooltip(for: claude), testCase.tooltip, testCase.name)
-            XCTAssertEqual(viewModel.claudeMeasurementPopoverDetail, testCase.popover, testCase.name)
-            XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), testCase.displayPercent, testCase.name)
-            XCTAssertEqual(viewModel.severity(for: claude), testCase.claudeSeverity, testCase.name)
-            XCTAssertEqual(viewModel.aggregateSeverity, testCase.aggregateSeverity, testCase.name)
-            XCTAssertEqual(viewModel.headerSeverity, testCase.aggregateSeverity, testCase.name)
-            XCTAssertEqual(viewModel.menuBarSeverity, testCase.aggregateSeverity, testCase.name)
-            XCTAssertEqual(viewModel.headerRemainingPercent, testCase.headerRemainingPercent, accuracy: 0.001, testCase.name)
-            XCTAssertEqual(viewModel.menuBarRemainingPercent, testCase.headerRemainingPercent, accuracy: 0.001, testCase.name)
-            XCTAssertEqual(viewModel.claudeLiveUpgrade == .setupAvailable, testCase.setupWouldOpen, testCase.name)
-
-            for expected in testCase.headerDetailIncludes {
-                XCTAssertTrue(
-                    viewModel.detail.contains(expected),
-                    "\(testCase.name) should include \(expected) in \(viewModel.detail)"
-                )
-            }
-
-            for unexpected in testCase.headerDetailExcludes {
-                XCTAssertFalse(
-                    viewModel.detail.contains(unexpected),
-                    "\(testCase.name) should exclude \(unexpected) from \(viewModel.detail)"
-                )
-            }
+            XCTAssertEqual(presentation.state, testCase.expectedState, testCase.name)
+            XCTAssertEqual(presentation.showsReading, testCase.showsReading, testCase.name)
+            XCTAssertEqual(presentation.showsClock, testCase.showsClock, testCase.name)
+            XCTAssertEqual(presentation.rowStatus, testCase.rowStatus, testCase.name)
+            XCTAssertEqual(presentation.tooltip, testCase.tooltip, testCase.name)
+            XCTAssertEqual(presentation.settingsSubtitle, testCase.settingsSubtitle, testCase.name)
+            XCTAssertEqual(presentation.settingsAction, testCase.settingsAction, testCase.name)
+            XCTAssertEqual(presentation.estimateFootnote, testCase.footnote, testCase.name)
+            XCTAssertEqual(presentation.popoverStatus, testCase.popover, testCase.name)
+            XCTAssertEqual(presentation.popoverAction, testCase.popoverAction, testCase.name)
+            XCTAssertEqual(presentation.isNeutral, testCase.neutral, testCase.name)
         }
     }
 
-    func testUseSoonSeverityDrivesHeaderColorAndFill() {
-        let viewModel = makeViewModel(
-            claudeSnapshot: claudeSnapshot(
-                source: .claudeStatusline,
-                confidence: .exact,
-                usedPercent: 57,
-                resetMinutes: 42
-            ),
-            codexSnapshot: codexSnapshot(usedPercent: 31, resetMinutes: 52),
-            bridgeCurrent: false
-        )
+    func testFreshnessFormatterUsesFiveRequiredTiers() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: -4 * 60 * 60)!
+        calendar.locale = Locale(identifier: "en_US")
+        let formatter = ClaudeFreshnessFormatter(calendar: calendar)
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 21,
+            hour: 16
+        ))!
 
-        viewModel.showManualCheck()
-
-        XCTAssertEqual(viewModel.aggregateSeverity, .useSoon)
-        XCTAssertEqual(viewModel.headerSeverity, .useSoon)
-        XCTAssertEqual(viewModel.menuBarSeverity, .useSoon)
-        XCTAssertEqual(viewModel.headerRemainingPercent, 69, accuracy: 0.001)
-        XCTAssertEqual(viewModel.menuBarRemainingPercent, 69, accuracy: 0.001)
-        XCTAssertEqual(viewModel.headline, "Use prompt juice soon")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 42m")
+        XCTAssertEqual(formatter.title(for: now.addingTimeInterval(-20), now: now), "Updated just now")
+        XCTAssertEqual(formatter.title(for: now.addingTimeInterval(-12 * 60), now: now), "Updated 12 min ago")
+        XCTAssertEqual(formatter.title(for: now.addingTimeInterval(-2 * 60 * 60), now: now), "Updated at 2:00 PM")
+        XCTAssertEqual(formatter.title(for: now.addingTimeInterval(-24 * 60 * 60), now: now), "Updated yesterday at 4:00 PM")
+        XCTAssertEqual(formatter.title(for: now.addingTimeInterval(-3 * 24 * 60 * 60), now: now), "Updated Jul 18 at 4:00 PM")
+        XCTAssertEqual(formatter.clause(for: now.addingTimeInterval(-12 * 60), now: now), "updated 12 min ago")
     }
 
-    func testClaudeCannotFabricateFreshSessionWithWeeklyCarryForwardPresentation() {
-        let weeklyUpdatedAt = fixedNow.addingTimeInterval(-9 * 60 * 60)
-        let weeklyResetAt = fixedNow.addingTimeInterval(4 * 24 * 60 * 60)
-        let viewModel = makeViewModel(
-            claudeSnapshot: ProviderSnapshot(
-                identity: .claude,
-                rateWindow: .unavailable,
-                weeklyWindow: .available(
-                    usedPercent: 30,
-                    resetAt: weeklyResetAt,
-                    durationMinutes: 10_080
-                ),
-                source: .claudeStatusline,
-                confidence: .stale,
-                updatedAt: weeklyUpdatedAt,
-                weeklyUpdatedAt: weeklyUpdatedAt,
-                statusDetail: "Fresh window",
-                isFreshSessionWindow: true
-            ),
-            bridgeCurrent: true
+    func testClaudeZeroUsageUsesStandardReadingAndCodexKeepsFreshEvidence() {
+        let claude = snapshot(usedPercent: 0)
+        let claudePresentation = ClaudeUsagePresentation.resolve(
+            access: .subscription(plan: "Max"),
+            refresh: .idle,
+            snapshot: claude,
+            isEnabled: true,
+            now: fixedNow
+        )
+        let codex = ProviderSnapshot(
+            identity: .codex,
+            rateWindow: .unavailable,
+            source: .codexAppServer,
+            confidence: .exact,
+            updatedAt: fixedNow,
+            isFreshSessionWindow: true
         )
 
-        viewModel.showManualCheck()
-        let claude = viewModel.snapshots.first { $0.provider == .claude }!
-
-        XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Waiting for Claude statusline")
-        XCTAssertEqual(
-            viewModel.sourceTooltip(for: claude),
-            "Read from Claude Code as of \(clockTime(weeklyUpdatedAt)) · send any message in Claude Code to refresh"
-        )
-        XCTAssertEqual(
-            viewModel.claudeMeasurementPopoverDetail,
-            "Right now it's showing your last exact reading from \(clockTime(weeklyUpdatedAt)). Claude Code will replace it when the statusline sends a current window."
-        )
-        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "n/a")
-        XCTAssertEqual(viewModel.severity(for: claude), .unavailable)
-        XCTAssertEqual(viewModel.menuBarRemainingPercent, 80, accuracy: 0.001)
-        XCTAssertEqual(
-            viewModel.weeklyText(for: claude),
-            "Week: 70% left · resets in 4d · as of \(clockTime(weeklyUpdatedAt))"
-        )
-        XCTAssertEqual(viewModel.detail, "Codex resets in 3h 0m")
+        XCTAssertEqual(claudePresentation.state, .current)
+        XCTAssertEqual(claude.remainingPercent, 100)
+        XCTAssertFalse(claude.isFreshSessionWindow)
+        XCTAssertTrue(codex.isFreshSessionWindow)
     }
 
-    func testFreshWeeklyPresentation() {
-        let viewModel = makeViewModel(
-            claudeSnapshot: ProviderSnapshot(
-                identity: .claude,
-                rateWindow: .available(
-                    usedPercent: 5,
-                    resetAt: fixedNow.addingTimeInterval(2 * 60 * 60),
-                    durationMinutes: 300
-                ),
-                weeklyWindow: nil,
-                source: .claudeStatusline,
-                confidence: .exact,
-                updatedAt: fixedNow,
-                weeklyUpdatedAt: staleUpdatedAt,
-                isFreshWeeklyWindow: true
-            ),
-            bridgeCurrent: true
-        )
-
-        let claude = viewModel.snapshots.first { $0.provider == .claude }!
-
-        XCTAssertEqual(viewModel.weeklyText(for: claude), "Week: 100% left · fresh week")
-        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "95%")
-    }
-
-    private func makeViewModel(
-        claudeSnapshot: ProviderSnapshot,
-        codexSnapshot: ProviderSnapshot? = nil,
-        bridgeCurrent: Bool
-    ) -> PromptJuiceViewModel {
-        let suiteName = "ClaudePresentationMatrixTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let store = PromptJuiceSettingsStore(defaults: defaults)
-        addTeardownBlock {
-            defaults.removePersistentDomain(forName: suiteName)
+    private func signedOutCase(reason: ClaudeSignInReason, estimate: Bool) -> Case {
+        let isInitial = reason == .initial
+        let settingsSubtitle: String
+        if isInitial {
+            settingsSubtitle = estimate
+                ? "Estimate · signed out of Claude Code"
+                : "Signed out of Claude Code"
+        } else {
+            settingsSubtitle = estimate
+                ? "Signed out of Claude Code · sign in again · showing local estimate"
+                : "Signed out of Claude Code · sign in again"
         }
-
-        return PromptJuiceViewModel(
-            settingsStore: store,
-            providerClient: StaticUsageProviderClient(
-                storedSnapshots: [claudeSnapshot, codexSnapshot ?? self.codexSnapshot()]
-            ),
-            now: { self.fixedNow },
-            isClaudeBridgeCurrent: { bridgeCurrent }
+        return Case(
+            name: "signed out \(reason.rawValue) \(estimate ? "with estimate" : "without reading")",
+            access: .signedOut(reason: reason),
+            refresh: .idle,
+            snapshot: estimate ? snapshot(confidence: .estimated) : unavailableSnapshot(),
+            expectedState: .signedOut(reason),
+            showsReading: estimate,
+            showsClock: false,
+            rowStatus: estimate ? nil : "Sign in needed",
+            tooltip: estimate
+                ? "Estimated from Claude Code's activity logs on this Mac"
+                : "Sign in to Claude Code to read your plan usage",
+            settingsSubtitle: settingsSubtitle,
+            settingsAction: .journey(.signIn),
+            footnote: estimate
+                ? (isInitial
+                    ? "This is an estimate from Claude Code's activity logs on this Mac. Sign in to Claude Code and PromptJuice switches to direct readings automatically."
+                    : "This is an estimate from Claude Code's activity logs on this Mac. Sign in to Claude Code again and PromptJuice switches back to direct readings automatically.")
+                : nil,
+            popover: isInitial
+                ? "Claude Code is signed out. Sign in once and PromptJuice takes it from there."
+                : "Claude Code's sign-in has expired. Sign in again and PromptJuice takes it from there.",
+            neutral: false
         )
     }
 
-    private func claudeSnapshot(
-        source: SnapshotSource,
-        confidence: SnapshotConfidence,
+    private var updateRequiredAccess: ClaudeAccessState {
+        .updateRequired(
+            installed: ClaudeCodeVersion(major: 2, minor: 0, patch: 14),
+            minimum: .minimumUsageVersion
+        )
+    }
+
+    private func snapshot(
+        source: SnapshotSource = .claudeUsageCLI,
+        confidence: SnapshotConfidence = .exact,
         usedPercent: Double = 58,
-        resetMinutes: Int = 150,
         updatedAt: Date? = nil
     ) -> ProviderSnapshot {
         ProviderSnapshot(
             identity: .claude,
             rateWindow: .available(
                 usedPercent: usedPercent,
-                resetAt: fixedNow.addingTimeInterval(TimeInterval(resetMinutes * 60)),
+                resetAt: fixedNow.addingTimeInterval(150 * 60),
                 durationMinutes: 300
             ),
             source: source,
@@ -300,65 +443,32 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         )
     }
 
-    private func unavailableClaudeSnapshot() -> ProviderSnapshot {
+    private func unavailableSnapshot() -> ProviderSnapshot {
         ProviderSnapshot(
             identity: .claude,
             rateWindow: .unavailable,
-            source: .claudeStatusline,
+            source: .claudeUsageCLI,
             confidence: .unavailable,
-            updatedAt: fixedNow,
-            statusDetail: "Claude statusline and local usage unavailable"
-        )
-    }
-
-    private func codexSnapshot(
-        usedPercent: Double = 20,
-        resetMinutes: Int = 180
-    ) -> ProviderSnapshot {
-        ProviderSnapshot(
-            identity: .codex,
-            rateWindow: .available(
-                usedPercent: usedPercent,
-                resetAt: fixedNow.addingTimeInterval(TimeInterval(resetMinutes * 60)),
-                durationMinutes: 300
-            ),
-            source: .codexAppServer,
-            confidence: .exact,
             updatedAt: fixedNow
         )
     }
 
-    private func clockTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: date)
-    }
-
     private struct Case {
         let name: String
-        let claudeSnapshot: ProviderSnapshot
-        let bridgeCurrent: Bool
-        let liveUpgrade: ClaudeLiveUpgrade
-        let settingsStatus: String
-        let setupButtonTitle: String?
-        let tooltip: String
-        let popover: String
-        let displayPercent: String
-        let headerDetailIncludes: [String]
-        let headerDetailExcludes: [String]
-        let claudeSeverity: UsageSeverity
-        let aggregateSeverity: UsageSeverity
-        let headerRemainingPercent: Double
-        let setupWouldOpen: Bool
-    }
-
-    private struct StaticUsageProviderClient: UsageProviderClient {
-        let source: SnapshotSource = .fixture
-        let storedSnapshots: [ProviderSnapshot]
-
-        func snapshots(now _: Date) -> [ProviderSnapshot] {
-            storedSnapshots
-        }
+        let access: ClaudeAccessState
+        let refresh: ClaudeRefreshState
+        let snapshot: ProviderSnapshot?
+        var isEnabled = true
+        let expectedState: ClaudePresentationState
+        let showsReading: Bool
+        let showsClock: Bool
+        let rowStatus: String?
+        let tooltip: String?
+        let settingsSubtitle: String
+        let settingsAction: ClaudeSettingsAction?
+        let footnote: String?
+        let popover: String?
+        let neutral: Bool
+        var popoverAction: ClaudeSettingsAction? = nil
     }
 }

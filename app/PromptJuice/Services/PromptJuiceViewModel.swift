@@ -116,13 +116,16 @@ final class PromptJuiceViewModel: ObservableObject {
     private let settingsStore: PromptJuiceSettingsStore
     private let alertEngine: AlertEngine
     private let now: () -> Date
-    private let isClaudeBridgeCurrent: () -> Bool
+    private let isClaudeBridgeCurrent: @Sendable () -> Bool
     private let injectedProviderClient: (any UsageProviderClient)?
     private let claudeStatusCacheProviderClient: any UsageProviderClient
     private let liveClaudeProviderClient: any UsageProviderClient
     private let liveCodexProviderClient: any UsageProviderClient
     private let claudeUsageCoordinator: (any ClaudeUsageSnapshotProviding)?
     private let claudeUsageDogfoodEnabled: Bool
+    private let claudeGuidanceChecker: any ClaudeGuidanceChecking
+    private let claudeExecutableLocator: @Sendable () -> ClaudeExecutableLocation?
+    let claudeLegacyBridgeRemoval: ClaudeLegacyBridgeRemoval
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
@@ -148,11 +151,20 @@ final class PromptJuiceViewModel: ObservableObject {
         liveCodexProviderClient: (any UsageProviderClient)? = nil,
         claudeUsageCoordinator: (any ClaudeUsageSnapshotProviding)? = nil,
         claudeUsageDogfoodEnabled: Bool? = nil,
+        claudeGuidanceChecker: any ClaudeGuidanceChecking = SystemClaudeGuidanceChecker(),
+        claudeExecutableLocator: @escaping @Sendable () -> ClaudeExecutableLocation? = {
+            ClaudeExecutableLocator.locate()
+        },
+        claudeLegacyBridgeRemoval: ClaudeLegacyBridgeRemoval = ClaudeLegacyBridgeRemoval(),
+        initialSnapshots: [UsageSnapshot]? = nil,
+        initialClaudeAccessState: ClaudeAccessState? = nil,
+        initialClaudeRefreshState: ClaudeRefreshState? = nil,
+        initialLegacyBridgeStatus: LegacyBridgeStatus? = nil,
         alertEngine: AlertEngine = AlertEngine(),
         now: @escaping () -> Date = Date.init,
         claudeStatusCacheRefreshTimeoutNanoseconds: UInt64 = 5_000_000_000,
-        isClaudeBridgeCurrent: @escaping () -> Bool = {
-            ClaudeBridgeInstaller().isBridgeCurrent()
+        isClaudeBridgeCurrent: @escaping @Sendable () -> Bool = {
+            ClaudeLegacyBridgeRemoval().makePlan() != nil
         }
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
@@ -167,10 +179,18 @@ final class PromptJuiceViewModel: ObservableObject {
         self.liveClaudeProviderClient = liveClaudeClient
         self.liveCodexProviderClient = liveCodexClient
         self.claudeUsageDogfoodEnabled = dogfoodEnabled
+        self.claudeGuidanceChecker = claudeGuidanceChecker
+        self.claudeExecutableLocator = claudeExecutableLocator
+        self.claudeLegacyBridgeRemoval = claudeLegacyBridgeRemoval
         self.claudeUsageCoordinator = if let claudeUsageCoordinator {
             claudeUsageCoordinator
         } else if dogfoodEnabled {
-            ClaudeUsageCoordinator(featureEnabled: true)
+            ClaudeUsageCoordinator(
+                featureEnabled: true,
+                legacyBridgeStatus: {
+                    isClaudeBridgeCurrent() ? .removable : .none
+                }
+            )
         } else {
             nil
         }
@@ -187,11 +207,14 @@ final class PromptJuiceViewModel: ObservableObject {
         self.isClaudeBridgeCurrentState = isClaudeBridgeCurrent()
         self.useSoonNotificationsEnabled = settingsStore.useSoonNotificationsEnabled
         self.didOfferUseSoonNotification = settingsStore.didOfferUseSoonNotification
-        claudeAccessState = .checking
-        claudeRefreshState = .idle
-        legacyBridgeStatus = isClaudeBridgeCurrentState ? .removable : .none
+        claudeAccessState = initialClaudeAccessState ?? .checking
+        claudeRefreshState = initialClaudeRefreshState ?? .idle
+        legacyBridgeStatus = initialLegacyBridgeStatus
+            ?? (isClaudeBridgeCurrentState ? .removable : .none)
         thresholds = settingsStore.thresholds
-        snapshots = if let providerClient {
+        snapshots = if let initialSnapshots {
+            initialSnapshots
+        } else if let providerClient {
             providerClient.snapshots(now: now())
         } else {
             Self.cachedOrUnavailableSnapshots(
@@ -203,6 +226,48 @@ final class PromptJuiceViewModel: ObservableObject {
 
     var visibleSnapshots: [UsageSnapshot] {
         snapshots.filter { enabledProviders.contains($0.provider) }
+    }
+
+    var usesClaudeUsagePresentation: Bool {
+        claudeUsageDogfoodEnabled
+    }
+
+    var claudePresentation: ClaudeUsagePresentation {
+        ClaudeUsagePresentation.resolve(
+            access: claudeAccessState,
+            refresh: claudeRefreshState,
+            snapshot: snapshots.first { $0.provider == .claude },
+            isEnabled: enabledProviders.contains(.claude),
+            now: now()
+        )
+    }
+
+    func claudeGuidanceContent(for journey: ClaudeGuidanceJourney) -> ClaudeGuidanceContent {
+        ClaudeGuidanceContent.make(
+            journey: journey,
+            access: claudeAccessState,
+            location: claudeExecutableLocator()
+        )
+    }
+
+    func claudeFreshnessAccessibilityLabel(for snapshot: UsageSnapshot) -> String? {
+        guard snapshot.provider == .claude,
+              claudeUsageDogfoodEnabled,
+              claudePresentation.showsClock else {
+            return nil
+        }
+        return ClaudeFreshnessFormatter().title(for: snapshot.updatedAt, now: now())
+    }
+
+    func recheckClaudeGuidance(_ journey: ClaudeGuidanceJourney) async -> ClaudeGuidanceCheckResult {
+        claudeRefreshState = .refreshing
+        let checker = claudeGuidanceChecker
+        let result = await Task.detached(priority: .userInitiated) {
+            checker.check(journey: journey)
+        }.value
+        claudeAccessState = result.access
+        claudeRefreshState = .idle
+        return result
     }
 
     private var quotaBearingVisibleSnapshots: [UsageSnapshot] {
@@ -299,10 +364,25 @@ final class PromptJuiceViewModel: ObservableObject {
         return available.map(\.remainingPercent).min() ?? 100
     }
 
+    var menuBarShowsPercentage: Bool {
+        quotaBearingVisibleSnapshots.contains(where: \.isAvailable)
+    }
+
+    var menuBarAccessibilityLabel: String {
+        guard menuBarShowsPercentage else {
+            return "PromptJuice: plan usage unavailable"
+        }
+        return "PromptJuice: \(Int(menuBarRemainingPercent.rounded()))% left"
+    }
+
     /// Manual-mode verdict headline — the answer, not the mechanism.
     private var manualVerdict: String {
         if isCheckingUsage {
             return "Checking usage…"
+        }
+
+        if let neutralClaudeHeader {
+            return neutralClaudeHeader.headline
         }
 
         switch aggregateSeverity {
@@ -351,6 +431,10 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Just a moment…"
         }
 
+        if let neutralClaudeHeader {
+            return neutralClaudeHeader.detail
+        }
+
         guard quotaBearingVisibleSnapshots.contains(where: \.isAvailable) else {
             return "Usage unavailable"
         }
@@ -384,6 +468,27 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return "Fresh window"
+    }
+
+    private var neutralClaudeHeader: (headline: String, detail: String)? {
+        guard claudeUsageDogfoodEnabled,
+              quotaBearingVisibleSnapshots.isEmpty,
+              enabledProviders.contains(.claude),
+              claudeAccessState.isNeutralAuthenticationCategory else {
+            return nil
+        }
+
+        let detail: String = switch claudeAccessState {
+        case .apiBilling:
+            "Claude Code is using API billing"
+        case .externalProvider:
+            "Claude Code uses an external provider"
+        case .unsupportedAuth:
+            "Account type not recognized"
+        default:
+            "Usage unavailable"
+        }
+        return ("Claude plan usage unavailable", detail)
     }
 
     private func resetSnapshotsForHeaderDetail(
@@ -977,6 +1082,10 @@ final class PromptJuiceViewModel: ObservableObject {
     /// Friendly hover text for a row — where the reading came from, stated as a
     /// fact (never a promise). Lives in a tooltip, never inline.
     func sourceTooltip(for snapshot: UsageSnapshot) -> String {
+        if snapshot.provider == .claude, claudeUsageDogfoodEnabled {
+            return claudePresentation.tooltip ?? "Usage unavailable"
+        }
+
         if snapshot.provider == .claude {
             if snapshot.isFreshSessionWindow {
                 return "Fresh window · starts with your next Claude Code message"
@@ -1050,6 +1159,9 @@ final class PromptJuiceViewModel: ObservableObject {
             return nil
         }
 
+        if claudeUsageDogfoodEnabled {
+            return "Updated at \(clockTime(snapshot.updatedAt))"
+        }
         return "Reading from \(clockTime(snapshot.updatedAt))"
     }
 
@@ -1058,6 +1170,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var claudeSetupButtonTitle: String? {
+        if claudeUsageDogfoodEnabled {
+            return claudePresentation.settingsAction?.title
+        }
+
         guard claudeLiveUpgrade == .setupAvailable, !isRefreshing(.claude) else {
             return nil
         }
@@ -1066,6 +1182,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     var claudeMeasurementPopoverDetail: String {
+        if claudeUsageDogfoodEnabled {
+            return claudePresentation.popoverStatus ?? "Usage unavailable."
+        }
+
         if let snapshot = snapshots.first(where: { $0.provider == .claude }),
            snapshot.isFreshSessionWindow {
             return "Fresh window. Usage starts with your next Claude Code message."
@@ -1095,6 +1215,10 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func settingsStatusText(for provider: UsageProvider) -> String {
+        if provider == .claude, claudeUsageDogfoodEnabled {
+            return claudePresentation.settingsSubtitle
+        }
+
         guard let snapshot = snapshots.first(where: { $0.provider == provider }) else {
             return provider == .claude ? "Not set up yet" : "Not detected"
         }
@@ -1402,6 +1526,11 @@ final class PromptJuiceViewModel: ObservableObject {
 
         let refreshID = UUID()
         activeRefreshID = refreshID
+        if claudeUsageDogfoodEnabled,
+           claudeUsageCoordinator != nil,
+           enabledProviders.contains(.claude) {
+            claudeRefreshState = .refreshing
+        }
         PromptJuiceLog.usage.debug("Usage refresh started")
         return (refreshID, now())
     }

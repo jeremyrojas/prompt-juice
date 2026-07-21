@@ -76,26 +76,37 @@ final class PanelSnapshotTests: XCTestCase {
         try renderView("panel-notification-prime", content: content)
     }
 
-    func testRenderClaudeSetupSnapshots() throws {
+    func testRenderClaudeGuidanceFooterSnapshots() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["PROMPTJUICE_SNAPSHOT"] == "1",
-            "Set PROMPTJUICE_SNAPSHOT=1 to render setup snapshots."
+            "Set PROMPTJUICE_SNAPSHOT=1 to render guidance snapshots."
         )
 
-        let outputDirectory = URL(fileURLWithPath: "/tmp/promptjuice-verification", isDirectory: true)
-        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
-
-        try renderClaudeSetup(
-            "preview-nostatusline",
-            plan: claudeSetupPlan(isWrappingExisting: false),
-            showsCommand: true,
-            outputDirectory: outputDirectory
+        try renderView(
+            "guidance-install-normal",
+            content: ClaudeGuidancePreviewShell(
+                viewModel: guidanceViewModel(access: .cliMissing, executable: nil),
+                journey: .install
+            )
+            .environment(\.dynamicTypeSize, .large)
         )
-        try renderClaudeSetup(
-            "preview-wrapping",
-            plan: claudeSetupPlan(isWrappingExisting: true),
-            showsCommand: false,
-            outputDirectory: outputDirectory
+        try renderView(
+            "guidance-update-unknown-enlarged",
+            content: ClaudeGuidancePreviewShell(
+                viewModel: guidanceViewModel(
+                    access: .updateRequired(
+                        installed: ClaudeCodeVersion(major: 2, minor: 0, patch: 14),
+                        minimum: .minimumUsageVersion
+                    ),
+                    executable: ClaudeExecutableLocation(
+                        invokedURL: URL(fileURLWithPath: "/opt/tools/bin/claude"),
+                        resolvedURL: URL(fileURLWithPath: "/opt/tools/bin/claude"),
+                        provenance: .unknown
+                    )
+                ),
+                journey: .update
+            )
+            .environment(\.dynamicTypeSize, .xxxLarge)
         )
     }
 
@@ -136,11 +147,6 @@ final class PanelSnapshotTests: XCTestCase {
                 text: tooltipText(from: unavailableViewModel)
             )
             .environment(\.colorScheme, .dark)
-        )
-        try renderView(
-            "sheet-success",
-            content: ClaudeSetupSuccessPreviewShell()
-                .environment(\.colorScheme, .dark)
         )
         try renderAwaitingSessionPanel(viewModel: viewModel)
 
@@ -240,35 +246,6 @@ final class PanelSnapshotTests: XCTestCase {
         }
 
         let url = URL(fileURLWithPath: "/tmp/promptjuice-panel-\(name).png")
-        try png.write(to: url)
-        print("wrote \(url.path)")
-    }
-
-    private func renderClaudeSetup(
-        _ name: String,
-        plan: ClaudeBridgeInstaller.Plan,
-        showsCommand: Bool,
-        outputDirectory: URL
-    ) throws {
-        let content = ClaudeSetupPlanPreviewShell(
-            plan: plan,
-            showsCommand: showsCommand
-        )
-        .environment(\.colorScheme, .dark)
-
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = 2
-
-        guard
-            let image = renderer.nsImage,
-            let tiff = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiff),
-            let png = bitmap.representation(using: .png, properties: [:])
-        else {
-            throw XCTSkip("ImageRenderer produced no image on this platform.")
-        }
-
-        let url = outputDirectory.appendingPathComponent("\(name).png")
         try png.write(to: url)
         print("wrote \(url.path)")
     }
@@ -385,29 +362,31 @@ final class PanelSnapshotTests: XCTestCase {
         return viewModel
     }
 
-    private func claudeSetupPlan(isWrappingExisting: Bool) -> ClaudeBridgeInstaller.Plan {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let settingsPath = home
-            .appendingPathComponent(".claude", isDirectory: true)
-            .appendingPathComponent("settings.json")
-        let installedScriptPath = home
-            .appendingPathComponent("Library/Application Support/PromptJuice", isDirectory: true)
-            .appendingPathComponent("claude-statusline-bridge.sh")
-        let previousCommand = isWrappingExisting ? "bash ~/.claude/statusline-command.sh" : nil
-        let newCommand: String
-        if let previousCommand {
-            newCommand = "PROMPTJUICE_CLAUDE_STATUSLINE_COMMAND='\(previousCommand)' bash '\(installedScriptPath.path)'"
-        } else {
-            newCommand = "bash '\(installedScriptPath.path)'"
-        }
-
-        return ClaudeBridgeInstaller.Plan(
-            settingsPath: settingsPath,
-            installedScriptPath: installedScriptPath,
-            isWrappingExisting: isWrappingExisting,
-            previousCommand: previousCommand,
-            newCommand: newCommand,
-            newSettingsData: Data()
+    private func guidanceViewModel(
+        access: ClaudeAccessState,
+        executable: ClaudeExecutableLocation?
+    ) -> PromptJuiceViewModel {
+        let suiteName = "PanelSnapshotTests.guidance.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(UsageProvider.allCases.map(\.rawValue), forKey: "enabledProviders")
+        let store = PromptJuiceSettingsStore(defaults: defaults)
+        let claude = ProviderSnapshot(
+            identity: .claude,
+            rateWindow: .unavailable,
+            source: .claudeUsageCLI,
+            confidence: .unavailable,
+            updatedAt: now
+        )
+        return PromptJuiceViewModel(
+            settingsStore: store,
+            providerClient: NotMeasuredFixtureClient(),
+            claudeUsageDogfoodEnabled: true,
+            claudeExecutableLocator: { executable },
+            initialSnapshots: [claude, codexExact(now)],
+            initialClaudeAccessState: access,
+            initialClaudeRefreshState: .idle,
+            now: { self.now },
+            isClaudeBridgeCurrent: { false }
         )
     }
 }

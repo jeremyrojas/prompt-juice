@@ -18,6 +18,15 @@ enum ClaudeUsageTransportOutcome: Sendable, Equatable {
     case processFailed
 }
 
+enum ClaudeWorkspaceTrustOutcome: Sendable, Equatable {
+    case ready
+    case trustRequired
+    case timedOut
+    case outputTooLarge
+    case launchFailed
+    case processFailed
+}
+
 protocol ClaudeUsageTransporting: Sendable {
     func captureUsage(
         executableURL: URL,
@@ -115,6 +124,125 @@ struct ClaudePTYSession: ClaudeUsageTransporting {
 
     init(configuration: ClaudePTYConfiguration = .production) {
         self.configuration = configuration
+    }
+
+    func checkWorkspaceTrust(
+        executableURL: URL,
+        workspaceURL: URL,
+        environment: [String: String]
+    ) -> ClaudeWorkspaceTrustOutcome {
+        guard Self.isOwnerOnlyDirectory(workspaceURL) else {
+            return .launchFailed
+        }
+
+        var master: Int32 = -1
+        var slave: Int32 = -1
+        var terminalSize = winsize(ws_row: 60, ws_col: 160, ws_xpixel: 0, ws_ypixel: 0)
+        guard openpty(&master, &slave, nil, nil, &terminalSize) == 0 else {
+            return .launchFailed
+        }
+        defer {
+            if master >= 0 {
+                close(master)
+            }
+            if slave >= 0 {
+                close(slave)
+            }
+        }
+
+        let currentFlags = fcntl(master, F_GETFL)
+        guard currentFlags >= 0,
+              fcntl(master, F_SETFL, currentFlags | O_NONBLOCK) == 0 else {
+            return .launchFailed
+        }
+
+        guard let processIdentifier = Self.spawn(
+            executableURL: executableURL,
+            arguments: Self.fixedArguments,
+            environment: Self.childEnvironment(from: environment),
+            workspaceURL: workspaceURL,
+            master: master,
+            slave: slave
+        ) else {
+            return .launchFailed
+        }
+        close(slave)
+        slave = -1
+
+        var output = Data()
+        var processWasReaped = false
+        var cursorResponsesSent = 0
+        let deadline = Date().addingTimeInterval(configuration.startupTimeout)
+
+        while true {
+            switch Self.readAvailable(
+                from: master,
+                into: &output,
+                maximumBytes: configuration.maximumOutputBytes
+            ) {
+            case .overflow:
+                Self.terminateProcessGroup(
+                    processIdentifier,
+                    grace: configuration.terminationGrace,
+                    wasReaped: &processWasReaped
+                )
+                return .outputTooLarge
+            case .readData, .noData:
+                break
+            }
+
+            let queryCount = Self.occurrenceCount(
+                of: Data("\u{001B}[6n".utf8),
+                in: output
+            )
+            while cursorResponsesSent < queryCount {
+                guard Self.writeAll(Self.cursorPositionResponse, to: master) else {
+                    Self.terminateProcessGroup(
+                        processIdentifier,
+                        grace: configuration.terminationGrace,
+                        wasReaped: &processWasReaped
+                    )
+                    return .processFailed
+                }
+                cursorResponsesSent += 1
+            }
+
+            let visibleText = ClaudeUsageParser.visibleTerminalText(from: output)
+            if Self.requiresWorkspaceTrust(visibleText) {
+                Self.terminateProcessGroup(
+                    processIdentifier,
+                    grace: configuration.terminationGrace,
+                    wasReaped: &processWasReaped
+                )
+                return .trustRequired
+            }
+            if Self.isReadyForCommand(visibleText) {
+                Self.terminateProcessGroup(
+                    processIdentifier,
+                    grace: configuration.terminationGrace,
+                    wasReaped: &processWasReaped
+                )
+                return .ready
+            }
+
+            var status: Int32 = 0
+            let waitResult = waitpid(processIdentifier, &status, WNOHANG)
+            if waitResult == processIdentifier {
+                processWasReaped = true
+                return .processFailed
+            }
+
+            if Date() >= deadline {
+                Self.terminateProcessGroup(
+                    processIdentifier,
+                    grace: configuration.terminationGrace,
+                    wasReaped: &processWasReaped
+                )
+                return .timedOut
+            }
+
+            Thread.sleep(forTimeInterval: configuration.pollInterval)
+        }
     }
 
     func captureUsage(

@@ -865,6 +865,9 @@ final class JuicebarPanelController: NSObject {
             viewModel: viewModel,
             onClose: { [weak self] in
                 self?.handleClick(.close)
+            },
+            onClaudeJourney: { [weak self] _ in
+                self?.openClaudeGuidanceIfAvailable()
             }
         )
 
@@ -925,7 +928,11 @@ final class JuicebarPanelController: NSObject {
         case .close:
             dismissSurface()
         case .provider(let provider):
-            if provider == .claude, viewModel.claudeRowOffersSetup {
+            if provider == .claude,
+               (viewModel.usesClaudeUsagePresentation
+                    ? (!viewModel.claudePresentation.showsReading
+                        && viewModel.claudePresentation.guidanceJourney != nil)
+                    : viewModel.claudeRowOffersSetup) {
                 dismissSurface()
                 onClaudeSettingsRequested(true)
                 return
@@ -940,6 +947,14 @@ final class JuicebarPanelController: NSObject {
         case .background:
             viewModel.clearSelection()
         }
+    }
+
+    private func openClaudeGuidanceIfAvailable() {
+        guard viewModel.claudePresentation.guidanceJourney != nil else {
+            return
+        }
+        dismissSurface()
+        onClaudeSettingsRequested(true)
     }
 
     @objc private func showSettingsFromPanelMenu() {
