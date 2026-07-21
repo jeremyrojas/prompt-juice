@@ -3,9 +3,9 @@
 Companion to `claude-usage-ui-spec.html` (mockups + catalog). This version folds in all four
 adjudication rounds with Codex (ledger D1–D19). It supersedes every earlier version.
 
-Status: **B1, B2, B3 APPROVED · B5 DEFERRED (optional, not now)** — see section 9.
-**Design ready. Execution awaits Jeremy's explicit start instruction.** B5 no longer gates
-public release (optional courtesy + passive-data fallback ready).
+Status: **B1, B2, B3 APPROVED · phases 0–3 complete · B5 DEFERRED (optional, not now)** — see
+section 9. Phase 4 is the next implementation slice. B5 no longer gates public release
+(optional courtesy + passive-data fallback ready).
 
 **Slice 0 (Codex):** this file is the binding spec. Copy it into the worktree at
 `docs/claude-usage-ui-implementation.md`, and add a banner to `claude-usage-plan.md` marking its
@@ -117,6 +117,26 @@ This adds a trust-setup outcome to the implementation model. Phase 6 presents it
 setup journey with an Open Terminal action and app-activation/Check Again rechecks. The action
 copies no command automatically and every recheck stays within locator, version, and auth/trust
 readiness checks until the workspace is ready.
+
+### Phase 3 transport and parser evidence (2026-07-21)
+
+The production transport now uses a flat PTY in the owner-only stable workspace with the fixed
+arguments `--safe-mode --ax-screen-reader --allowed-tools ""`. It also suppresses prompt-history
+storage and the CLI auto-updater in the child environment. Its only application command input is
+the exact byte sequence `/usage\r`; terminal cursor-position queries receive a fixed terminal
+response. Project-trust screens produce a typed `workspaceTrustRequired` result before command
+input, and the production path contains no permission-bypass flag.
+
+The PTY reader enforces a 512 KiB output bound, separate startup and command deadlines,
+cancellation, full process-group termination, and child reaping. Startup-only output receives
+one retry; other failures do not retry in the transport layer. Usage completion is scoped to the
+actual Usage panel so release-note text cannot impersonate a rate-limit result.
+
+The pure parser consumes the synthetic and sanitized Phase 1 fixtures. It handles session,
+all-model weekly, and model-specific weekly windows; exact zero usage; plan labels; ANSI/control
+sequences; repeated live redraws; 12- and 24-hour reset times; timezone and DST timestamps;
+saved bars with measurement timestamps; and rate-limit signals alongside a usable reading.
+Malformed, partial, oversized, and unsupported output produce typed safe failures.
 
 ---
 
@@ -499,7 +519,8 @@ inspect before anything is copied into the repository
 2. Locator, version gate (2.1.208), install-method/provenance detection, fail-closed
    five-category auth classification, with tests. The decoder uses Jeremy's confirmed 2.1.214
    captured shape. `claude auth login` exit behavior is a dogfood observation, not a gate.
-3. Flat PTY transport (fixed command allowlist) + pure /usage parser, fixture tests.
+3. Complete: flat PTY transport (fixed command allowlist) + pure `/usage` parser, fixture and
+   process-lifecycle tests.
 4. Access/refresh state, client-owned cooldown, cache, coordinator, source ladder, behind the
    dogfood switch; bridge stays hidden fallback.
 5. G1–G4 estimator privacy refactor (gates the privacy copy).
