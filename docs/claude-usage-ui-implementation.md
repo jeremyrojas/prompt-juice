@@ -97,6 +97,27 @@ transport. Phase 2 architecture review must select a workflow that satisfies wor
 authentication, zero model prompts, and the no-settings-mutation product requirement before
 the production PTY transport proceeds.
 
+### Phase 2 workspace-trust architecture decision
+
+PromptJuice owns one stable empty workspace at
+`~/Library/Application Support/PromptJuice/ClaudeProbe/Workspace/`. The directory is owner-only
+and contains only probe-owned artifacts.
+Production transport uses that workspace with safe mode, screen-reader output, an empty tool
+allowlist, prompt-history suppression, and the fixed `/usage` command allowlist. It never uses
+`--dangerously-skip-permissions`.
+
+Claude's first trust decision remains an explicit user gesture in a visible Terminal session.
+PromptJuice does not write Claude settings or its trust store. Phase 3 detects the project-trust
+screen, terminates the background probe, and returns a typed `workspaceTrustRequired` outcome.
+The setup journey opens Terminal in the stable probe workspace with the same safe launch shape;
+after the user accepts Claude's trust prompt once, subsequent read-only probes reuse that stable
+workspace. PromptJuice never uses a user repository as production probe cwd.
+
+This adds a trust-setup outcome to the implementation model. Phase 6 presents it as a scoped
+setup journey with an Open Terminal action and app-activation/Check Again rechecks. The action
+copies no command automatically and every recheck stays within locator, version, and auth/trust
+readiness checks until the workspace is ready.
+
 ---
 
 ## 1. State model (three axes + one migration axis)
@@ -156,11 +177,12 @@ No environment mutation. Enumerate the known, documented billing-affecting crede
 for supported Claude Code versions, as visible to the exact child process (not "every source" —
 future releases may add sources; unknown combinations already fail closed):
 app-visible env (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`,
-`ANTHROPIC_BASE_URL`, Bedrock/Vertex/Foundry flags, gateway/proxy vars), `~/.claude/settings.json`
-(`apiKeyHelper`, env block, provider/base-URL settings), managed settings, plus
-`claude auth status` (EXPECTED/PROVISIONAL field names — `loggedIn`, `authMethod`,
-`apiProvider`, `subscriptionType` — unconfirmed until Jeremy's sanitized capture lands) as
-corroborating evidence — never sole proof of effective billing.
+OAuth refresh-token sources, `ANTHROPIC_BASE_URL`, Bedrock/Mantle/Vertex/Foundry flags,
+provider-specific endpoints, current Anthropic-on-AWS routing, gateway/custom-header/proxy
+vars), `~/.claude/settings.json` (`apiKeyHelper`, env block, provider/base-URL settings),
+file-based and macOS managed settings, plus `claude auth status` as corroborating evidence —
+never sole proof of effective billing. The sanitized 2.1.214 capture confirms the billing
+fields `loggedIn`, `authMethod`, `apiProvider`, and `subscriptionType`.
 
 Forward-compat rule (D14): additive unrelated JSON fields are IGNORED. Unknown values of
 billing-relevant discriminators, or missing required billing evidence, fail closed to
@@ -344,9 +366,9 @@ with `--email`/`--sso`/`--console`, `auth logout`, `auth status`); `/login` is t
 alternative, kept as secondary copy only; update per install-method detection above. Internal
 probes CONFIRMED: `claude --version` → plain text e.g. `2.1.211 (Claude Code)`;
 `claude auth status` → JSON by default, exit code 0 = logged in / 1 = signed out, `--text` for
-human-readable. The `claude auth status` JSON field names used in this spec (loggedIn /
-authMethod / apiProvider / subscriptionType) are EXPECTED/PROVISIONAL — not publicly documented;
-the auth classifier stays provisional until Jeremy's sanitized capture confirms them. Whether
+human-readable. The `claude auth status` JSON field names used in this spec (`loggedIn`,
+`authMethod`, `apiProvider`, and `subscriptionType`) are confirmed by Jeremy's sanitized Claude
+Code 2.1.214 capture. Whether
 `claude auth login` exits cleanly after browser auth completes is undocumented and NOT a slice
 gate: the flow depends on app-activation rechecks plus auth status, not on the Terminal process
 exiting — record the actual behavior as a dogfood observation.
@@ -421,13 +443,13 @@ fabricated freshness · T-RL4 recovery clears backoff.
 
 Category 2 — sanitized OSS: CodexBar fixtures with repo URL, commit hash, license recorded.
 
-Category 3 — live captures. **Boundary: Codex prepares the harness but never executes it and
-never invokes Claude Code. Jeremy runs the approved captures himself after reviewing the
-script.** Approved now (B3, read-only): current subscription /usage, `claude auth status`,
-`claude --version`. Separately approved FUTURE work, not slice 1: Console login changes
+Category 3 — live captures. Completed under the goal-level capture execution policy: current
+subscription `/usage`, `claude auth status`, and `claude --version`. The repository contains
+only their sanitized outputs and provenance; private raw files remain owner-only and untracked.
+Separately approved FUTURE work, not slice 1: Console login changes
 (`claude auth login --console` can replace the current login — never without approval + a
 written isolation/recovery plan) and genuine rate-limit captures. The auth classifier stays
-provisional until Jeremy's sanitized auth-status capture lands.
+fail-closed around the confirmed 2.1.214 auth-status shape.
 
 Harness requirements: creates a private scratch directory with owner-only permissions (0700)
 containing a dedicated EMPTY working directory — every Claude Code capture process runs from
@@ -466,21 +488,17 @@ inspect before anything is copied into the repository
 - String sweep (at gate): the full bridge-era delete list from v6 plus the four withdrawn
   claims in section 2.
 
-## 8. Sequence (B1/B2/B3 approved · design ready — execution awaits Jeremy's explicit start instruction)
+## 8. Sequence (B1/B2/B3 approved · Phases 0–1 complete · Phase 2 authorized)
 
 0. Consolidate: copy this spec into the worktree at `docs/claude-usage-ui-implementation.md`;
    banner `claude-usage-plan.md`'s superseded decisions.
-1. Slice 1: author category-1 synthetic fixtures; evaluate category-2 OSS fixtures; PREPARE
-   (never execute) the capture harness per section 6. **Hard stop after slice 1:** Codex
-   reports — synthetic fixture inventory · CodexBar provenance/license verdict · harness
-   location · exact review/run instructions for Jeremy · any fixture finding that invalidates
-   this spec — and stops. Jeremy reviews the harness and decides when to run the approved
-   read-only captures (subscription /usage, auth status, version) in a later step. Codex never
-   executes the harness.
+1. Slice 1 complete: category-1 synthetic fixtures, independently authored live fixtures, and
+   the capture/sanitizer harness. CodexBar material imported: zero. The goal-authorized
+   read-only captures completed, passed privacy checks, and produced the evidence in the Phase
+   1 section. Jeremy reviewed the hard-stop report and authorized Phase 2.
 2. Locator, version gate (2.1.208), install-method/provenance detection, fail-closed
-   five-category auth classification, with tests. Write the auth-status decoder against
-   Jeremy's real captured shape (classifier provisional until then). `claude auth login` exit
-   behavior is a dogfood observation, not a gate.
+   five-category auth classification, with tests. The decoder uses Jeremy's confirmed 2.1.214
+   captured shape. `claude auth login` exit behavior is a dogfood observation, not a gate.
 3. Flat PTY transport (fixed command allowlist) + pure /usage parser, fixture tests.
 4. Access/refresh state, client-owned cooldown, cache, coordinator, source ladder, behind the
    dogfood switch; bridge stays hidden fallback.
@@ -512,5 +530,7 @@ inspect before anything is copied into the repository
   passive-data (estimate-only) fallback. Not being pursued now.
 - **Bridge — RESOLVED.** Never shipped externally; needs-review path dropped.
 - **Ampersand — RESOLVED.** Keep "Copy and Open Terminal" (Apple Style Guide).
-- **Only genuine open unknown:** exact `claude auth status` JSON field names (undocumented),
-  confirmed by the first B3 capture before the classifier finalizes.
+- **Auth fields — RESOLVED.** The sanitized 2.1.214 capture confirms `loggedIn`, `authMethod`,
+  `apiProvider`, and `subscriptionType`.
+- **Workspace trust — RESOLVED ARCHITECTURALLY.** Stable PromptJuice-owned workspace plus an
+  explicit one-time user trust gesture; Phase 3 implements detection and transport.
