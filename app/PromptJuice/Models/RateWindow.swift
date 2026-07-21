@@ -1,6 +1,6 @@
 import Foundation
 
-struct RateWindow: Equatable {
+struct RateWindow: Equatable, Sendable {
     let usedPercent: Double?
     let resetAt: Date?
     let durationMinutes: Int?

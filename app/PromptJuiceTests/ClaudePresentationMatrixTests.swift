@@ -97,7 +97,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
                 liveUpgrade: .setupAvailable,
                 settingsStatus: "Not set up yet",
                 setupButtonTitle: "Set Up…",
-                tooltip: "Claude statusline and local usage unavailable",
+                tooltip: "Not measured yet",
                 popover: "It's not set up yet. Set it up, then use Claude Code in the terminal for exact numbers.",
                 displayPercent: "n/a",
                 headerDetailIncludes: ["Codex resets in 3h 0m"],
@@ -187,7 +187,7 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         XCTAssertEqual(viewModel.detail, "Claude resets in 42m")
     }
 
-    func testFreshSessionWithWeeklyCarryForwardPresentation() {
+    func testClaudeCannotFabricateFreshSessionWithWeeklyCarryForwardPresentation() {
         let weeklyUpdatedAt = fixedNow.addingTimeInterval(-9 * 60 * 60)
         let weeklyResetAt = fixedNow.addingTimeInterval(4 * 24 * 60 * 60)
         let viewModel = makeViewModel(
@@ -212,12 +212,18 @@ final class ClaudePresentationMatrixTests: XCTestCase {
         viewModel.showManualCheck()
         let claude = viewModel.snapshots.first { $0.provider == .claude }!
 
-        XCTAssertEqual(viewModel.claudeLiveUpgrade, .live)
-        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Fresh window")
-        XCTAssertEqual(viewModel.sourceTooltip(for: claude), "Fresh window · starts with your next Claude Code message")
-        XCTAssertEqual(viewModel.claudeMeasurementPopoverDetail, "Fresh window. Usage starts with your next Claude Code message.")
-        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "100%")
-        XCTAssertEqual(viewModel.severity(for: claude), .healthy)
+        XCTAssertEqual(viewModel.claudeLiveUpgrade, .awaitingSession)
+        XCTAssertEqual(viewModel.settingsStatusText(for: .claude), "Waiting for Claude statusline")
+        XCTAssertEqual(
+            viewModel.sourceTooltip(for: claude),
+            "Read from Claude Code as of \(clockTime(weeklyUpdatedAt)) · send any message in Claude Code to refresh"
+        )
+        XCTAssertEqual(
+            viewModel.claudeMeasurementPopoverDetail,
+            "Right now it's showing your last exact reading from \(clockTime(weeklyUpdatedAt)). Claude Code will replace it when the statusline sends a current window."
+        )
+        XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "n/a")
+        XCTAssertEqual(viewModel.severity(for: claude), .unavailable)
         XCTAssertEqual(viewModel.menuBarRemainingPercent, 80, accuracy: 0.001)
         XCTAssertEqual(
             viewModel.weeklyText(for: claude),

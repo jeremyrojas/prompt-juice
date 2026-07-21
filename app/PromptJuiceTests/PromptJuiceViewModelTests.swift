@@ -1421,6 +1421,82 @@ final class PromptJuiceViewModelTests: XCTestCase {
         }
     }
 
+    func testLiveCodexRefreshMergesBeforeClaudeCoordinatorAndPublishesCoordinatorState() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let claudeSnapshot = Self.alertSnapshots[0]
+        let nextAttemptAt = Self.fixedNow.addingTimeInterval(30)
+        let coordinator = BlockingClaudeUsageCoordinator(
+            state: ClaudeUsageCoordinatorState(
+                access: .subscription(plan: "Max"),
+                refresh: .backingOff(nextAttemptAt: nextAttemptAt),
+                snapshot: claudeSnapshot,
+                legacyBridge: .removable
+            )
+        )
+        let codexSnapshot = Self.healthySnapshots[1]
+        let codexProvider = CountingUsageProviderClient(snapshots: [codexSnapshot])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: codexProvider,
+            claudeUsageCoordinator: coordinator,
+            claudeUsageDogfoodEnabled: true,
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsageQuietly(reason: .manual)
+
+        await waitUntil { viewModel.snapshots.contains(codexSnapshot) }
+        XCTAssertEqual(coordinator.callCount, 1)
+        XCTAssertEqual(coordinator.lastForce, false)
+        XCTAssertEqual(viewModel.claudeAccessState, .checking)
+
+        coordinator.releaseRefresh()
+        await waitUntil { viewModel.claudeAccessState == .subscription(plan: "Max") }
+
+        XCTAssertTrue(viewModel.snapshots.contains(claudeSnapshot))
+        XCTAssertEqual(viewModel.claudeRefreshState, .backingOff(nextAttemptAt: nextAttemptAt))
+        XCTAssertEqual(viewModel.legacyBridgeStatus, .removable)
+    }
+
+    func testNeutralClaudeAuthenticationCategoriesStayOutsideAggregateAndNotifications() async {
+        let neutralStates: [ClaudeAccessState] = [
+            .apiBilling,
+            .externalProvider(.bedrock),
+            .unsupportedAuth,
+        ]
+
+        for neutralState in neutralStates {
+            let fixture = makeFixture()
+            defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+            let coordinator = StaticClaudeUsageCoordinator(
+                state: ClaudeUsageCoordinatorState(
+                    access: neutralState,
+                    refresh: .idle,
+                    snapshot: Self.alertSnapshots[0],
+                    legacyBridge: .none
+                )
+            )
+            let codexSnapshot = Self.healthySnapshots[1]
+            let viewModel = PromptJuiceViewModel(
+                settingsStore: fixture.store,
+                liveCodexProviderClient: StaticUsageProviderClient(snapshots: [codexSnapshot]),
+                claudeUsageCoordinator: coordinator,
+                claudeUsageDogfoodEnabled: true,
+                now: { Self.fixedNow }
+            )
+
+            viewModel.refreshUsageQuietly(reason: .manual)
+            await waitUntil { viewModel.claudeAccessState == neutralState }
+
+            XCTAssertTrue(viewModel.visibleSnapshots.contains { $0.provider == .claude })
+            XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
+            XCTAssertEqual(viewModel.menuBarSeverity, .healthy)
+            XCTAssertEqual(viewModel.menuBarRemainingPercent, codexSnapshot.remainingPercent)
+            XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        }
+    }
+
     func testRefreshReplacesExpiredSnapshotWithOlderSourceTimestamp() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -2448,6 +2524,83 @@ final class PromptJuiceViewModelTests: XCTestCase {
         func releaseRefresh() {
             _ = refreshStarted.wait(timeout: .now() + 1)
             refreshCanFinish.signal()
+        }
+    }
+
+    private struct StaticClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
+        let state: ClaudeUsageCoordinatorState
+
+        func snapshot(
+            now _: Date,
+            reason _: ClaudeRefreshReason,
+            force _: Bool,
+            providerEnabled _: Bool,
+            isAwake _: Bool,
+            isOnline _: Bool
+        ) async -> ClaudeUsageCoordinatorState {
+            state
+        }
+    }
+
+    private final class BlockingClaudeUsageCoordinator: ClaudeUsageSnapshotProviding, @unchecked Sendable {
+        private let state: ClaudeUsageCoordinatorState
+        private let lock = NSLock()
+        private var calls = 0
+        private var recordedForce: Bool?
+        private var refreshContinuation: CheckedContinuation<Void, Never>?
+        private var refreshReleased = false
+
+        init(state: ClaudeUsageCoordinatorState) {
+            self.state = state
+        }
+
+        var callCount: Int {
+            lock.withLock {
+                calls
+            }
+        }
+
+        var lastForce: Bool? {
+            lock.withLock {
+                recordedForce
+            }
+        }
+
+        func snapshot(
+            now _: Date,
+            reason _: ClaudeRefreshReason,
+            force: Bool,
+            providerEnabled _: Bool,
+            isAwake _: Bool,
+            isOnline _: Bool
+        ) async -> ClaudeUsageCoordinatorState {
+            lock.withLock {
+                calls += 1
+                recordedForce = force
+            }
+            await withCheckedContinuation { continuation in
+                let shouldResume = lock.withLock {
+                    if refreshReleased {
+                        return true
+                    }
+                    refreshContinuation = continuation
+                    return false
+                }
+                if shouldResume {
+                    continuation.resume()
+                }
+            }
+            return state
+        }
+
+        func releaseRefresh() {
+            let continuation = lock.withLock {
+                refreshReleased = true
+                let continuation = refreshContinuation
+                refreshContinuation = nil
+                return continuation
+            }
+            continuation?.resume()
         }
     }
 

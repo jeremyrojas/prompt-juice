@@ -783,6 +783,7 @@ final class JuicebarPanelController: NSObject {
 
     func show() {
         viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
+        viewModel.refreshUsageQuietly(reason: .panelOpen)
         let panel = ensurePanel()
         setPanelMode(.anchored)
         applyPanelFrame(panel, force: true)

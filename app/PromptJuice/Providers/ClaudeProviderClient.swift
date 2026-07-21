@@ -562,14 +562,16 @@ final class ClaudeSnapshotCache: @unchecked Sendable {
             defaults: defaults,
             key: Key.lastGoodClaudeSnapshot,
             identity: .claude,
-            cacheSource: .claudeCache
+            cacheSource: .claudeCache,
+            allowsFreshWindowEvidence: false
         )
     }
 
     func save(_ snapshot: ProviderSnapshot) {
         guard snapshot.identity == .claude,
-              snapshot.source == .claudeStatusline,
-              snapshot.confidence != .unavailable else {
+              snapshot.source == .claudeStatusline || snapshot.source == .claudeUsageCLI,
+              snapshot.confidence != .unavailable,
+              snapshot.rateWindow.isAvailable else {
             return
         }
 
@@ -1107,7 +1109,7 @@ private struct ClaudeStatuslineRateLimitWindow: Decodable {
     }
 }
 
-enum ClaudeUsageError: Error, LocalizedError, Equatable {
+enum ClaudeUsageError: Error, LocalizedError, Equatable, Sendable {
     case statuslineCacheUnavailable
     case statuslineCacheStale
     case missingFiveHourRateLimit

@@ -34,7 +34,7 @@ enum ClaudeProbeWorkspaceError: Error, Sendable, Equatable {
     case creationFailed
 }
 
-struct ClaudeProbeWorkspace {
+struct ClaudeProbeWorkspace: @unchecked Sendable {
     let url: URL
     let fileManager: FileManager
 

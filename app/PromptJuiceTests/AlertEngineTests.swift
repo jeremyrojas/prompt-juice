@@ -157,11 +157,11 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
-    func testFreshSessionNeverTriggersUseSoon() {
+    func testCodexFreshSessionNeverTriggersUseSoon() {
         let snapshot = ProviderSnapshot(
-            identity: .claude,
+            identity: .codex,
             rateWindow: .unavailable,
-            source: .claudeStatusline,
+            source: .codexAppServer,
             confidence: .exact,
             updatedAt: now,
             statusDetail: "Fresh window",

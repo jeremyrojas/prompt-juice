@@ -1,4 +1,4 @@
-struct ProviderIdentity: Identifiable, Equatable, Hashable {
+struct ProviderIdentity: Identifiable, Equatable, Hashable, Sendable {
     let provider: UsageProvider
     let displayName: String
 

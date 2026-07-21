@@ -113,6 +113,21 @@ struct ProviderWindowSnapshotCache {
     let key: String
     let identity: ProviderIdentity
     let cacheSource: SnapshotSource
+    let allowsFreshWindowEvidence: Bool
+
+    init(
+        defaults: UserDefaults,
+        key: String,
+        identity: ProviderIdentity,
+        cacheSource: SnapshotSource,
+        allowsFreshWindowEvidence: Bool = true
+    ) {
+        self.defaults = defaults
+        self.key = key
+        self.identity = identity
+        self.cacheSource = cacheSource
+        self.allowsFreshWindowEvidence = allowsFreshWindowEvidence
+    }
 
     func save(_ snapshot: ProviderSnapshot) {
         guard snapshot.identity == identity else {
@@ -179,8 +194,10 @@ struct ProviderWindowSnapshotCache {
             updatedAt: cached.session?.updatedAt ?? newestUpdatedAt,
             weeklyUpdatedAt: cached.weekly?.updatedAt,
             statusDetail: failureDetail,
-            isFreshSessionWindow: validSession == nil,
-            isFreshWeeklyWindow: validWeekly == nil && cached.weekly != nil
+            isFreshSessionWindow: allowsFreshWindowEvidence && validSession == nil,
+            isFreshWeeklyWindow: allowsFreshWindowEvidence
+                && validWeekly == nil
+                && cached.weekly != nil
         )
     }
 

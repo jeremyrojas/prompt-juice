@@ -1,4 +1,4 @@
-enum UsageProvider: String, CaseIterable, Identifiable {
+enum UsageProvider: String, CaseIterable, Identifiable, Sendable {
     case claude = "Claude"
     case codex = "Codex"
 

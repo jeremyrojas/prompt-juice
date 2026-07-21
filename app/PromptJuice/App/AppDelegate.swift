@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         observeViewModel()
         observeHostLifecycle()
         syncClaudeBridgeScript(reason: "launch")
+        viewModel.refreshUsageQuietly(reason: .launch)
         startTicker()
         startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
@@ -168,10 +169,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func refreshAfterWake() {
         syncClaudeBridgeScript(reason: "wake")
-        refreshAfterHostLifecycleChange()
+        performHostLifecycleRefresh(reason: .wake)
     }
 
     @objc private func refreshAfterHostLifecycleChange() {
+        performHostLifecycleRefresh(reason: .foreground)
+    }
+
+    private func performHostLifecycleRefresh(reason: ClaudeRefreshReason) {
         let refreshDate = Date()
 
         if let lastLifecycleRefreshAt,
@@ -182,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastLifecycleRefreshAt = refreshDate
         startClaudeStatusCacheMonitor()
         viewModel.refreshClaudeStatusCacheNow(reason: "host lifecycle")
-        viewModel.refreshUsageQuietly()
+        viewModel.refreshUsageQuietly(reason: reason)
         updateStatusItemGlyph(force: true)
         processUseSoonNotifications()
     }

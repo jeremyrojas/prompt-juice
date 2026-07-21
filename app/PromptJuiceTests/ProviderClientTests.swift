@@ -438,7 +438,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.updatedAt, now)
     }
 
-    func testClaudeStatuslineReaderTreatsZombieOnlySessionsAsFreshWindow() throws {
+    func testClaudeStatuslineReaderLeavesZombieOnlySessionsUnavailable() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
@@ -455,12 +455,12 @@ final class ProviderClientTests: XCTestCase {
 
         let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
 
-        XCTAssertTrue(snapshot.isFreshSessionWindow, "Expired session files now mean a fresh Claude window.")
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
         XCTAssertEqual(snapshot.confidence, .exact)
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertNil(snapshot.rateWindow.resetAt)
-        XCTAssertEqual(snapshot.remainingPercent, 100)
-        XCTAssertTrue(snapshot.isAvailable)
+        XCTAssertEqual(snapshot.remainingPercent, 0)
+        XCTAssertFalse(snapshot.isAvailable)
     }
 
     func testClaudeStatuslineReaderUsesMaxUsedWithinSameWindow() throws {
@@ -520,7 +520,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.rateWindow.resetAt, now.addingTimeInterval(4 * 60 * 60))
     }
 
-    func testClaudeStatuslineReaderCarriesWeeklyForwardWithFreshSession() throws {
+    func testClaudeStatuslineReaderCarriesWeeklyWithoutFreshSession() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let cacheURL = root.appendingPathComponent("ClaudeStatus/latest.json")
@@ -540,13 +540,13 @@ final class ProviderClientTests: XCTestCase {
 
         let snapshot = try ClaudeStatuslineSnapshotReader(cacheURL: cacheURL).snapshot(now: now)
 
-        XCTAssertTrue(snapshot.isFreshSessionWindow, "Expired five-hour windows now produce the fresh state.")
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
         XCTAssertEqual(snapshot.confidence, .stale)
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 22)
         XCTAssertEqual(snapshot.weeklyUpdatedAt, oldUpdate)
-        XCTAssertEqual(snapshot.remainingPercent, 100)
-        XCTAssertEqual(snapshot.effectiveRemainingPercent, 78)
+        XCTAssertEqual(snapshot.remainingPercent, 0)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 0)
     }
 
     func testClaudeStatuslineReaderShowsFreshWeekWhenWeeklyResetPassed() throws {
@@ -905,7 +905,7 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertEqual(snapshot.effectiveRemainingPercent, 56)
     }
 
-    func testClaudeSnapshotCacheCarriesValidWeeklyAsFreshSession() throws {
+    func testClaudeSnapshotCacheCarriesWeeklyWithoutFabricatingFreshSession() throws {
         let suiteName = "PromptJuiceClaudeWeeklyOnlyCacheTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -937,11 +937,12 @@ final class ProviderClientTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(snapshot.isFreshSessionWindow)
+        XCTAssertFalse(snapshot.isFreshSessionWindow)
         XCTAssertEqual(snapshot.rateWindow, .unavailable)
         XCTAssertEqual(snapshot.weeklyWindow?.usedPercent, 35)
-        XCTAssertEqual(snapshot.remainingPercent, 100)
-        XCTAssertEqual(snapshot.effectiveRemainingPercent, 65)
+        XCTAssertEqual(snapshot.remainingPercent, 0)
+        XCTAssertEqual(snapshot.weeklyRemainingPercent, 65)
+        XCTAssertEqual(snapshot.effectiveRemainingPercent, 0)
     }
 
     func testClaudeProviderSkipsLocalEstimateWhenStatuslineCacheIsUnavailableByDefault() {

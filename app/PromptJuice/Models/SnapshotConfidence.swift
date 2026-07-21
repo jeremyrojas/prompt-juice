@@ -1,4 +1,4 @@
-enum SnapshotConfidence: String, Equatable {
+enum SnapshotConfidence: String, Equatable, Sendable {
     case exact
     case estimated
     case stale
