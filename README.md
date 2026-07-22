@@ -18,6 +18,10 @@ That orange window is your cue to spend bigger: start the ambitious task, fan
 work out to more agents, use fast mode, or reach for a stronger model while the
 capacity is already yours. Squeeze the window before the window resets.
 
+<div align="center">
+  <img src="design/assets/promptjuice-juicebar.png" alt="PromptJuice Juice Bar: Claude at 97% left with a healthy green bar resetting in 2h 37m, and Codex at 61% left flagged Use soon with an orange bar resetting in 14m" width="440">
+</div>
+
 ## Quick Start
 
 ### Requirements
