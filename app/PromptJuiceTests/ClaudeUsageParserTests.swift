@@ -126,6 +126,17 @@ final class ClaudeUsageParserTests: XCTestCase {
         XCTAssertEqual(malformedTimestamp.failure, .malformedMeasurementTimestamp)
     }
 
+    func testRateLimitDetectionIgnoresStartupTextOutsideLatestUsagePanel() throws {
+        let result = parse(
+            "Usage/startup-rate-limit-valid-panel.txt",
+            now: easternDate(2026, 7, 21, 10, 0)
+        )
+
+        XCTAssertEqual(result.reading?.session.usedPercent, 42)
+        XCTAssertFalse(result.rateLimitObserved)
+        XCTAssertNil(result.failure)
+    }
+
     func testMeasurementTimestampFormatsAndDSTOffsets() throws {
         let now = easternDate(2026, 11, 3, 12, 0)
         let twelveHour = parse("Usage/as-of-12-hour.txt", now: now)

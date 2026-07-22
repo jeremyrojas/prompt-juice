@@ -9,7 +9,6 @@ enum SettingsWindowMode {
 @MainActor
 final class SettingsWindowState: ObservableObject {
     @Published var mode: SettingsWindowMode = .settings
-    @Published var isClaudeSetupPresented = false
     @Published var claudeGuidanceJourney: ClaudeGuidanceJourney?
     @Published var firstRunEnabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases)
 }
@@ -20,6 +19,12 @@ final class SettingsWindowController: NSWindowController {
     private let onFirstRunFinished: () -> Void
     private let state = SettingsWindowState()
     private var didCenter = false
+
+#if DEBUG
+    var claudeGuidanceJourneyForTesting: ClaudeGuidanceJourney? {
+        state.claudeGuidanceJourney
+    }
+#endif
 
     init(
         viewModel: PromptJuiceViewModel,
@@ -35,7 +40,10 @@ final class SettingsWindowController: NSWindowController {
         nil
     }
 
-    func show(presentingClaudeSetup: Bool = false) {
+    func show(claudeJourney: ClaudeGuidanceJourney? = nil) {
+        if let claudeJourney {
+            state.claudeGuidanceJourney = claudeJourney
+        }
         viewModel.refreshUsageQuietly(reason: .panelOpen)
 
         let window = ensureWindow()
@@ -50,12 +58,6 @@ final class SettingsWindowController: NSWindowController {
 
         window.makeKeyAndOrderFront(nil)
 
-        if presentingClaudeSetup {
-            state.claudeGuidanceJourney = nil
-            DispatchQueue.main.async { [weak self] in
-                self?.state.claudeGuidanceJourney = self?.viewModel.claudePresentation.guidanceJourney
-            }
-        }
     }
 
     func showFirstRun() {

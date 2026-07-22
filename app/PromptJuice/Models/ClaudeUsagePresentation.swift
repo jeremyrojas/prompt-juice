@@ -83,7 +83,8 @@ struct ClaudeFreshnessFormatter {
         if calendar.isDate(date, inSameDayAs: now) {
             return "Updated at \(clockTime(date))"
         }
-        if calendar.isDateInYesterday(date) {
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
             return "Updated yesterday at \(clockTime(date))"
         }
         return "Updated \(monthDay(date)) at \(clockTime(date))"
@@ -245,10 +246,11 @@ struct ClaudeUsagePresentation: Sendable, Equatable {
                 noReadingStatus: "Update needed",
                 noReadingTooltip: "Update Claude Code to read your plan usage",
                 settingsWithoutReading: "Update Claude Code to track plan usage",
-                settingsWithEstimate: "Update Claude Code to track plan usage · showing local estimate",
+                settingsWithEstimate: "Update Claude Code to track plan usage",
                 footnote: "This is an estimate from Claude Code's activity logs on this Mac. Update Claude Code and PromptJuice switches to direct readings automatically.",
                 popoverStatus: "PromptJuice needs Claude Code \(minimum) or newer to read plan usage.",
                 snapshot: snapshot,
+                showsReadingWhenAvailable: false,
                 now: now,
                 freshness: freshness
             )
@@ -421,14 +423,17 @@ struct ClaudeUsagePresentation: Sendable, Equatable {
         footnote: String,
         popoverStatus: String,
         snapshot: ProviderSnapshot?,
+        showsReadingWhenAvailable: Bool = true,
         now: Date,
         freshness: ClaudeFreshnessFormatter
     ) -> ClaudeUsagePresentation {
         let hasReading = snapshot?.isAvailable == true
         let isEstimate = snapshot?.confidence == .estimated
-        let showsReading = hasReading
+        let showsReading = hasReading && showsReadingWhenAvailable
         let tooltip: String
-        if isEstimate {
+        if !showsReading {
+            tooltip = noReadingTooltip
+        } else if isEstimate {
             tooltip = "Estimated from Claude Code's activity logs on this Mac"
         } else if hasReading, let snapshot {
             tooltip = "From Claude Code · \(freshness.clause(for: snapshot.updatedAt, now: now))"
@@ -439,7 +444,7 @@ struct ClaudeUsagePresentation: Sendable, Equatable {
         return ClaudeUsagePresentation(
             state: state,
             showsReading: showsReading,
-            showsClock: hasReading && !isEstimate,
+            showsClock: showsReading && !isEstimate,
             rowStatus: showsReading ? nil : noReadingStatus,
             tooltip: tooltip,
             settingsSubtitle: isEstimate ? settingsWithEstimate : settingsWithoutReading,

@@ -236,7 +236,6 @@ private actor ClaudeUIPreviewCoordinator: ClaudeUsageSnapshotProviding {
         reason _: ClaudeRefreshReason,
         force _: Bool,
         providerEnabled _: Bool,
-        isAwake _: Bool,
         isOnline _: Bool
     ) async -> ClaudeUsageCoordinatorState {
         state

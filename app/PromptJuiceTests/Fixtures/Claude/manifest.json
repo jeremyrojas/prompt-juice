@@ -233,6 +233,12 @@
       ]
     },
     {
+      "path": "Usage/startup-rate-limit-valid-panel.txt",
+      "covers": [
+        "usage-rate-limit-latest-panel-boundary"
+      ]
+    },
+    {
       "path": "Usage/truncated.txt",
       "covers": [
         "usage-truncated"

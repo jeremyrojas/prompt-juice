@@ -1,0 +1,9 @@
+Claude Code v2.1.214
+What's new
+Fixed a rate limit reached warning after too many requests returned HTTP 429.
+$
+you: /usage
+Settings  Status  Config  Usage  Stats
+Current session
+42% used
+Resets at 3:14 PM

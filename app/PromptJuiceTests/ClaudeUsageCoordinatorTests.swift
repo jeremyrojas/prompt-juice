@@ -39,6 +39,17 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
                 for: context(
                     now: now,
                     reason: .timer,
+                    lastSuccessAt: now.addingTimeInterval(-60),
+                    nextAttemptAt: now
+                )
+            ),
+            .probe
+        )
+        XCTAssertEqual(
+            schedule.decision(
+                for: context(
+                    now: now,
+                    reason: .timer,
                     lastSuccessAt: now.addingTimeInterval(-60)
                 )
             ),
@@ -81,6 +92,17 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             ),
             .skipBudget
         )
+        XCTAssertEqual(
+            schedule.decision(
+                for: context(
+                    now: now,
+                    reason: .timer,
+                    nextAttemptAt: now,
+                    recentAttempts: fourAutomatic
+                )
+            ),
+            .skipBudget
+        )
         let sixCombined = fourAutomatic + [
             ClaudeUsageAttempt(date: now.addingTimeInterval(-300), reason: .manual),
             ClaudeUsageAttempt(date: now.addingTimeInterval(-360), reason: .manual),
@@ -104,12 +126,6 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         )
         XCTAssertEqual(
             schedule.decision(
-                for: context(now: now, reason: .timer, isAwake: false)
-            ),
-            .skipSleeping
-        )
-        XCTAssertEqual(
-            schedule.decision(
                 for: context(now: now, reason: .timer, isOnline: false)
             ),
             .skipOffline
@@ -126,6 +142,8 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             let next = persistence.advanceBackoff(from: now)
             XCTAssertEqual(next, now.addingTimeInterval(TimeInterval(minutes * 60)))
             now = next.addingTimeInterval(1)
+            XCTAssertEqual(persistence.metadata(now: now).nextAttemptAt, next)
+            persistence.recordAttempt(at: now, reason: .timer)
             XCTAssertNil(persistence.metadata(now: now).nextAttemptAt)
         }
 
@@ -385,6 +403,105 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(probe.callCount, 1)
     }
 
+    func testElapsedTimerHonorsSuccessTTLAndDueCooldownRetry() async throws {
+        let fixture = try makeCoordinatorFixture()
+        defer { fixture.remove() }
+        let start = date(2026, 7, 21, 14, 0)
+        let manualRateLimitAt = start.addingTimeInterval(5 * 60)
+        let cooldownRetryAt = start.addingTimeInterval(10 * 60)
+        let ttlRetryAt = cooldownRetryAt.addingTimeInterval(15 * 60)
+        let probe = ScriptedClaudeUsageProbe([
+            successfulProbe(at: start, usedPercent: 10),
+            .parsed(ClaudeUsageParseResult(
+                reading: reading(
+                    usedPercent: 20,
+                    resetAt: manualRateLimitAt.addingTimeInterval(3_600),
+                    measuredAt: manualRateLimitAt,
+                    isSaved: false
+                ),
+                rateLimitObserved: true,
+                failure: nil
+            )),
+            successfulProbe(at: cooldownRetryAt, usedPercent: 30),
+            successfulProbe(at: ttlRetryAt, usedPercent: 40),
+        ])
+        let coordinator = makeCoordinator(
+            fixture: fixture,
+            access: .subscription(plan: "Max"),
+            probe: probe
+        )
+
+        _ = await coordinator.snapshot(now: start, reason: .launch)
+        let fresh = await coordinator.snapshot(
+            now: start.addingTimeInterval(4 * 60),
+            reason: .timer
+        )
+        XCTAssertEqual(fresh.scheduleDecision, .skipFresh)
+        XCTAssertEqual(probe.callCount, 1)
+
+        let rateLimited = await coordinator.snapshot(
+            now: manualRateLimitAt,
+            reason: .manual,
+            force: true
+        )
+        XCTAssertEqual(rateLimited.refresh, .backingOff(nextAttemptAt: cooldownRetryAt))
+
+        let coolingDown = await coordinator.snapshot(
+            now: cooldownRetryAt.addingTimeInterval(-1),
+            reason: .timer
+        )
+        XCTAssertEqual(
+            coolingDown.scheduleDecision,
+            .skipCooldown(nextAttemptAt: cooldownRetryAt)
+        )
+        XCTAssertEqual(probe.callCount, 2)
+
+        _ = await coordinator.snapshot(now: cooldownRetryAt, reason: .timer)
+        XCTAssertEqual(probe.callCount, 3)
+
+        let freshAfterRecovery = await coordinator.snapshot(
+            now: ttlRetryAt.addingTimeInterval(-1),
+            reason: .timer
+        )
+        XCTAssertEqual(freshAfterRecovery.scheduleDecision, .skipFresh)
+        XCTAssertEqual(probe.callCount, 3)
+
+        _ = await coordinator.snapshot(now: ttlRetryAt, reason: .timer)
+        XCTAssertEqual(probe.callCount, 4)
+    }
+
+    func testCoordinatorReportsManualDebounceDecision() async throws {
+        let fixture = try makeCoordinatorFixture()
+        defer { fixture.remove() }
+        let now = date(2026, 7, 21, 14, 0)
+        let probe = ScriptedClaudeUsageProbe([
+            .parsed(ClaudeUsageParseResult(
+                reading: reading(
+                    usedPercent: 42,
+                    resetAt: now.addingTimeInterval(3_600),
+                    measuredAt: now,
+                    isSaved: false
+                ),
+                rateLimitObserved: false,
+                failure: nil
+            )),
+        ])
+        let coordinator = makeCoordinator(
+            fixture: fixture,
+            access: .subscription(plan: "Max"),
+            probe: probe
+        )
+
+        _ = await coordinator.snapshot(now: now, reason: .manual, force: true)
+        let debounced = await coordinator.snapshot(
+            now: now.addingTimeInterval(30),
+            reason: .manual
+        )
+
+        XCTAssertEqual(debounced.scheduleDecision, .skipDebounce)
+        XCTAssertEqual(probe.callCount, 1)
+    }
+
     func testAllFourSignedOutSnapshotCombinationsRemainIndependent() async throws {
         for reason in [ClaudeSignInReason.initial, .reauthenticationRequired] {
             for hasEstimate in [true, false] {
@@ -543,8 +660,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
                 defaults: fixture.defaults,
                 key: "coordinator"
             ),
-            environment: [:],
-            featureEnabled: true
+            environment: [:]
         )
     }
 
@@ -553,7 +669,6 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         reason: ClaudeRefreshReason,
         force: Bool = false,
         providerEnabled: Bool = true,
-        isAwake: Bool = true,
         isOnline: Bool = true,
         lastAttemptAt: Date? = nil,
         lastSuccessAt: Date? = nil,
@@ -565,13 +680,28 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             reason: reason,
             force: force,
             providerEnabled: providerEnabled,
-            isAwake: isAwake,
             isOnline: isOnline,
             lastAttemptAt: lastAttemptAt,
             lastSuccessAt: lastSuccessAt,
             nextAttemptAt: nextAttemptAt,
             recentAttempts: recentAttempts
         )
+    }
+
+    private func successfulProbe(
+        at date: Date,
+        usedPercent: Double
+    ) -> ClaudeUsageProbeOutcome {
+        .parsed(ClaudeUsageParseResult(
+            reading: reading(
+                usedPercent: usedPercent,
+                resetAt: date.addingTimeInterval(3_600),
+                measuredAt: date,
+                isSaved: false
+            ),
+            rateLimitObserved: false,
+            failure: nil
+        ))
     }
 
     private func reading(

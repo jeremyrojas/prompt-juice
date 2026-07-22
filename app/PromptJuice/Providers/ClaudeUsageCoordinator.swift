@@ -106,7 +106,6 @@ protocol ClaudeUsageSnapshotProviding: Sendable {
         reason: ClaudeRefreshReason,
         force: Bool,
         providerEnabled: Bool,
-        isAwake: Bool,
         isOnline: Bool
     ) async -> ClaudeUsageCoordinatorState
 }
@@ -146,14 +145,9 @@ final class ClaudeUsagePersistence: @unchecked Sendable {
             now.timeIntervalSince($0.date) >= 0
                 && now.timeIntervalSince($0.date) < 60 * 60
         }
-        var changed = attempts != record.recentAttempts
+        let changed = attempts != record.recentAttempts
         record.recentAttempts = attempts
 
-        if let nextAttemptAt = record.nextAttemptAt,
-           nextAttemptAt <= now {
-            record.nextAttemptAt = nil
-            changed = true
-        }
         if changed {
             saveRecord(record)
         }
@@ -176,6 +170,10 @@ final class ClaudeUsagePersistence: @unchecked Sendable {
 
     func recordAttempt(at date: Date, reason: ClaudeRefreshReason) {
         mutate { record in
+            if let nextAttemptAt = record.nextAttemptAt,
+               nextAttemptAt <= date {
+                record.nextAttemptAt = nil
+            }
             record.lastAttemptAt = date
             record.recentAttempts = record.recentAttempts.filter {
                 date.timeIntervalSince($0.date) >= 0
@@ -328,7 +326,6 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
     private let schedule: ClaudeUsageSchedule
     private let environment: [String: String]
     private let calendar: Calendar
-    private let featureEnabled: Bool
 
     private var state: ClaudeUsageCoordinatorState
     private var inFlight: (id: UUID, task: Task<Execution, Never>)?
@@ -343,8 +340,7 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         persistence: ClaudeUsagePersistence = ClaudeUsagePersistence(),
         schedule: ClaudeUsageSchedule = ClaudeUsageSchedule(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        calendar: Calendar = Calendar(identifier: .gregorian),
-        featureEnabled: Bool = true
+        calendar: Calendar = Calendar(identifier: .gregorian)
     ) {
         self.prerequisiteChecker = prerequisiteChecker
         self.usageProbe = usageProbe
@@ -355,7 +351,6 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         self.schedule = schedule
         self.environment = environment
         self.calendar = calendar
-        self.featureEnabled = featureEnabled
         state = ClaudeUsageCoordinatorState(
             access: persistence.authenticationFingerprint().flatMap {
                 ClaudeAccessState(persistenceFingerprint: $0)
@@ -374,21 +369,11 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         reason: ClaudeRefreshReason,
         force: Bool = false,
         providerEnabled: Bool = true,
-        isAwake: Bool = true,
         isOnline: Bool = true
     ) async -> ClaudeUsageCoordinatorState {
         if let inFlight {
             let execution = await inFlight.task.value
             applyIfNeeded(execution, id: inFlight.id, now: now)
-            return state
-        }
-
-        guard featureEnabled else {
-            state = ClaudeUsageCoordinatorState(
-                access: state.access,
-                refresh: .idle,
-                snapshot: fallbackSnapshot(primary: nil, now: now)
-            )
             return state
         }
 
@@ -399,7 +384,6 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
                 reason: reason,
                 force: force,
                 providerEnabled: providerEnabled,
-                isAwake: isAwake,
                 isOnline: isOnline,
                 lastAttemptAt: metadata.lastAttemptAt,
                 lastSuccessAt: metadata.lastSuccessAt,
@@ -584,14 +568,15 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             refresh = .backingOff(nextAttemptAt: nextAttemptAt)
         case .skipOffline:
             refresh = .failed(.offline)
-        case .skipDisabled, .skipSleeping, .skipDebounce, .skipFresh, .skipBudget, .probe:
+        case .skipDisabled, .skipDebounce, .skipFresh, .skipBudget, .probe:
             refresh = .idle
         }
 
         return ClaudeUsageCoordinatorState(
             access: state.access,
             refresh: refresh,
-            snapshot: fallbackSnapshot(primary: state.snapshot, now: now)
+            snapshot: fallbackSnapshot(primary: state.snapshot, now: now),
+            scheduleDecision: decision
         )
     }
 

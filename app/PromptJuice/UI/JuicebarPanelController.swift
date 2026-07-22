@@ -640,7 +640,7 @@ final class PanelToolTipView: NSView {
 final class JuicebarPanelController: NSObject {
     private let viewModel: PromptJuiceViewModel
     private let settingsStore: PromptJuiceSettingsStore
-    private let onClaudeSettingsRequested: (Bool) -> Void
+    private let onClaudeGuidanceRequested: (ClaudeGuidanceJourney) -> Void
     private let onSettingsRequested: () -> Void
     private var panel: NSWindow?
     private var panelMode: JuicebarPanelMode = .anchored
@@ -727,12 +727,12 @@ final class JuicebarPanelController: NSObject {
     init(
         viewModel: PromptJuiceViewModel,
         settingsStore: PromptJuiceSettingsStore = .shared,
-        onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in },
+        onClaudeGuidanceRequested: @escaping (ClaudeGuidanceJourney) -> Void = { _ in },
         onSettingsRequested: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
         self.settingsStore = settingsStore
-        self.onClaudeSettingsRequested = onClaudeSettingsRequested
+        self.onClaudeGuidanceRequested = onClaudeGuidanceRequested
         self.onSettingsRequested = onSettingsRequested
         super.init()
 
@@ -864,8 +864,8 @@ final class JuicebarPanelController: NSObject {
             onClose: { [weak self] in
                 self?.handleClick(.close)
             },
-            onClaudeJourney: { [weak self] _ in
-                self?.openClaudeGuidanceIfAvailable()
+            onClaudeJourney: { [weak self] journey in
+                self?.openClaudeGuidance(journey)
             }
         )
 
@@ -928,9 +928,9 @@ final class JuicebarPanelController: NSObject {
         case .provider(let provider):
             if provider == .claude,
                !viewModel.claudePresentation.showsReading,
-               viewModel.claudePresentation.guidanceJourney != nil {
+               let journey = viewModel.claudePresentation.guidanceJourney {
                 dismissSurface()
-                onClaudeSettingsRequested(true)
+                onClaudeGuidanceRequested(journey)
                 return
             }
         case .enableNotifications:
@@ -945,12 +945,9 @@ final class JuicebarPanelController: NSObject {
         }
     }
 
-    private func openClaudeGuidanceIfAvailable() {
-        guard viewModel.claudePresentation.guidanceJourney != nil else {
-            return
-        }
+    private func openClaudeGuidance(_ journey: ClaudeGuidanceJourney) {
         dismissSurface()
-        onClaudeSettingsRequested(true)
+        onClaudeGuidanceRequested(journey)
     }
 
     @objc private func showSettingsFromPanelMenu() {

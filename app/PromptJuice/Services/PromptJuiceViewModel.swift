@@ -115,14 +115,18 @@ final class PromptJuiceViewModel: ObservableObject {
     private let claudeUsageCoordinator: (any ClaudeUsageSnapshotProviding)?
     private let claudeGuidanceChecker: any ClaudeGuidanceChecking
     private let claudeExecutableLocator: @Sendable () -> ClaudeExecutableLocation?
+    private let claudeTimerCheckInterval: TimeInterval
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
+    private var claudeTimerRefreshTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
     private var hasPendingRefresh = false
     private var pendingRefreshCompletionMessage: String?
     private var pendingRefreshCompletions: [RefreshCompletion] = []
     private var pendingClaudeRefreshReason: ClaudeRefreshReason?
     private var expiredWindowRefreshKeys = Set<String>()
+    private var lastClaudeTimerCheckAt: Date?
+    private var isNetworkOnline = true
 
     init(
         settingsStore: PromptJuiceSettingsStore = .shared,
@@ -138,6 +142,7 @@ final class PromptJuiceViewModel: ObservableObject {
         initialClaudeAccessState: ClaudeAccessState? = nil,
         initialClaudeRefreshState: ClaudeRefreshState? = nil,
         alertEngine: AlertEngine = AlertEngine(),
+        claudeTimerCheckInterval: TimeInterval = 60,
         now: @escaping () -> Date = Date.init
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
@@ -150,6 +155,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.liveCodexProviderClient = liveCodexClient
         self.claudeGuidanceChecker = claudeGuidanceChecker
         self.claudeExecutableLocator = claudeExecutableLocator
+        self.claudeTimerCheckInterval = claudeTimerCheckInterval
         self.claudeUsageCoordinator = if let claudeUsageCoordinator {
             claudeUsageCoordinator
         } else if liveClaudeProviderClient != nil {
@@ -616,15 +622,23 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func refreshUsage() {
-        actionMessage = "Refreshing \(sourceMode.title.lowercased())."
+        actionMessage = "Refreshing usage."
         refreshSnapshotsInBackground(
             claudeReason: .manual,
-            completionMessage: "\(sourceMode.title) refreshed."
+            completionMessage: "Usage refreshed."
         )
     }
 
     func refreshUsageQuietly(reason: ClaudeRefreshReason = .timer) {
         refreshSnapshotsInBackground(claudeReason: reason)
+    }
+
+    func setNetworkOnline(_ isOnline: Bool) {
+        let wasOnline = isNetworkOnline
+        isNetworkOnline = isOnline
+        if isOnline, !wasOnline {
+            refreshUsageQuietly(reason: .foreground)
+        }
     }
 
     func setUsageSourceMode(_ mode: UsageSourceMode) {
@@ -735,7 +749,39 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func tick() {
         refreshExpiredSnapshotsIfNeeded()
+        refreshClaudeOnTimerIfNeeded()
         objectWillChange.send()
+    }
+
+    private func refreshClaudeOnTimerIfNeeded() {
+        let checkDate = now()
+        guard activeRefreshID == nil,
+              claudeTimerRefreshTask == nil,
+              shouldRefreshLiveProvidersIndependently,
+              let claudeUsageCoordinator,
+              enabledProviders.contains(.claude),
+              isNetworkOnline,
+              lastClaudeTimerCheckAt.map({
+                  checkDate.timeIntervalSince($0) >= claudeTimerCheckInterval
+              }) ?? true else {
+            return
+        }
+
+        lastClaudeTimerCheckAt = checkDate
+        claudeTimerRefreshTask = Task { [weak self] in
+            let state = await claudeUsageCoordinator.snapshot(
+                now: checkDate,
+                reason: .timer,
+                force: false,
+                providerEnabled: true,
+                isOnline: true
+            )
+            guard !Task.isCancelled else {
+                return
+            }
+            self?.applyClaudeCoordinatorState(state)
+            self?.claudeTimerRefreshTask = nil
+        }
     }
 
     private func refreshExpiredSnapshotsIfNeeded() {
@@ -1229,8 +1275,10 @@ final class PromptJuiceViewModel: ObservableObject {
         let codexProviderClient = liveCodexProviderClient
         let claudeUsageCoordinator = claudeUsageCoordinator
         let claudeProviderEnabled = enabledProviders.contains(.claude)
+        let networkOnline = isNetworkOnline
 
         refreshTask = Task.detached(priority: .userInitiated) { [weak self] in
+            var claudeScheduleDecision: ClaudeUsageScheduleDecision?
             await withTaskGroup(of: LiveProviderRefreshResult.self) { group in
                 if let claudeUsageCoordinator {
                     group.addTask {
@@ -1240,8 +1288,7 @@ final class PromptJuiceViewModel: ObservableObject {
                             reason: claudeReason,
                             force: false,
                             providerEnabled: claudeProviderEnabled,
-                            isAwake: true,
-                            isOnline: true
+                            isOnline: networkOnline
                         )
                         return .claudeCoordinator(state)
                     }
@@ -1263,6 +1310,9 @@ final class PromptJuiceViewModel: ObservableObject {
                 }
 
                 for await result in group {
+                    if case .claudeCoordinator(let state) = result {
+                        claudeScheduleDecision = state.scheduleDecision
+                    }
                     await MainActor.run { [weak self] in
                         switch result {
                         case .claudeCoordinator(let state):
@@ -1277,9 +1327,13 @@ final class PromptJuiceViewModel: ObservableObject {
             }
 
             await MainActor.run { [weak self] in
+                let resolvedCompletionMessage = claudeReason == .manual
+                    && claudeScheduleDecision == .skipDebounce
+                    ? "Just checked · up to date"
+                    : completionMessage
                 self?.finishLiveProviderRefresh(
                     refreshID: refreshID,
-                    completionMessage: completionMessage,
+                    completionMessage: resolvedCompletionMessage,
                     completion: completion
                 )
             }
@@ -1332,10 +1386,23 @@ final class PromptJuiceViewModel: ObservableObject {
             return
         }
 
+        applyClaudeCoordinatorState(coordinatorState, refreshID: refreshID)
+    }
+
+    private func applyClaudeCoordinatorState(
+        _ coordinatorState: ClaudeUsageCoordinatorState,
+        refreshID: UUID? = nil
+    ) {
         claudeAccessState = coordinatorState.access
         claudeRefreshState = coordinatorState.refresh
-        if let snapshot = coordinatorState.snapshot {
+        guard let snapshot = coordinatorState.snapshot else {
+            return
+        }
+
+        if let refreshID {
             mergeLiveRefreshSnapshot(snapshot, refreshID: refreshID)
+        } else {
+            _ = mergeSnapshotIfNewer(snapshot)
         }
     }
 

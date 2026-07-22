@@ -57,7 +57,9 @@ struct ClaudeUsageParser {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let lowercasedText = visibleText.lowercased()
-        let rateLimitObserved = Self.containsRateLimitSignal(lowercasedText)
+        let rateLimitObserved = Self.latestUsagePanelText(in: visibleText)
+            .map { Self.containsRateLimitSignal($0.lowercased()) }
+            ?? false
         let containsUsagePanel = lowercasedText.contains("usage")
 
         let measurementLines = lines.filter { $0.lowercased().hasPrefix("as of ") }
@@ -261,6 +263,36 @@ struct ClaudeUsageParser {
             || text.contains("rate limit reached")
             || text.contains("too many requests")
             || text.contains("http 429")
+    }
+
+    private static func latestUsagePanelText(in text: String) -> String? {
+        let panelMarkers = [
+            #"(?im)^[ \t]*you:[ \t]*/usage[ \t]*$"#,
+            #"(?im)^[ \t]*settings[ \t]+status[ \t]+config[ \t]+usage[ \t]+stats[ \t]*$"#,
+            #"(?im)^[ \t]*usage[ \t]*$"#,
+        ]
+        var latestStart: String.Index?
+
+        for pattern in panelMarkers {
+            guard let expression = try? NSRegularExpression(pattern: pattern) else {
+                continue
+            }
+            let matches = expression.matches(
+                in: text,
+                range: NSRange(text.startIndex..<text.endIndex, in: text)
+            )
+            for match in matches {
+                guard let range = Range(match.range, in: text) else {
+                    continue
+                }
+                if let latestStart, range.lowerBound <= latestStart {
+                    continue
+                }
+                latestStart = range.lowerBound
+            }
+        }
+
+        return latestStart.map { String(text[$0...]) }
     }
 
     private static func windowKind(for line: String) -> ClaudeUsageWindowKind? {

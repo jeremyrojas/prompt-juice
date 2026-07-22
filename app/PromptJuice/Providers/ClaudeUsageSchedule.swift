@@ -24,7 +24,6 @@ struct ClaudeUsageScheduleContext: Sendable, Equatable {
     let reason: ClaudeRefreshReason
     let force: Bool
     let providerEnabled: Bool
-    let isAwake: Bool
     let isOnline: Bool
     let lastAttemptAt: Date?
     let lastSuccessAt: Date?
@@ -35,7 +34,6 @@ struct ClaudeUsageScheduleContext: Sendable, Equatable {
 enum ClaudeUsageScheduleDecision: Sendable, Equatable {
     case probe
     case skipDisabled
-    case skipSleeping
     case skipOffline
     case skipCooldown(nextAttemptAt: Date)
     case skipDebounce
@@ -53,15 +51,17 @@ struct ClaudeUsageSchedule: Sendable {
         guard context.providerEnabled else {
             return .skipDisabled
         }
-        guard context.isAwake else {
-            return .skipSleeping
-        }
         guard context.isOnline else {
             return .skipOffline
         }
-        if let nextAttemptAt = context.nextAttemptAt,
-           nextAttemptAt > context.now {
-            return .skipCooldown(nextAttemptAt: nextAttemptAt)
+        let cooldownRetryIsDue: Bool
+        if let nextAttemptAt = context.nextAttemptAt {
+            if nextAttemptAt > context.now {
+                return .skipCooldown(nextAttemptAt: nextAttemptAt)
+            }
+            cooldownRetryIsDue = true
+        } else {
+            cooldownRetryIsDue = false
         }
 
         let recent = context.recentAttempts.filter {
@@ -74,6 +74,10 @@ struct ClaudeUsageSchedule: Sendable {
         if context.reason.isAutomatic,
            recent.filter({ $0.reason.isAutomatic }).count >= Self.automaticHourlyBudget {
             return .skipBudget
+        }
+
+        if cooldownRetryIsDue {
+            return .probe
         }
 
         if context.reason == .manual,

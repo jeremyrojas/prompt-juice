@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Network
 import SwiftUI
 
 @MainActor
@@ -15,8 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     private lazy var panelController = JuicebarPanelController(
         viewModel: viewModel,
-        onClaudeSettingsRequested: { [weak self] presentingSetup in
-            self?.settingsWindowController.show(presentingClaudeSetup: presentingSetup)
+        onClaudeGuidanceRequested: { [weak self] journey in
+            self?.settingsWindowController.show(claudeJourney: journey)
         },
         onSettingsRequested: { [weak self] in
             self?.settingsWindowController.show()
@@ -27,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastGlyphKey: String?
     private var lastLifecycleRefreshAt: Date?
     private var cancellables = Set<AnyCancellable>()
+    private let networkMonitor = NWPathMonitor()
+    private let networkMonitorQueue = DispatchQueue(label: "app.promptjuice.network-monitor")
 #if DEBUG
     private var debugPanelWindow: NSWindow?
     private var debugToolTipWindow: NSWindow?
@@ -40,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureNotifications()
         observeViewModel()
         observeHostLifecycle()
+        startNetworkMonitor()
         viewModel.refreshUsageQuietly(reason: .launch)
         startTicker()
         preparePanelAfterLaunch()
@@ -71,7 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case "settings":
                 self.settingsWindowController.show()
             case "guidance":
-                self.settingsWindowController.show(presentingClaudeSetup: true)
+                self.settingsWindowController.show(
+                    claudeJourney: self.viewModel.claudePresentation.guidanceJourney
+                )
             case "tooltip":
                 self.showDebugToolTipPreview()
             default:
@@ -102,9 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 onClose: { [weak window] in
                     window?.close()
                 },
-                onClaudeJourney: { [weak self, weak window] _ in
+                onClaudeJourney: { [weak self, weak window] journey in
                     window?.close()
-                    self?.settingsWindowController.show(presentingClaudeSetup: true)
+                    self?.settingsWindowController.show(claudeJourney: journey)
                 }
             )
         )
@@ -142,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         ticker?.invalidate()
+        networkMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -172,6 +179,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.processUseSoonNotifications()
             }
         }
+    }
+
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                self?.viewModel.setNetworkOnline(path.status == .satisfied)
+            }
+        }
+        networkMonitor.start(queue: networkMonitorQueue)
     }
 
     private func observeViewModel() {

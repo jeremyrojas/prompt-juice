@@ -874,14 +874,42 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.refreshUsage()
 
-        XCTAssertEqual(viewModel.actionMessage, "Refreshing live usage.")
+        XCTAssertEqual(viewModel.actionMessage, "Refreshing usage.")
         XCTAssertEqual(viewModel.snapshots, Self.healthySnapshots)
 
         provider.releaseRefresh()
         await waitForSnapshots(Self.alertSnapshots, in: viewModel)
 
         XCTAssertEqual(provider.callCount, 2)
-        XCTAssertEqual(viewModel.actionMessage, "Live Usage refreshed.")
+        XCTAssertEqual(viewModel.actionMessage, "Usage refreshed.")
+    }
+
+    func testDebouncedClaudeRefreshShowsUpToDateMessage() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let coordinator = StaticClaudeUsageCoordinator(
+            state: ClaudeUsageCoordinatorState(
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: Self.healthySnapshots[0],
+                scheduleDecision: .skipDebounce
+            )
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: StaticUsageProviderClient(
+                snapshots: [Self.healthySnapshots[1]]
+            ),
+            claudeUsageCoordinator: coordinator,
+            initialSnapshots: Self.healthySnapshots,
+            initialClaudeAccessState: .subscription(plan: "Max"),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.refreshUsage()
+
+        XCTAssertEqual(viewModel.actionMessage, "Refreshing usage.")
+        await waitUntil { viewModel.actionMessage == "Just checked · up to date" }
     }
 
     func testQuietRefreshRunsBackgroundFetchWithoutMessageSideEffects() async {
@@ -932,6 +960,50 @@ final class PromptJuiceViewModelTests: XCTestCase {
         await waitForSnapshots(Self.healthySnapshots, in: viewModel)
 
         XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testTickChecksClaudeCoordinatorEveryMinuteAndRespectsOfflineState() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let clock = MutableTestClock(Self.fixedNow)
+        let coordinator = RecordingClaudeUsageCoordinator(
+            state: ClaudeUsageCoordinatorState(
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: Self.healthySnapshots[0],
+                scheduleDecision: .skipFresh
+            )
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: StaticUsageProviderClient(
+                snapshots: [Self.healthySnapshots[1]]
+            ),
+            claudeUsageCoordinator: coordinator,
+            initialSnapshots: Self.healthySnapshots,
+            initialClaudeAccessState: .subscription(plan: "Max"),
+            claudeTimerCheckInterval: 60,
+            now: clock.now
+        )
+
+        viewModel.tick()
+        await waitUntil { coordinator.callCount == 1 }
+        XCTAssertEqual(coordinator.lastReason, .timer)
+        XCTAssertEqual(coordinator.lastIsOnline, true)
+
+        viewModel.tick()
+        clock.advance(by: 59)
+        viewModel.tick()
+        XCTAssertEqual(coordinator.callCount, 1)
+
+        clock.advance(by: 1)
+        viewModel.tick()
+        await waitUntil { coordinator.callCount == 2 }
+
+        viewModel.setNetworkOnline(false)
+        clock.advance(by: 60)
+        viewModel.tick()
+        XCTAssertEqual(coordinator.callCount, 2)
     }
 
     func testTickReplacesExpiredClaudeWindowWithLocalEstimate() async {
@@ -1184,6 +1256,39 @@ final class PromptJuiceViewModelTests: XCTestCase {
         controller.close()
 
         XCTAssertEqual(provider.callCount, 2)
+    }
+
+    func testSettingsWindowPreservesRequestedClaudeJourneyWhileRefreshRuns() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let coordinator = BlockingClaudeUsageCoordinator(
+            state: ClaudeUsageCoordinatorState(
+                access: .cliMissing,
+                refresh: .idle,
+                snapshot: Self.healthySnapshots[0]
+            )
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: StaticUsageProviderClient(
+                snapshots: [Self.healthySnapshots[1]]
+            ),
+            claudeUsageCoordinator: coordinator,
+            initialSnapshots: Self.healthySnapshots,
+            initialClaudeAccessState: .cliMissing,
+            now: { Self.fixedNow }
+        )
+        let controller = SettingsWindowController(viewModel: viewModel)
+
+        controller.show(claudeJourney: .install)
+
+        XCTAssertEqual(controller.claudeGuidanceJourneyForTesting, .install)
+        XCTAssertEqual(viewModel.claudeRefreshState, .refreshing)
+
+        coordinator.releaseRefresh()
+        await waitUntil { viewModel.claudeRefreshState == .idle }
+        XCTAssertEqual(controller.claudeGuidanceJourneyForTesting, .install)
+        controller.close()
     }
 
     func testFirstRunWindowShowStartsExactlyOneQuietRefresh() async {
@@ -1841,6 +1946,64 @@ final class PromptJuiceViewModelTests: XCTestCase {
         }
     }
 
+    private final class MutableTestClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var date: Date
+
+        init(_ date: Date) {
+            self.date = date
+        }
+
+        func now() -> Date {
+            lock.withLock { date }
+        }
+
+        func advance(by interval: TimeInterval) {
+            lock.withLock {
+                date = date.addingTimeInterval(interval)
+            }
+        }
+    }
+
+    private final class RecordingClaudeUsageCoordinator: ClaudeUsageSnapshotProviding, @unchecked Sendable {
+        private let state: ClaudeUsageCoordinatorState
+        private let lock = NSLock()
+        private var calls = 0
+        private var recordedReason: ClaudeRefreshReason?
+        private var recordedIsOnline: Bool?
+
+        init(state: ClaudeUsageCoordinatorState) {
+            self.state = state
+        }
+
+        var callCount: Int {
+            lock.withLock { calls }
+        }
+
+        var lastReason: ClaudeRefreshReason? {
+            lock.withLock { recordedReason }
+        }
+
+        var lastIsOnline: Bool? {
+            lock.withLock { recordedIsOnline }
+        }
+
+        func snapshot(
+            now _: Date,
+            reason: ClaudeRefreshReason,
+            force _: Bool,
+            providerEnabled _: Bool,
+            isOnline: Bool
+        ) async -> ClaudeUsageCoordinatorState {
+            lock.withLock {
+                calls += 1
+                recordedReason = reason
+                recordedIsOnline = isOnline
+            }
+            return state
+        }
+    }
+
     private struct StaticClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
         let state: ClaudeUsageCoordinatorState
 
@@ -1849,7 +2012,6 @@ final class PromptJuiceViewModelTests: XCTestCase {
             reason _: ClaudeRefreshReason,
             force _: Bool,
             providerEnabled _: Bool,
-            isAwake _: Bool,
             isOnline _: Bool
         ) async -> ClaudeUsageCoordinatorState {
             state
@@ -1885,7 +2047,6 @@ final class PromptJuiceViewModelTests: XCTestCase {
             reason _: ClaudeRefreshReason,
             force: Bool,
             providerEnabled _: Bool,
-            isAwake _: Bool,
             isOnline _: Bool
         ) async -> ClaudeUsageCoordinatorState {
             lock.withLock {

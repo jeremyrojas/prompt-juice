@@ -118,6 +118,19 @@ struct ClaudeUsageCoordinatorState: Sendable, Equatable {
     let access: ClaudeAccessState
     let refresh: ClaudeRefreshState
     let snapshot: ProviderSnapshot?
+    let scheduleDecision: ClaudeUsageScheduleDecision?
+
+    init(
+        access: ClaudeAccessState,
+        refresh: ClaudeRefreshState,
+        snapshot: ProviderSnapshot?,
+        scheduleDecision: ClaudeUsageScheduleDecision? = nil
+    ) {
+        self.access = access
+        self.refresh = refresh
+        self.snapshot = snapshot
+        self.scheduleDecision = scheduleDecision
+    }
 }
 
 struct ClaudeAggregatePolicy {
