@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "provenance": "independently-authored-synthetic-and-sanitized-real",
+  "thirdPartyMaterialImported": false,
+  "fixtures": [
+    {
+      "path": "Auth/additive-harmless-fields.json",
+      "covers": [
+        "auth-additive-harmless-fields"
+      ]
+    },
+    {
+      "path": "Auth/api-billing.json",
+      "covers": [
+        "auth-first-party-api-billing"
+      ]
+    },
+    {
+      "path": "Auth/external-bedrock.json",
+      "covers": [
+        "auth-external-bedrock"
+      ]
+    },
+    {
+      "path": "Auth/external-foundry.json",
+      "covers": [
+        "auth-external-foundry"
+      ]
+    },
+    {
+      "path": "Auth/external-gateway.json",
+      "covers": [
+        "auth-external-gateway"
+      ]
+    },
+    {
+      "path": "Auth/external-vertex.json",
+      "covers": [
+        "auth-external-vertex"
+      ]
+    },
+    {
+      "path": "Auth/malformed.json",
+      "covers": [
+        "auth-malformed"
+      ]
+    },
+    {
+      "path": "Auth/missing-required-field.json",
+      "covers": [
+        "auth-missing-required-fields"
+      ]
+    },
+    {
+      "path": "Auth/reauth-expired.json",
+      "covers": [
+        "auth-reauth-expired"
+      ]
+    },
+    {
+      "path": "Auth/reauth-revoked.json",
+      "covers": [
+        "auth-reauth-revoked"
+      ]
+    },
+    {
+      "path": "Auth/signed-out-initial.json",
+      "covers": [
+        "auth-signed-out-initial"
+      ]
+    },
+    {
+      "path": "Auth/subscription.json",
+      "covers": [
+        "auth-subscription"
+      ]
+    },
+    {
+      "path": "Auth/unknown-api-provider.json",
+      "covers": [
+        "auth-unknown-api-provider"
+      ]
+    },
+    {
+      "path": "Auth/unknown-auth-method.json",
+      "covers": [
+        "auth-unknown-auth-method"
+      ]
+    },
+    {
+      "path": "Auth/unknown-subscription-type.json",
+      "covers": [
+        "auth-unknown-subscription-type"
+      ]
+    },
+    {
+      "path": "Live/auth-status-subscription.json",
+      "provenance": "sanitized-real-capture",
+      "covers": [
+        "auth-subscription-real-shape"
+      ]
+    },
+    {
+      "path": "Live/usage-flat-subscription.ans",
+      "provenance": "sanitized-real-capture",
+      "covers": [
+        "usage-flat-real-shape",
+        "usage-real-redraws",
+        "usage-real-timezone-reset",
+        "usage-real-model-specific-weekly"
+      ]
+    },
+    {
+      "path": "Live/version-2.1.214.txt",
+      "provenance": "sanitized-real-capture",
+      "covers": [
+        "version-real-shape"
+      ]
+    },
+    {
+      "path": "Provenance/outcomes.json",
+      "covers": [
+        "provenance-native",
+        "provenance-homebrew-apple-silicon",
+        "provenance-homebrew-intel",
+        "provenance-npm-global",
+        "provenance-custom-symlink",
+        "provenance-unknown"
+      ]
+    },
+    {
+      "path": "State/corrupt-next-at.json",
+      "covers": [
+        "cooldown-corrupt-nextAttemptAt"
+      ]
+    },
+    {
+      "path": "State/probe-snapshot-and-backoff.json",
+      "covers": [
+        "probe-snapshot-and-backoff"
+      ]
+    },
+    {
+      "path": "Usage/F-RL1-session-cached.txt",
+      "covers": [
+        "cached-bars-F-RL1"
+      ]
+    },
+    {
+      "path": "Usage/F-RL2-weekly-cached.txt",
+      "covers": [
+        "cached-bars-F-RL2"
+      ]
+    },
+    {
+      "path": "Usage/F-RL3-rate-limit-no-bars.txt",
+      "covers": [
+        "cached-bars-F-RL3"
+      ]
+    },
+    {
+      "path": "Usage/F-RL4-bars-malformed-as-of.txt",
+      "covers": [
+        "cached-bars-F-RL4",
+        "timestamp-malformed"
+      ]
+    },
+    {
+      "path": "Usage/ansi-residue.ans",
+      "covers": [
+        "usage-ansi-residue"
+      ]
+    },
+    {
+      "path": "Usage/as-of-12-hour.txt",
+      "covers": [
+        "timestamp-12-hour"
+      ]
+    },
+    {
+      "path": "Usage/as-of-24-hour.txt",
+      "covers": [
+        "timestamp-24-hour"
+      ]
+    },
+    {
+      "path": "Usage/as-of-ansi-residue.ans",
+      "covers": [
+        "timestamp-ansi-residue"
+      ]
+    },
+    {
+      "path": "Usage/as-of-timezone-dst-fall-first.txt",
+      "covers": [
+        "timestamp-dst-fall-first"
+      ]
+    },
+    {
+      "path": "Usage/as-of-timezone-dst-fall-second.txt",
+      "covers": [
+        "timestamp-dst-fall-second"
+      ]
+    },
+    {
+      "path": "Usage/as-of-timezone-dst-spring.txt",
+      "covers": [
+        "timestamp-timezone",
+        "timestamp-dst-spring"
+      ]
+    },
+    {
+      "path": "Usage/malformed.txt",
+      "covers": [
+        "usage-malformed"
+      ]
+    },
+    {
+      "path": "Usage/session-only.txt",
+      "covers": [
+        "usage-session-only"
+      ]
+    },
+    {
+      "path": "Usage/session-weekly-model-specific.txt",
+      "covers": [
+        "usage-model-specific-weekly"
+      ]
+    },
+    {
+      "path": "Usage/session-weekly.txt",
+      "covers": [
+        "usage-session-plus-weekly"
+      ]
+    },
+    {
+      "path": "Usage/startup-rate-limit-valid-panel.txt",
+      "covers": [
+        "usage-rate-limit-latest-panel-boundary"
+      ]
+    },
+    {
+      "path": "Usage/truncated.txt",
+      "covers": [
+        "usage-truncated"
+      ]
+    },
+    {
+      "path": "Usage/zero-percent-used.txt",
+      "covers": [
+        "usage-zero-percent"
+      ]
+    },
+    {
+      "path": "Version/below-minimum.txt",
+      "covers": [
+        "version-below-minimum"
+      ]
+    },
+    {
+      "path": "Version/current.txt",
+      "covers": [
+        "version-current"
+      ]
+    },
+    {
+      "path": "Version/malformed.txt",
+      "covers": [
+        "version-malformed"
+      ]
+    },
+    {
+      "path": "Version/minimum.txt",
+      "covers": [
+        "version-minimum-2.1.208"
+      ]
+    },
+    {
+      "path": "Version/older.txt",
+      "covers": [
+        "version-older"
+      ]
+    },
+    {
+      "path": "Version/prefixed.txt",
+      "covers": [
+        "version-prefixed"
+      ]
+    }
+  ]
+}

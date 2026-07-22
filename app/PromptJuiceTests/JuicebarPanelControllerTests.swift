@@ -13,8 +13,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
         let initialHeight = PromptJuicePanelMetrics.height(
@@ -79,13 +78,14 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { false }
+            initialClaudeAccessState: .cliMissing,
+            initialClaudeRefreshState: .idle,
+            now: { Self.fixedNow }
         )
-        var settingsRequests: [Bool] = []
+        var guidanceRequests: [ClaudeGuidanceJourney] = []
         let controller = JuicebarPanelController(
             viewModel: viewModel,
-            onClaudeSettingsRequested: { settingsRequests.append($0) }
+            onClaudeGuidanceRequested: { guidanceRequests.append($0) }
         )
 
         controller.show()
@@ -95,15 +95,53 @@ final class JuicebarPanelControllerTests: XCTestCase {
             controller.panelFrameForTesting != nil
         }
 
-        XCTAssertTrue(viewModel.claudeRowOffersSetup)
+        XCTAssertEqual(viewModel.claudePresentation.guidanceJourney, .install)
 
         let target = try providerTarget(row: 0, controller: controller, viewModel: viewModel)
         XCTAssertEqual(target, .provider(.claude))
 
         controller.clickTargetForTesting(target)
 
-        XCTAssertEqual(settingsRequests, [true])
+        XCTAssertEqual(guidanceRequests, [.install])
         XCTAssertNil(viewModel.selectedProvider)
+    }
+
+    func testClaudeSetupRowClickPreservesJourneyWhileSettingsRefreshRuns() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let coordinator = PanelStaticClaudeUsageCoordinator(
+            state: ClaudeUsageCoordinatorState(
+                access: .cliMissing,
+                refresh: .idle,
+                snapshot: Self.claudeSetupSnapshots[0]
+            )
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: MutableUsageProviderClient(
+                snapshots: [Self.claudeSetupSnapshots[1]]
+            ),
+            claudeUsageCoordinator: coordinator,
+            initialSnapshots: Self.claudeSetupSnapshots,
+            initialClaudeAccessState: .cliMissing,
+            initialClaudeRefreshState: .idle,
+            now: { Self.fixedNow }
+        )
+        let settingsController = SettingsWindowController(viewModel: viewModel)
+        let panelController = JuicebarPanelController(
+            viewModel: viewModel,
+            onClaudeGuidanceRequested: { journey in
+                settingsController.show(claudeJourney: journey)
+            }
+        )
+
+        panelController.clickTargetForTesting(.provider(.claude))
+
+        XCTAssertEqual(settingsController.claudeGuidanceJourneyForTesting, .install)
+        await waitUntil { viewModel.claudeRefreshState == .idle }
+        XCTAssertEqual(settingsController.claudeGuidanceJourneyForTesting, .install)
+        settingsController.close()
     }
 
     func testAvailableProviderRowClickIsDisplayOnly() async throws {
@@ -115,13 +153,12 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
-        var settingsRequests: [Bool] = []
+        var guidanceRequests: [ClaudeGuidanceJourney] = []
         let controller = JuicebarPanelController(
             viewModel: viewModel,
-            onClaudeSettingsRequested: { settingsRequests.append($0) }
+            onClaudeGuidanceRequested: { guidanceRequests.append($0) }
         )
         let expectedHeight = PromptJuicePanelMetrics.height(
             rowCount: 2
@@ -140,7 +177,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         controller.clickTargetForTesting(target)
 
         XCTAssertNil(viewModel.selectedProvider)
-        XCTAssertTrue(settingsRequests.isEmpty)
+        XCTAssertTrue(guidanceRequests.isEmpty)
         XCTAssertEqual(viewModel.detail, "Claude resets in 3h 0m")
         XCTAssertEqual(controller.panelFrameForTesting?.height, expectedHeight)
     }
@@ -154,8 +191,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -212,8 +248,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -260,8 +295,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -294,8 +328,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(
             viewModel: viewModel,
@@ -329,8 +362,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            now: { Self.fixedNow },
-            isClaudeBridgeCurrent: { true }
+            now: { Self.fixedNow }
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
 
@@ -468,10 +500,10 @@ final class JuicebarPanelControllerTests: XCTestCase {
         ProviderSnapshot(
             identity: .claude,
             rateWindow: .unavailable,
-            source: .claudeStatusline,
+            source: .claudeUsageCLI,
             confidence: .unavailable,
             updatedAt: fixedNow,
-            statusDetail: "Claude statusline and local usage unavailable"
+            statusDetail: "Claude usage unavailable"
         ),
         ProviderSnapshot(
             identity: .codex,
@@ -513,6 +545,24 @@ private final class MutableUsageProviderClient: UsageProviderClient, @unchecked 
         lock.withLock {
             storedSnapshots
         }
+    }
+}
+
+private struct PanelStaticClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
+    let state: ClaudeUsageCoordinatorState
+
+    init(state: ClaudeUsageCoordinatorState) {
+        self.state = state
+    }
+
+    func snapshot(
+        now _: Date,
+        reason _: ClaudeRefreshReason,
+        force _: Bool,
+        providerEnabled _: Bool,
+        isOnline _: Bool
+    ) async -> ClaudeUsageCoordinatorState {
+        state
     }
 }
 

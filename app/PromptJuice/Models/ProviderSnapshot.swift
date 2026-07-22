@@ -1,6 +1,6 @@
 import Foundation
 
-struct ProviderSnapshot: Identifiable, Equatable {
+struct ProviderSnapshot: Identifiable, Equatable, Sendable {
     let identity: ProviderIdentity
     let rateWindow: RateWindow
     // retained for future weekly UI; not currently displayed
@@ -35,7 +35,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
         self.updatedAt = updatedAt
         self.weeklyUpdatedAt = weeklyUpdatedAt
         self.statusDetail = statusDetail
-        self.isFreshSessionWindow = isFreshSessionWindow
+        self.isFreshSessionWindow = identity.provider == .codex && isFreshSessionWindow
         self.isFreshWeeklyWindow = isFreshWeeklyWindow
     }
 

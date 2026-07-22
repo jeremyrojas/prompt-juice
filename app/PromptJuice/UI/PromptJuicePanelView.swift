@@ -33,6 +33,7 @@ enum PromptJuicePanelMetrics {
 struct PromptJuicePanelView: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
     let onClose: () -> Void
+    var onClaudeJourney: (ClaudeGuidanceJourney) -> Void = { _ in }
 
     private var panelHeight: CGFloat {
         PromptJuicePanelMetrics.height(
@@ -109,7 +110,11 @@ struct PromptJuicePanelView: View {
     private var usageRows: some View {
         VStack(spacing: 7) {
             ForEach(viewModel.visibleSnapshots) { snapshot in
-                ProviderUsageRow(snapshot: snapshot, viewModel: viewModel)
+                ProviderUsageRow(
+                    snapshot: snapshot,
+                    viewModel: viewModel,
+                    onClaudeJourney: onClaudeJourney
+                )
             }
         }
     }
@@ -214,6 +219,7 @@ private struct NotificationPrimeBanner: View {
 private struct ProviderUsageRow: View {
     let snapshot: UsageSnapshot
     @ObservedObject var viewModel: PromptJuiceViewModel
+    let onClaudeJourney: (ClaudeGuidanceJourney) -> Void
 
     var body: some View {
         VStack(spacing: 6) {
@@ -229,8 +235,11 @@ private struct ProviderUsageRow: View {
                 trailing
             }
 
-            if snapshot.isAvailable {
+            if showsReading {
                 CapacityBar(remainingPercent: snapshot.sessionRemainingPercent, color: severityColor)
+            } else if snapshot.provider == .claude,
+                      viewModel.claudePresentation.isNeutral {
+                EmptyView()
             } else {
                 ghostBar
             }
@@ -252,7 +261,19 @@ private struct ProviderUsageRow: View {
 
     @ViewBuilder
     private var trailing: some View {
-        if snapshot.isFreshSessionWindow {
+        if snapshot.provider == .claude {
+            if showsReading {
+                resetCluster
+            } else if let rowStatus = viewModel.claudePresentation.rowStatus {
+                Text(rowStatus)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.4))
+
+                if let journey = viewModel.claudePresentation.guidanceJourney {
+                    journeyButton(journey)
+                }
+            }
+        } else if snapshot.isFreshSessionWindow {
             Text("Fresh window")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.72))
@@ -263,10 +284,6 @@ private struct ProviderUsageRow: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.4))
 
-            if snapshot.provider == .claude,
-               viewModel.claudeRowOffersSetup {
-                setUpCue
-            }
         }
     }
 
@@ -279,26 +296,26 @@ private struct ProviderUsageRow: View {
             return "Checking…"
         }
 
-        if snapshot.provider == .claude,
-           viewModel.claudeLiveUpgrade == .awaitingSession {
-            return "Waiting for terminal"
-        }
-
         return "Not measured yet"
     }
 
-    private var setUpCue: some View {
-        Text("Set up")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.85))
-            .padding(.horizontal, 9)
-            .frame(height: 20)
-            .background(
-                Capsule(style: .continuous).fill(Color.white.opacity(0.10))
-            )
-            .overlay(
-                Capsule(style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1)
-            )
+    private func journeyButton(_ journey: ClaudeGuidanceJourney) -> some View {
+        Button(journey.capsuleTitle) {
+            onClaudeJourney(journey)
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.85))
+        .padding(.horizontal, 9)
+        .frame(height: 20)
+        .background(
+            Capsule(style: .continuous).fill(Color.white.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1)
+        )
+        .accessibilityLabel(journey.accessibilityLabel)
+        .accessibilityHint("Opens PromptJuice Settings")
     }
 
     private var ghostBar: some View {
@@ -312,23 +329,14 @@ private struct ProviderUsageRow: View {
         Circle()
             .fill(providerColor)
             .frame(width: 7, height: 7)
-            .opacity(snapshot.isAvailable ? 1 : 0.4)
-            .shadow(color: providerColor.opacity(snapshot.isAvailable ? 0.55 : 0), radius: 5)
+            .opacity(showsReading ? 1 : 0.4)
+            .shadow(color: providerColor.opacity(showsReading ? 0.55 : 0), radius: 5)
     }
 
     private var providerName: some View {
-        HStack(spacing: 5) {
-            Text(snapshot.displayName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(snapshot.isAvailable ? 0.88 : 0.6))
-
-            if let staleReadingLabel = viewModel.staleReadingIndicatorAccessibilityLabel(for: snapshot) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.46))
-                    .accessibilityLabel(staleReadingLabel)
-            }
-        }
+        Text(snapshot.displayName)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white.opacity(showsReading ? 0.88 : 0.6))
     }
 
     private var providerColor: Color {
@@ -337,6 +345,13 @@ private struct ProviderUsageRow: View {
 
     private var isSelected: Bool {
         viewModel.selectedProvider == snapshot.provider
+    }
+
+    private var showsReading: Bool {
+        if snapshot.provider == .claude {
+            return viewModel.claudePresentation.showsReading
+        }
+        return snapshot.isAvailable
     }
 
     private var severity: UsageSeverity {
@@ -355,6 +370,15 @@ private struct ProviderUsageRow: View {
     @ViewBuilder
     private var resetCluster: some View {
         HStack(spacing: 5) {
+            if snapshot.provider == .claude,
+               viewModel.claudePresentation.showsClock,
+               let clockLabel = viewModel.claudeFreshnessAccessibilityLabel(for: snapshot) {
+                Image(systemName: "clock")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.46))
+                    .accessibilityLabel(clockLabel)
+            }
+
             Text(percentLabel)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.54))
@@ -395,7 +419,19 @@ private struct ProviderUsageRow: View {
     }
 
     private var accessibilityValue: String {
-        snapshot.isAvailable
+        if snapshot.provider == .claude {
+            if showsReading {
+                let freshness = viewModel.claudeFreshnessAccessibilityLabel(for: snapshot)
+                    .map { label in
+                        let clause = label.prefix(1).lowercased() + label.dropFirst()
+                        return ", \(clause)"
+                    } ?? ""
+                return "\(percentLabel)\(freshness), \(viewModel.fullResetText(for: snapshot))"
+            }
+            return viewModel.claudePresentation.rowStatus ?? "Usage unavailable"
+        }
+
+        return snapshot.isAvailable
             ? "\(viewModel.sessionRemainingPercentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
             : unavailableLabel
     }

@@ -1,0 +1,76 @@
+[Screen Reader Mode: on via flag]
+7[r8[?25h[?2004h[?1004h[?2031h[>0q[c]0;✳ Claude CodeClaude Code v2.1.214
+Welcome back [REDACTED_USERNAME]!
+Opus 4.8 (1M context) with high effort · Claude Max · [REDACTED_EMAIL]'s Organization
+~[REDACTED_PATH] What's new
+Added `sandbox.filesystem.disabled` setting to skip filesystem isolation while keeping network egress control
+Fixed a slowdown in long sessions where message normalization cost grew quadratically with the number of turns, causing
+multi-second stalls and slow resumes
+Fixed auto mode denying commands with "HTTP 401" classifier errors after the OAuth token expired or rotated mid-session
+/release-notes for more
+warning: Safe mode: all customizations are disabled (CLAUDE.md, skills, plugins, hooks, MCP, agents, and more)
+Restart without --safe-mode to re-enable
+Fable 5 is now a standard part of your Max plan
+You can use up to 50% of your weekly usage limit on Fable 5. If you hit your limit, you can continue on Fable 5 with
+usage credits. Fable 5 draws down usage faster than Opus 4.8. Run /model and select Fable to use it. Learn more:
+https://support.claude.com/en/articles/[REDACTED_OPAQUE]
+manual mode on
+effort: high · /effort
+$[4G[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[GOpus 4.8 (1M context) with high effort · Claude Max
+~[REDACTED_PATH]
+warning: Safe mode: all customizations are disabled (CLAUDE.md, skills, plugins, hooks, MCP, agents, and more)
+Restart without --safe-mode to re-enable
+Fable 5 is now a standard part of your Max plan
+You can use up to 50% of your weekly usage limit on Fable 5. If you hit your limit, you can continue on Fable 5 with
+usage credits. Fable 5 draws down usage faster than Opus 4.8. Run /model and select Fable to use it. Learn more:
+https://support.claude.com/en/articles/[REDACTED_OPAQUE]
+manual mode on
+effort: high · /effort
+$[4G[2K[1A[2K[1A[2K[Gyou: /usage
+Settings  Status   Config   Usage   Stats
+Session
+Total cost:            $0.0000
+Total duration (API):  0s
+Total duration (wall): 7s
+Total code changes:    0 lines added, 0 lines removed
+Usage:                 0 input, 0 output, 0 cache read, 0 cache write
+Current session
+99% 99% used
+Resets 11am (America/New_York)
+Current week (all models)
+38% 38% used
+Resets Jul 21 at 7pm (America/New_York)
++50% weekly limits promo through Aug 19 · clau.de/cc-50-promo
+What's contributing to your limits usage?
+Approximate, based on local sessions on this machine — does not include other devices or claude.ai
+Scanning local sessions…
+Refreshing…
+Esc to cancel[29G[18A[18B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G100% 100% used
+Resets 11am (America/New_York)
+Current week (all models)
+39% 39% used
+Resets Jul 21 at 7pm (America/New_York)
++50% weekly limits promo through Aug 19 · clau.de/cc-50-promo
+Current week (Fable)
+59% 59% used
+Resets Jul 21 at 7pm (America/New_York)
+What's contributing to your limits usage?
+Approximate, based on local sessions on this machine — does not include other devices or claude.ai
+Scanning local sessions…
+Usage credits
+Usage credits are off · /usage-credits to turn them on
+Esc to cancel[29G[22A[22B[2K[1A[2K[1A[2K[1A[2K[GLast 24h · these are independent characteristics of your usage, not a breakdown
+93% of your usage was at >150k context
+Longer sessions are more expensive even when cached. /compact mid-task, /clear when switching to new tasks.
+82% of your usage came from subagent-heavy sessions
+Each subagent runs its own requests. Be deliberate about spawning them — and consider configuring a cheaper model for
+simpler subagents.
+16% of your usage came from MCP server "[REDACTED_MCP_NAME]"
+MCP tool results stay in context for the rest of the session. /compact to flush them, or disable servers you don't need.
+MCP servers % of usage
+[REDACTED_MCP_NAME] 16%
+[REDACTED_MCP_NAME] 12%
+d to day · w to week
+Usage credits
+Usage credits are off · /usage-credits to turn them on
+Esc to cancel[29G[33A

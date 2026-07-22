@@ -1,0 +1,6 @@
+{
+  "loggedIn": true,
+  "authMethod": "external",
+  "apiProvider": "gateway",
+  "subscriptionType": null
+}

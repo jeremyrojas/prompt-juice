@@ -1,11 +1,11 @@
 import AppKit
 import Combine
+import Network
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let viewModel = PromptJuiceViewModel()
-    private let claudeBridgeInstaller = ClaudeBridgeInstaller()
-    private let claudeStatusCachePoller = ClaudeStatusCachePoller()
+    private let viewModel = PromptJuiceViewModel.makeAppViewModel()
     private let notificationService = PromptJuiceNotificationService()
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: viewModel,
@@ -16,8 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     private lazy var panelController = JuicebarPanelController(
         viewModel: viewModel,
-        onClaudeSettingsRequested: { [weak self] presentingSetup in
-            self?.settingsWindowController.show(presentingClaudeSetup: presentingSetup)
+        onClaudeGuidanceRequested: { [weak self] journey in
+            self?.settingsWindowController.show(claudeJourney: journey)
         },
         onSettingsRequested: { [weak self] in
             self?.settingsWindowController.show()
@@ -28,6 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastGlyphKey: String?
     private var lastLifecycleRefreshAt: Date?
     private var cancellables = Set<AnyCancellable>()
+    private let networkMonitor = NWPathMonitor()
+    private let networkMonitorQueue = DispatchQueue(label: "app.promptjuice.network-monitor")
+#if DEBUG
+    private var debugPanelWindow: NSWindow?
+    private var debugToolTipWindow: NSWindow?
+#endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let appIcon = PromptJuiceIcon.appIconImage() {
@@ -37,10 +43,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureNotifications()
         observeViewModel()
         observeHostLifecycle()
-        syncClaudeBridgeScript(reason: "launch")
+        startNetworkMonitor()
+        viewModel.refreshUsageQuietly(reason: .launch)
         startTicker()
-        startClaudeStatusCacheMonitor()
         preparePanelAfterLaunch()
+
+#if DEBUG
+        showDebugPreviewSurfaceIfRequested()
+#endif
 
         if viewModel.isFirstRun {
             DispatchQueue.main.async { [weak self] in
@@ -49,9 +59,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+#if DEBUG
+    private func showDebugPreviewSurfaceIfRequested() {
+        let environment = ProcessInfo.processInfo.environment
+        let dogfoodSurface = environment["PROMPTJUICE_DOGFOOD_SURFACE"]
+        guard environment["PROMPTJUICE_CLAUDE_UI_SCENARIO"] != nil || dogfoodSurface != nil else {
+            return
+        }
+        let surface = dogfoodSurface ?? environment["PROMPTJUICE_UI_SURFACE"] ?? "panel"
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                return
+            }
+            switch surface {
+            case "settings":
+                self.settingsWindowController.show()
+            case "guidance":
+                self.settingsWindowController.show(
+                    claudeJourney: self.viewModel.claudePresentation.guidanceJourney
+                )
+            case "tooltip":
+                self.showDebugToolTipPreview()
+            default:
+                self.showDebugPanelPreview()
+            }
+        }
+    }
+
+    private func showDebugPanelPreview() {
+        let height = PromptJuicePanelMetrics.height(
+            rowCount: viewModel.visibleSnapshots.count,
+            showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
+        )
+        let window = NSWindow(
+            contentRect: NSRect(
+                origin: .zero,
+                size: NSSize(width: PromptJuicePanelMetrics.width, height: height)
+            ),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "PromptJuice Juicebar Preview"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(
+            rootView: PromptJuicePanelView(
+                viewModel: viewModel,
+                onClose: { [weak window] in
+                    window?.close()
+                },
+                onClaudeJourney: { [weak self, weak window] journey in
+                    window?.close()
+                    self?.settingsWindowController.show(claudeJourney: journey)
+                }
+            )
+        )
+        window.center()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        debugPanelWindow = window
+    }
+
+    private func showDebugToolTipPreview() {
+        guard let snapshot = viewModel.visibleSnapshots.first(where: { $0.provider == .claude }) else {
+            return
+        }
+
+        let tooltipView = PanelToolTipView(text: viewModel.sourceTooltip(for: snapshot))
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: tooltipView.fittingSize),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "PromptJuice Tooltip Preview"
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        window.contentView = tooltipView
+        window.center()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        debugToolTipWindow = window
+    }
+#endif
+
     func applicationWillTerminate(_ notification: Notification) {
         ticker?.invalidate()
-        claudeStatusCachePoller.stop()
+        networkMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -84,10 +181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func startClaudeStatusCacheMonitor() {
-        claudeStatusCachePoller.start { [weak self] in
-            self?.viewModel.refreshClaudeAfterStatusCacheChange(reason: "cache watcher")
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                self?.viewModel.setNetworkOnline(path.status == .satisfied)
+            }
         }
+        networkMonitor.start(queue: networkMonitorQueue)
     }
 
     private func observeViewModel() {
@@ -167,11 +267,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func refreshAfterWake() {
-        syncClaudeBridgeScript(reason: "wake")
-        refreshAfterHostLifecycleChange()
+        performHostLifecycleRefresh(reason: .wake)
     }
 
     @objc private func refreshAfterHostLifecycleChange() {
+        performHostLifecycleRefresh(reason: .foreground)
+    }
+
+    private func performHostLifecycleRefresh(reason: ClaudeRefreshReason) {
+#if DEBUG
+        if ProcessInfo.processInfo.environment["PROMPTJUICE_DOGFOOD_SURFACE"] != nil,
+           reason == .foreground {
+            return
+        }
+#endif
         let refreshDate = Date()
 
         if let lastLifecycleRefreshAt,
@@ -180,16 +289,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         lastLifecycleRefreshAt = refreshDate
-        startClaudeStatusCacheMonitor()
-        viewModel.refreshClaudeStatusCacheNow(reason: "host lifecycle")
-        viewModel.refreshUsageQuietly()
+        viewModel.refreshUsageQuietly(reason: reason)
         updateStatusItemGlyph(force: true)
         processUseSoonNotifications()
-    }
-
-    private func syncClaudeBridgeScript(reason: String) {
-        claudeBridgeInstaller.ensureInstalledBridgeCurrent(reason: reason)
-        viewModel.refreshClaudeBridgeState()
     }
 
     /// Redraws the menu-bar droplet from the current aggregate. The fill is the
@@ -217,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         image?.size = NSSize(width: 18, height: 18)
         button.image = image
-        button.setAccessibilityLabel("PromptJuice: \(percent)% left")
+        button.setAccessibilityLabel(viewModel.menuBarAccessibilityLabel)
     }
 
     private func preparePanelAfterLaunch() {

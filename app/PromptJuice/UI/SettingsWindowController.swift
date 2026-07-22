@@ -9,7 +9,7 @@ enum SettingsWindowMode {
 @MainActor
 final class SettingsWindowState: ObservableObject {
     @Published var mode: SettingsWindowMode = .settings
-    @Published var isClaudeSetupPresented = false
+    @Published var claudeGuidanceJourney: ClaudeGuidanceJourney?
     @Published var firstRunEnabledProviders: Set<UsageProvider> = Set(UsageProvider.allCases)
 }
 
@@ -19,6 +19,12 @@ final class SettingsWindowController: NSWindowController {
     private let onFirstRunFinished: () -> Void
     private let state = SettingsWindowState()
     private var didCenter = false
+
+#if DEBUG
+    var claudeGuidanceJourneyForTesting: ClaudeGuidanceJourney? {
+        state.claudeGuidanceJourney
+    }
+#endif
 
     init(
         viewModel: PromptJuiceViewModel,
@@ -34,10 +40,11 @@ final class SettingsWindowController: NSWindowController {
         nil
     }
 
-    func show(presentingClaudeSetup: Bool = false) {
-        viewModel.refreshClaudeBridgeState()
-        viewModel.refreshClaudeStatusCacheNow(reason: "settings open")
-        viewModel.refreshUsageQuietly()
+    func show(claudeJourney: ClaudeGuidanceJourney? = nil) {
+        if let claudeJourney {
+            state.claudeGuidanceJourney = claudeJourney
+        }
+        viewModel.refreshUsageQuietly(reason: .panelOpen)
 
         let window = ensureWindow()
         state.mode = .settings
@@ -51,18 +58,10 @@ final class SettingsWindowController: NSWindowController {
 
         window.makeKeyAndOrderFront(nil)
 
-        if presentingClaudeSetup {
-            state.isClaudeSetupPresented = false
-            DispatchQueue.main.async { [weak self] in
-                self?.state.isClaudeSetupPresented = true
-            }
-        }
     }
 
     func showFirstRun() {
-        viewModel.refreshClaudeBridgeState()
-        viewModel.refreshClaudeStatusCacheNow(reason: "first-run settings open")
-        viewModel.refreshUsageQuietly()
+        viewModel.refreshUsageQuietly(reason: .panelOpen)
 
         let window = ensureWindow()
         state.mode = .firstRun
@@ -106,15 +105,24 @@ final class SettingsWindowController: NSWindowController {
         window.setAccessibilityElement(true)
         window.setAccessibilityRole(.window)
         window.setAccessibilityLabel("PromptJuice Settings")
-        window.contentView = NSHostingView(
-            rootView: SettingsView(
-                viewModel: viewModel,
-                state: state,
-                onFirstRunContinue: { [weak self] in
-                    self?.finishFirstRun()
-                }
-            )
+        let settingsView = SettingsView(
+            viewModel: viewModel,
+            state: state,
+            onFirstRunContinue: { [weak self] in
+                self?.finishFirstRun()
+            }
         )
+#if DEBUG
+        let rootView: AnyView
+        if ProcessInfo.processInfo.environment["PROMPTJUICE_UI_TEXT_SIZE"] == "enlarged" {
+            rootView = AnyView(settingsView.environment(\.dynamicTypeSize, .xxxLarge))
+        } else {
+            rootView = AnyView(settingsView)
+        }
+#else
+        let rootView = AnyView(settingsView)
+#endif
+        window.contentView = NSHostingView(rootView: rootView)
         self.window = window
         return window
     }

@@ -640,7 +640,7 @@ final class PanelToolTipView: NSView {
 final class JuicebarPanelController: NSObject {
     private let viewModel: PromptJuiceViewModel
     private let settingsStore: PromptJuiceSettingsStore
-    private let onClaudeSettingsRequested: (Bool) -> Void
+    private let onClaudeGuidanceRequested: (ClaudeGuidanceJourney) -> Void
     private let onSettingsRequested: () -> Void
     private var panel: NSWindow?
     private var panelMode: JuicebarPanelMode = .anchored
@@ -727,12 +727,12 @@ final class JuicebarPanelController: NSObject {
     init(
         viewModel: PromptJuiceViewModel,
         settingsStore: PromptJuiceSettingsStore = .shared,
-        onClaudeSettingsRequested: @escaping (Bool) -> Void = { _ in },
+        onClaudeGuidanceRequested: @escaping (ClaudeGuidanceJourney) -> Void = { _ in },
         onSettingsRequested: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
         self.settingsStore = settingsStore
-        self.onClaudeSettingsRequested = onClaudeSettingsRequested
+        self.onClaudeGuidanceRequested = onClaudeGuidanceRequested
         self.onSettingsRequested = onSettingsRequested
         super.init()
 
@@ -782,7 +782,7 @@ final class JuicebarPanelController: NSObject {
     }
 
     func show() {
-        viewModel.refreshClaudeStatusCacheNow(reason: "panel open")
+        viewModel.refreshUsageQuietly(reason: .panelOpen)
         let panel = ensurePanel()
         setPanelMode(.anchored)
         applyPanelFrame(panel, force: true)
@@ -790,7 +790,6 @@ final class JuicebarPanelController: NSObject {
     }
 
     func pin() {
-        viewModel.refreshClaudeStatusCacheNow(reason: "panel pin")
         let panel = ensurePanel()
         let size = panelSize
         let origin = pinnedOrigin(for: panel, size: size)
@@ -864,6 +863,9 @@ final class JuicebarPanelController: NSObject {
             viewModel: viewModel,
             onClose: { [weak self] in
                 self?.handleClick(.close)
+            },
+            onClaudeJourney: { [weak self] journey in
+                self?.openClaudeGuidance(journey)
             }
         )
 
@@ -924,9 +926,11 @@ final class JuicebarPanelController: NSObject {
         case .close:
             dismissSurface()
         case .provider(let provider):
-            if provider == .claude, viewModel.claudeRowOffersSetup {
+            if provider == .claude,
+               !viewModel.claudePresentation.showsReading,
+               let journey = viewModel.claudePresentation.guidanceJourney {
                 dismissSurface()
-                onClaudeSettingsRequested(true)
+                onClaudeGuidanceRequested(journey)
                 return
             }
         case .enableNotifications:
@@ -939,6 +943,11 @@ final class JuicebarPanelController: NSObject {
         case .background:
             viewModel.clearSelection()
         }
+    }
+
+    private func openClaudeGuidance(_ journey: ClaudeGuidanceJourney) {
+        dismissSurface()
+        onClaudeGuidanceRequested(journey)
     }
 
     @objc private func showSettingsFromPanelMenu() {

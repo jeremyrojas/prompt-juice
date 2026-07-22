@@ -25,3 +25,7 @@ build/
 .env
 .env.*
 .claude/
+
+# Python capture-harness tests
+__pycache__/
+*.pyc

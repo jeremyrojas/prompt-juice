@@ -1,0 +1,11 @@
+{
+  "loggedIn": true,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+  "subscriptionType": "max",
+  "futureHarmlessFlag": true,
+  "diagnostics": {
+    "cacheState": "warm",
+    "schemaRevision": 2
+  }
+}

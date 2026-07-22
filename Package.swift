@@ -21,7 +21,10 @@ let package = Package(
         .testTarget(
             name: "PromptJuiceTests",
             dependencies: ["PromptJuice"],
-            path: "app/PromptJuiceTests"
+            path: "app/PromptJuiceTests",
+            resources: [
+                .copy("Fixtures")
+            ]
         )
     ]
 )

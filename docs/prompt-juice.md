@@ -53,7 +53,7 @@ PromptJuice uses these snapshot sources:
 - `fixture`: built-in test and preview values.
 - `codexAppServer`: live Codex data from `codex app-server`.
 - `codexCache`: cached last-good Codex windows.
-- `claudeStatusline`: live Claude Code status-line cache.
+- `claudeUsageCLI`: direct Claude Code `/usage` data.
 - `claudeLocalLogs`: local Claude activity estimate.
 - `claudeCache`: cached last-good Claude windows.
 
@@ -87,15 +87,18 @@ defaults until their respective reset times.
 
 PromptJuice reads Claude through two local paths:
 
-- Per-session Claude Code status-line files under
-  `~/Library/Application Support/PromptJuice/ClaudeStatus/`.
-- Local Claude activity logs under `CLAUDE_CONFIG_DIR`,
-  `~/.config/claude/projects`, or `~/.claude/projects`.
+- Claude Code's built-in `/usage` screen for exact plan windows.
+- Local Claude activity metadata under `CLAUDE_CONFIG_DIR`,
+  `~/.config/claude/projects`, or `~/.claude/projects` for estimates.
 
-The status-line bridge records exact five-hour and seven-day windows when Claude
-Code supplies them. PromptJuice merges active per-session files by matching
-server windows and keeps the highest observed usage. The local-log reader groups
-assistant usage into five-hour blocks and marks the result as an estimate.
+The direct path verifies the Claude Code version and subscription authentication,
+then uses a bounded pseudo-terminal session in a dedicated empty workspace. The
+probe sends `/usage`, parses quota rows, sends zero model prompts, and records
+typed lifecycle outcomes. A persisted scheduler controls freshness, coalescing,
+attempt budgets, and rate-limit cooldowns.
+
+The local-log reader decodes a narrow usage-only projection, groups activity into
+five-hour blocks, and marks the result as an estimate.
 
 The last-good normalized Claude windows are cached in local user defaults until
 their reset times.
@@ -105,7 +108,7 @@ their reset times.
 All PromptJuice processing and caches live on the user's Mac:
 
 - Codex rate limits come from the local Codex app-server process.
-- The Claude bridge writes sanitized rate-limit fields into PromptJuice's cache.
+- Claude exact windows are derived from the transient `/usage` parser boundary.
 - Claude estimates read activity metadata needed for the active window.
 - Cached snapshots contain normalized usage windows and update times.
 - PromptJuice includes zero analytics and zero hosted backend.

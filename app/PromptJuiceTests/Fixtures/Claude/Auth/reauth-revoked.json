@@ -1,0 +1,7 @@
+{
+  "loggedIn": false,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+  "subscriptionType": "pro",
+  "error": "oauth_revoked"
+}

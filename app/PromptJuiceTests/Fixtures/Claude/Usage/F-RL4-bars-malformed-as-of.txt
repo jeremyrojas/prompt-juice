@@ -1,0 +1,9 @@
+Usage
+Last known usage
+
+Current session
+████░░░░░░ 42% used
+Resets at 3:14 PM
+
+As of sometime recently
+Usage checks are temporarily rate limited.
