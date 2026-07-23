@@ -446,7 +446,7 @@ struct ClaudeUsageParser {
         if value.range(of: #"^[0-9]{1,2}(?::[0-9]{2})?\s*(?:AM|PM|am|pm)?$"#, options: .regularExpression) != nil {
             guard let parsedTime = parse(
                 value,
-                formats: ["h:mm a", "ha", "h a", "HH:mm"],
+                formats: ["h:mm a", "h:mma", "ha", "h a", "HH:mm"],
                 timeZone: timeZone
             ) else {
                 return nil
@@ -468,6 +468,7 @@ struct ClaudeUsageParser {
         let year = workingCalendar.component(.year, from: referenceDate)
         let formats = [
             "MMM d 'at' h:mm a yyyy",
+            "MMM d 'at' h:mma yyyy",
             "MMM d 'at' ha yyyy",
             "MMM d 'at' h a yyyy",
             "MMM d 'at' HH:mm yyyy",

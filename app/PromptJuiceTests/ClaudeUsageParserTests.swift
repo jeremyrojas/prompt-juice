@@ -169,6 +169,31 @@ final class ClaudeUsageParserTests: XCTestCase {
         )
     }
 
+    func testCompactMeridiemResetTimes() throws {
+        let now = easternDate(2026, 7, 23, 9, 0)
+        let data = Data(
+            """
+            Usage
+            Current session
+            0% used
+            Resets 2:20pm (America/New_York)
+            Current week (all models)
+            3% used
+            Resets Jul 28 at 6:59pm (America/New_York)
+            """.utf8
+        )
+
+        let result = ClaudeUsageParser().parse(
+            data,
+            now: now,
+            calendar: easternCalendar
+        )
+
+        XCTAssertEqual(result.reading?.session.resetAt, easternDate(2026, 7, 23, 14, 20))
+        XCTAssertEqual(result.reading?.weekly?.resetAt, easternDate(2026, 7, 28, 18, 59))
+        XCTAssertNil(result.failure)
+    }
+
     func testSanitizedLiveCaptureSelectsLatestCompleteRedraw() throws {
         let now = easternDate(2026, 7, 21, 10, 0)
         let result = parse("Live/usage-flat-subscription.ans", now: now)
