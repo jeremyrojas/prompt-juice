@@ -216,18 +216,13 @@ final class ClaudeUsagePersistence: @unchecked Sendable {
             && record.authenticationFingerprint != fingerprint
         record.authenticationFingerprint = fingerprint
         if changed {
+            record.lastAttemptAt = nil
             record.nextBackoffIndex = 0
             record.nextAttemptAt = nil
+            record.recentAttempts = []
         }
         saveRecord(record)
         return changed
-    }
-
-    func resetBackoff() {
-        mutate { record in
-            record.nextBackoffIndex = 0
-            record.nextAttemptAt = nil
-        }
     }
 
     private func mutate(_ body: (inout Record) -> Void) {
@@ -377,20 +372,29 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             return state
         }
 
-        let metadata = persistence.metadata(now: now)
-        let decision = schedule.decision(
-            for: ClaudeUsageScheduleContext(
-                now: now,
-                reason: reason,
-                force: force,
-                providerEnabled: providerEnabled,
-                isOnline: isOnline,
-                lastAttemptAt: metadata.lastAttemptAt,
-                lastSuccessAt: metadata.lastSuccessAt,
-                nextAttemptAt: metadata.nextAttemptAt,
-                recentAttempts: metadata.recentAttempts
+        let decision: ClaudeUsageScheduleDecision
+        if shouldAttemptAuthenticationRecovery(
+            reason: reason,
+            providerEnabled: providerEnabled,
+            isOnline: isOnline
+        ) {
+            decision = .probe
+        } else {
+            let metadata = persistence.metadata(now: now)
+            decision = schedule.decision(
+                for: ClaudeUsageScheduleContext(
+                    now: now,
+                    reason: reason,
+                    force: force,
+                    providerEnabled: providerEnabled,
+                    isOnline: isOnline,
+                    lastAttemptAt: metadata.lastAttemptAt,
+                    lastSuccessAt: metadata.lastSuccessAt,
+                    nextAttemptAt: metadata.nextAttemptAt,
+                    recentAttempts: metadata.recentAttempts
+                )
             )
-        )
+        }
 
         guard decision == .probe else {
             state = stateForSkippedDecision(decision, now: now)
@@ -460,12 +464,9 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             inFlight = nil
         }
 
-        let accessChanged = persistence.updateAuthenticationFingerprint(
+        _ = persistence.updateAuthenticationFingerprint(
             execution.prerequisites.access.persistenceFingerprint
         )
-        if accessChanged {
-            persistence.resetBackoff()
-        }
 
         guard let probeOutcome = execution.probeOutcome else {
             state = ClaudeUsageCoordinatorState(
@@ -587,6 +588,31 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
             estimateReader: estimateReader,
             now: now
         )
+    }
+
+    private func shouldAttemptAuthenticationRecovery(
+        reason: ClaudeRefreshReason,
+        providerEnabled: Bool,
+        isOnline: Bool
+    ) -> Bool {
+        guard providerEnabled, isOnline else {
+            return false
+        }
+
+        switch reason {
+        case .launch, .wake, .foreground, .panelOpen, .manual:
+            break
+        case .timer, .resetBoundary:
+            return false
+        }
+
+        switch state.access {
+        case .signedOut, .unsupportedAuth, .authCheckFailed:
+            return true
+        case .checking, .cliMissing, .updateRequired, .workspaceTrustRequired,
+             .subscription, .apiBilling, .externalProvider:
+            return false
+        }
     }
 
     private static func snapshot(from reading: ClaudeUsageReading) -> ProviderSnapshot {
