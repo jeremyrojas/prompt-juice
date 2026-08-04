@@ -271,13 +271,17 @@ struct ClaudeAuthClassifier {
         guard let status = object as? [String: Any],
               let loggedIn = status["loggedIn"] as? Bool,
               let authMethod = status["authMethod"] as? String,
-              let apiProvider = status["apiProvider"] as? String,
-              status.keys.contains("subscriptionType") else {
+              let apiProvider = status["apiProvider"] as? String else {
             return .unsupported
         }
 
         let subscriptionType: String?
-        if status["subscriptionType"] is NSNull {
+        if !status.keys.contains("subscriptionType") {
+            guard !loggedIn else {
+                return .unsupported
+            }
+            subscriptionType = nil
+        } else if status["subscriptionType"] is NSNull {
             subscriptionType = nil
         } else if let value = status["subscriptionType"] as? String {
             subscriptionType = value.lowercased()
@@ -341,7 +345,9 @@ struct ClaudeAuthClassifier {
             }
         }
 
-        if authMethod == "none", apiProvider == "none", subscriptionType == nil {
+        if authMethod == "none",
+           ["none", "firstparty"].contains(apiProvider),
+           subscriptionType == nil {
             return evidence.hasSubscriptionToken
                 ? .signedOut(reason: .reauthenticationRequired)
                 : .signedOut(reason: .initial)

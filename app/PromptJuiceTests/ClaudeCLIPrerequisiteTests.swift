@@ -141,6 +141,7 @@ final class ClaudeCLIPrerequisiteTests: XCTestCase {
             ("external-foundry", .externalProvider(.foundry)),
             ("external-gateway", .externalProvider(.gateway)),
             ("signed-out-initial", .signedOut(reason: .initial)),
+            ("signed-out-first-party", .signedOut(reason: .initial)),
             ("reauth-expired", .signedOut(reason: .reauthenticationRequired)),
             ("reauth-revoked", .signedOut(reason: .reauthenticationRequired)),
             ("missing-required-field", .unsupported),
@@ -392,7 +393,7 @@ final class ClaudeCLIPrerequisiteTests: XCTestCase {
         let signedOutRunner = StubClaudeCommandRunner(
             result: .success(
                 ClaudeCLICommandResult(
-                    standardOutput: try fixtureData("Auth/signed-out-initial.json"),
+                    standardOutput: try fixtureData("Auth/signed-out-first-party.json"),
                     terminationStatus: 1
                 )
             )

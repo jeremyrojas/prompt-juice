@@ -159,7 +159,10 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             "subscription:max"
         )
         XCTAssertTrue(persistence.updateAuthenticationFingerprint("signedOut:initial"))
-        XCTAssertNil(persistence.metadata(now: now).nextAttemptAt)
+        let changedAuthentication = persistence.metadata(now: now)
+        XCTAssertNil(changedAuthentication.lastAttemptAt)
+        XCTAssertNil(changedAuthentication.nextAttemptAt)
+        XCTAssertTrue(changedAuthentication.recentAttempts.isEmpty)
         XCTAssertEqual(
             persistence.advanceBackoff(from: now),
             now.addingTimeInterval(5 * 60)
@@ -500,6 +503,77 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(debounced.scheduleDecision, .skipDebounce)
         XCTAssertEqual(probe.callCount, 1)
+    }
+
+    func testAuthenticationRecoveryBypassesExhaustedUsageBudgetAndClearsAttempts() async throws {
+        let now = date(2026, 7, 21, 14, 0)
+
+        for persistedAccess in ["unsupportedAuth", "signedOut:initial"] {
+            let fixture = try makeCoordinatorFixture()
+            defer { fixture.remove() }
+            let persistence = ClaudeUsagePersistence(
+                defaults: fixture.defaults,
+                key: "coordinator"
+            )
+            XCTAssertFalse(persistence.updateAuthenticationFingerprint(persistedAccess))
+            for offset in (0..<ClaudeUsageSchedule.combinedHourlyBudget).reversed() {
+                persistence.recordAttempt(
+                    at: now.addingTimeInterval(TimeInterval(-offset * 60)),
+                    reason: offset < ClaudeUsageSchedule.automaticHourlyBudget ? .timer : .manual
+                )
+            }
+            let exhaustedMetadata = persistence.metadata(now: now)
+            XCTAssertEqual(
+                exhaustedMetadata.recentAttempts.count,
+                ClaudeUsageSchedule.combinedHourlyBudget,
+                persistedAccess
+            )
+
+            let probe = ScriptedClaudeUsageProbe([
+                successfulProbe(at: now, usedPercent: 42),
+            ])
+            let subscriptionCheck = ClaudePrerequisiteCheck(
+                access: .subscription(plan: "max"),
+                location: ClaudeExecutableLocation(
+                    invokedURL: URL(fileURLWithPath: "/fake/claude"),
+                    resolvedURL: URL(fileURLWithPath: "/fake/claude"),
+                    provenance: .unknown
+                ),
+                version: .supported(.minimumUsageVersion),
+                authentication: .subscription(plan: "max")
+            )
+            let coordinator = ClaudeUsageCoordinator(
+                prerequisiteChecker: FixedPrerequisiteChecker(subscriptionCheck),
+                usageProbe: probe,
+                workspace: fixture.workspace,
+                cache: MemoryClaudeUsageCache(),
+                estimateReader: FixedClaudeReader(.failure),
+                persistence: persistence,
+                environment: [:]
+            )
+            let initialState = await coordinator.currentState()
+            XCTAssertEqual(
+                initialState.access.persistenceFingerprint,
+                persistedAccess,
+                persistedAccess
+            )
+
+            let budgetedTimer = await coordinator.snapshot(now: now, reason: .timer)
+            XCTAssertEqual(budgetedTimer.scheduleDecision, .skipBudget, persistedAccess)
+            XCTAssertEqual(probe.callCount, 0, persistedAccess)
+
+            let recovered = await coordinator.snapshot(now: now, reason: .foreground)
+            XCTAssertEqual(recovered.access, .subscription(plan: "Max"), persistedAccess)
+            XCTAssertEqual(recovered.snapshot?.usedPercent, 42, persistedAccess)
+            XCTAssertEqual(recovered.refresh, .idle, persistedAccess)
+            XCTAssertEqual(probe.callCount, 1, persistedAccess)
+
+            let metadata = persistence.metadata(now: now)
+            XCTAssertEqual(metadata.authenticationFingerprint, "subscription:max", persistedAccess)
+            XCTAssertNil(metadata.lastAttemptAt, persistedAccess)
+            XCTAssertEqual(metadata.lastSuccessAt, now, persistedAccess)
+            XCTAssertTrue(metadata.recentAttempts.isEmpty, persistedAccess)
+        }
     }
 
     func testAllFourSignedOutSnapshotCombinationsRemainIndependent() async throws {

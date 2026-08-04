@@ -64,6 +64,12 @@
       ]
     },
     {
+      "path": "Auth/signed-out-first-party.json",
+      "covers": [
+        "auth-signed-out-first-party-current-shape"
+      ]
+    },
+    {
       "path": "Auth/signed-out-initial.json",
       "covers": [
         "auth-signed-out-initial"
