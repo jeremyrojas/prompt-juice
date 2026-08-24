@@ -7,13 +7,16 @@ protocol CodexRateLimitReading: Sendable {
 struct CodexAppServerClient: CodexRateLimitReading {
     let executableURL: URL?
     let timeout: TimeInterval
+    let environment: [String: String]
 
     init(
         executableURL: URL? = CodexExecutableLocator.locate(),
-        timeout: TimeInterval = 3
+        timeout: TimeInterval = 3,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.executableURL = executableURL
         self.timeout = timeout
+        self.environment = environment
     }
 
     func readRateLimits() throws -> CodexRateLimitReadResult {
@@ -24,6 +27,10 @@ struct CodexAppServerClient: CodexRateLimitReading {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = ["app-server"]
+        process.environment = Self.childEnvironment(
+            executableURL: executableURL,
+            baseEnvironment: environment
+        )
 
         let stdin = Pipe()
         let stdout = Pipe()
@@ -83,6 +90,31 @@ struct CodexAppServerClient: CodexRateLimitReading {
         case nil:
             throw CodexAppServerClientError.emptyResponse(stderrText)
         }
+    }
+
+    static func childEnvironment(
+        executableURL: URL,
+        baseEnvironment: [String: String]
+    ) -> [String: String] {
+        var childEnvironment = baseEnvironment
+        let executableDirectory = executableURL
+            .deletingLastPathComponent()
+            .standardizedFileURL
+            .path
+        let inheritedPath = baseEnvironment["PATH"].flatMap { path in
+            path.isEmpty ? nil : path
+        } ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        var pathEntries = [executableDirectory]
+
+        for entry in inheritedPath.split(separator: ":", omittingEmptySubsequences: true) {
+            let path = String(entry)
+            if !pathEntries.contains(path) {
+                pathEntries.append(path)
+            }
+        }
+
+        childEnvironment["PATH"] = pathEntries.joined(separator: ":")
+        return childEnvironment
     }
 
     private func sendInitialize(to input: FileHandle) throws {
@@ -321,6 +353,13 @@ enum CodexAppServerClientError: Error, LocalizedError, Equatable {
 }
 
 struct CodexExecutableLocator {
+    static let knownExecutablePaths = [
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex"
+    ]
+
     static func locate(
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -330,11 +369,7 @@ struct CodexExecutableLocator {
             return URL(fileURLWithPath: override)
         }
 
-        for path in [
-            "/Applications/Codex.app/Contents/Resources/codex",
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex"
-        ] where fileManager.isExecutableFile(atPath: path) {
+        for path in knownExecutablePaths where fileManager.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
         }
 
