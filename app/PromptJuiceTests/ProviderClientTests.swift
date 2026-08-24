@@ -657,6 +657,63 @@ final class ProviderClientTests: XCTestCase {
         XCTAssertNotNil(snapshot.rateWindow.durationMinutes)
     }
 
+    func testCodexExecutableLocatorPrefersCurrentChatGPTApp() {
+        XCTAssertEqual(
+            CodexExecutableLocator.knownExecutablePaths,
+            [
+                "/Applications/ChatGPT.app/Contents/Resources/codex",
+                "/Applications/Codex.app/Contents/Resources/codex",
+                "/opt/homebrew/bin/codex",
+                "/usr/local/bin/codex"
+            ]
+        )
+    }
+
+    func testCodexAppServerAddsLauncherDirectoryToRestrictedGUIPath() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let runtimeURL = directory.appendingPathComponent("promptjuice-codex-test-runtime")
+        let launcherURL = directory.appendingPathComponent("codex")
+        let resetAt = Int(now.addingTimeInterval(3_600).timeIntervalSince1970)
+        let runtime = """
+        #!/bin/sh
+        IFS= read -r initialize
+        printf '%s\\n' '{"id":1,"result":{}}'
+        IFS= read -r initialized
+        IFS= read -r rate_limits
+        printf '%s\\n' '{"id":2,"result":{"rateLimits":{"limitId":"codex","limitName":null,"primary":{"usedPercent":23,"windowDurationMins":300,"resetsAt":\(resetAt)},"secondary":null,"planType":"pro","rateLimitReachedType":null}}}'
+        """
+
+        try Data(runtime.utf8).write(to: runtimeURL)
+        try Data("#!/usr/bin/env promptjuice-codex-test-runtime\n".utf8).write(to: launcherURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: runtimeURL.path
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: launcherURL.path
+        )
+
+        let readResult = try CodexAppServerClient(
+            executableURL: launcherURL,
+            timeout: 3,
+            environment: ["PATH": "/usr/bin:/bin"]
+        ).readRateLimits()
+        let snapshot = try readResult.providerSnapshot(now: now)
+
+        XCTAssertEqual(snapshot.rateWindow.usedPercent, 23)
+        XCTAssertEqual(snapshot.rateWindow.durationMinutes, 300)
+        XCTAssertEqual(
+            CodexAppServerClient.childEnvironment(
+                executableURL: launcherURL,
+                baseEnvironment: ["PATH": "/usr/bin:/bin"]
+            )["PATH"],
+            "\(directory.path):/usr/bin:/bin"
+        )
+    }
+
     private func decodeRateLimits(_ json: String) throws -> CodexRateLimitReadResult {
         try JSONDecoder().decode(
             CodexRateLimitReadResult.self,

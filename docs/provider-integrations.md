@@ -16,10 +16,11 @@ PromptJuice reads Codex usage through the local Codex app-server:
 Executable lookup order:
 
 1. `PROMPTJUICE_CODEX_PATH`
-2. `/Applications/Codex.app/Contents/Resources/codex`
-3. `/opt/homebrew/bin/codex`
-4. `/usr/local/bin/codex`
-5. `which codex`
+2. `/Applications/ChatGPT.app/Contents/Resources/codex`
+3. `/Applications/Codex.app/Contents/Resources/codex`
+4. `/opt/homebrew/bin/codex`
+5. `/usr/local/bin/codex`
+6. `which codex`
 
 ### Codex source labels
 
@@ -30,7 +31,7 @@ Executable lookup order:
 Set an explicit executable path when automatic lookup misses Codex:
 
 ```bash
-export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
+export PROMPTJUICE_CODEX_PATH="/Applications/ChatGPT.app/Contents/Resources/codex"
 ```
 
 ## Claude

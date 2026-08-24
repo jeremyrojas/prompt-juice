@@ -89,11 +89,12 @@ stdio, and calls `account/rateLimits/read`. Install and sign in to Codex, then
 PromptJuice can read the primary session window automatically. A valid secondary
 weekly window is cached for future UI.
 
-Automatic lookup checks the Codex app, Homebrew locations, and `PATH`. Set
+Automatic lookup checks the current ChatGPT app, the earlier Codex app,
+Homebrew locations, and `PATH`. Set
 `PROMPTJUICE_CODEX_PATH` when the executable lives elsewhere:
 
 ```bash
-export PROMPTJUICE_CODEX_PATH="/Applications/Codex.app/Contents/Resources/codex"
+export PROMPTJUICE_CODEX_PATH="/Applications/ChatGPT.app/Contents/Resources/codex"
 ```
 
 ### Claude
