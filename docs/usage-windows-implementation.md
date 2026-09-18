@@ -33,8 +33,11 @@ shown at all.
    `modelSpecificWeekly` has no consumer. Plumbing it through is small.
 3. **Codex recon is done.** Live `account/rateLimits/read` on a Pro plan returns the weekly *in the
    `primary` slot* (`windowDurationMins: 10080`) with `secondary: null`, and only a `codex` bucket
-   (no Spark bucket). Lower tiers send `primary` = 300 and `secondary` = 10080.
-   **Rule: classify a window by its duration, never by its slot.**
+   (no Spark bucket). The lower-tier shape is **inferred, not captured**: the existing mapper
+   implies `primary` = 300 and `secondary` = 10080, but no real payload has been seen. Jeremy has a
+   non-Pro account and can run the capture — ask him for it during slice 2 and add it as a fixture.
+   **Rule: classify a window by its duration, never by its slot**, so either slot order works; an
+   unexpected duration (neither ~5 hours nor ~7 days) should be surfaced, not silently dropped.
 4. **Codex's 5-hour is real, not hypothetical.** The mockups previously labelled that state
    "hypothetical"; it is the lower-tier reality and must be built and tested as a first-class case.
 5. **Claude non-measured states exist now** (`ClaudeGuidanceView`, `ClaudeUsagePresentation`:
