@@ -213,10 +213,6 @@ struct ProviderSnapshot: Identifiable, Equatable, Sendable {
 
     var remainingPercent: Double { sessionRemainingPercent }
 
-    var effectiveRemainingPercent: Double {
-        min(sessionRemainingPercent, weeklyRemainingPercent ?? 100)
-    }
-
     var resetWindowID: String {
         mainWindow?.resetWindowID(provider: provider) ?? "\(provider.rawValue):unavailable"
     }

@@ -428,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let pending = viewModel.pendingUseSoonNotifications(now: notificationDate)
         guard !pending.isEmpty,
-              let merged = MergedUseSoonNotification(notices: pending) else {
+              let merged = MergedUseSoonNotification(notices: pending, now: notificationDate) else {
             return
         }
 

@@ -116,7 +116,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertEqual(selectedFrame.height, initialFrame.height)
         XCTAssertEqual(
             viewModel.detail,
-            "Claude resets in 3h"
+            "Claude · resets in 3h"
         )
         XCTAssertEqual(viewModel.headerRemainingPercent, 80)
 
@@ -263,7 +263,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertTrue(guidanceRequests.isEmpty)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 3h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 3h")
         XCTAssertEqual(controller.panelFrameForTesting?.height, expectedHeight)
     }
 

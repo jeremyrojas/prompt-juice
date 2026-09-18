@@ -117,15 +117,15 @@ final class PromptJuiceSettingsStore {
         }
     }
 
-    func markUseSoonWindowNotified(provider: UsageProvider, windowID: String) {
+    func markUseSoonWindowNotified(latchKey: String, windowID: String) {
         var next = notifiedUseSoonWindowIDs
-        next[provider.rawValue] = windowID
+        next[latchKey] = windowID
         notifiedUseSoonWindowIDs = next
     }
 
-    func clearUseSoonWindowNotification(provider: UsageProvider) {
+    func clearUseSoonWindowNotification(latchKey: String) {
         var next = notifiedUseSoonWindowIDs
-        next.removeValue(forKey: provider.rawValue)
+        next.removeValue(forKey: latchKey)
         notifiedUseSoonWindowIDs = next
     }
 

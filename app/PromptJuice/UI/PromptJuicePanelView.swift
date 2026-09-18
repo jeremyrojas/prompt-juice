@@ -89,7 +89,7 @@ struct PromptJuicePanelView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 11) {
             ZStack {
                 Circle()
                     .fill(.ultraThinMaterial)
@@ -115,8 +115,7 @@ struct PromptJuicePanelView: View {
                     .foregroundStyle(.white.opacity(0.58))
                     .lineLimit(1)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onClose) {
                 Image(systemName: "xmark")

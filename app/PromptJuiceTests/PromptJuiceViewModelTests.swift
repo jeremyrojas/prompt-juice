@@ -5,6 +5,69 @@ import XCTest
 
 @MainActor
 final class PromptJuiceViewModelTests: XCTestCase {
+    func testHiddenWeeklyAndFableAlertAndLatchIndependently() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        let claude = ProviderSnapshot(
+            identity: .claude,
+            windows: [
+                LimitWindow(
+                    kind: .fiveHour,
+                    rateWindow: .available(
+                        usedPercent: 17,
+                        resetAt: Self.fixedNow.addingTimeInterval(176 * 60),
+                        durationMinutes: 300
+                    ),
+                    updatedAt: Self.fixedNow
+                ),
+                LimitWindow(
+                    kind: .weekly,
+                    rateWindow: .available(
+                        usedPercent: 45,
+                        resetAt: Self.fixedNow.addingTimeInterval(23 * 60 * 60),
+                        durationMinutes: 10_080
+                    ),
+                    updatedAt: Self.fixedNow
+                ),
+                LimitWindow(
+                    kind: .weeklyModel("Fable"),
+                    rateWindow: .available(
+                        usedPercent: 38,
+                        resetAt: Self.fixedNow.addingTimeInterval(23 * 60 * 60),
+                        durationMinutes: 10_080
+                    ),
+                    updatedAt: Self.fixedNow
+                )
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: Self.fixedNow
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [claude]),
+            now: { Self.fixedNow }
+        )
+        XCTAssertTrue(fixture.store.expandedProviders.isEmpty)
+        XCTAssertEqual(viewModel.visibleWindowCounts, [3])
+        XCTAssertEqual(viewModel.headline, "Use your Claude juice")
+        XCTAssertEqual(viewModel.detail, "Weekly & Fable reset in 23h")
+
+        let notices = viewModel.pendingUseSoonNotifications(now: Self.fixedNow)
+        XCTAssertEqual(notices.map(\.kind), [.weeklyModel("Fable"), .weekly])
+        XCTAssertEqual(Set(notices.map(\.latchKey)).count, 2)
+        XCTAssertEqual(viewModel.mergedUseSoonNotification(now: Self.fixedNow)?.body,
+                       viewModel.detail)
+
+        viewModel.markUseSoonNoticeDispatched(notices[0])
+        XCTAssertEqual(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).map(\.kind),
+                       [.weekly])
+        viewModel.markUseSoonNoticeDispatched(notices[1])
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs.count, 2)
+    }
+
     func testUseSoonNotificationsArePendingForEachQualifyingProvider() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -19,8 +82,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(
             notices.map(\.body),
             [
-                "You have 80% left, resets in 10m",
-                "You have 78% left, resets in 12m"
+                "80% left · resets in 10m",
+                "78% left · resets in 12m"
             ]
         )
         XCTAssertEqual(
@@ -263,8 +326,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         let merged = viewModel.mergedUseSoonNotification(now: Self.fixedNow)
 
-        XCTAssertEqual(merged?.title, "Use Claude and Codex before they reset")
-        XCTAssertEqual(merged?.body, "Claude 80% left, resets in 10m · Codex 78% left, resets in 12m")
+        XCTAssertEqual(merged?.title, "Use your juice")
+        XCTAssertEqual(merged?.body, "2 limits reset soon · Claude 5-hour resets in 10m")
         XCTAssertEqual(merged?.identifier.hasPrefix("promptjuice.use-soon.merged."), true)
     }
 
@@ -303,8 +366,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         let merged = viewModel.mergedUseSoonNotification(now: Self.fixedNow)
 
-        XCTAssertEqual(merged?.title, "Use Claude and Codex before they reset")
-        XCTAssertEqual(merged?.body, "Claude 80% · Codex 78% left, resets in 10m")
+        XCTAssertEqual(merged?.title, "Use your juice")
+        XCTAssertEqual(merged?.body, "Claude 5-hour & Codex 5-hour reset in 10m")
     }
 
     func testMergedNotificationKeepsDistinctResetsWithSameDisplayedUnit() {
@@ -327,11 +390,11 @@ final class PromptJuiceViewModelTests: XCTestCase {
             )
         ]
 
-        let merged = MergedUseSoonNotification(notices: notices)
+        let merged = MergedUseSoonNotification(notices: notices, now: Self.fixedNow)
 
         XCTAssertEqual(
             merged?.body,
-            "Claude 80% left, resets in 10m · Codex 78% left, resets in 10m"
+            "2 limits reset soon · Claude 5-hour resets in 10m"
         )
     }
 
@@ -373,7 +436,9 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         notices.forEach {
             viewModel.clearUseSoonNotificationLatch(
-                for: UseSoonNotificationWithdrawal(provider: $0.provider, windowID: $0.windowID)
+                for: UseSoonNotificationWithdrawal(
+                    provider: $0.provider, windowID: $0.windowID, latchKey: $0.latchKey
+                )
             )
         }
         viewModel.forgetDispatchedUseSoonNotificationIfCleared()
@@ -446,7 +511,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         )
 
         XCTAssertTrue(unavailableViewModel.staleUseSoonNotificationWithdrawals(now: Self.fixedNow).isEmpty)
-        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs[UsageProvider.claude.rawValue], notice.windowID)
+        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs[notice.latchKey], notice.windowID)
 
         let returnedViewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
@@ -475,7 +540,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.setProviderEnabled(.claude, true)
 
         XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
-        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs[UsageProvider.claude.rawValue], notice.windowID)
+        XCTAssertEqual(fixture.store.notifiedUseSoonWindowIDs[notice.latchKey], notice.windowID)
     }
 
     func testStaleUseSoonNotificationWithdrawsOnlyAfterWindowEnd() {
@@ -506,11 +571,15 @@ final class PromptJuiceViewModelTests: XCTestCase {
         )
         XCTAssertEqual(
             rotatedViewModel.staleUseSoonNotificationWithdrawals(now: afterOldReset),
-            [UseSoonNotificationWithdrawal(provider: .claude, windowID: notice.windowID)]
+            [UseSoonNotificationWithdrawal(
+                provider: .claude, windowID: notice.windowID, latchKey: notice.latchKey
+            )]
         )
 
         rotatedViewModel.clearUseSoonNotificationLatch(
-            for: UseSoonNotificationWithdrawal(provider: .claude, windowID: notice.windowID)
+            for: UseSoonNotificationWithdrawal(
+                provider: .claude, windowID: notice.windowID, latchKey: notice.latchKey
+            )
         )
 
         XCTAssertTrue(fixture.store.notifiedUseSoonWindowIDs.isEmpty)
@@ -553,8 +622,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.headline, "Use prompt juice soon")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 42m")
+        XCTAssertEqual(viewModel.headline, "Use your juice")
+        XCTAssertEqual(viewModel.detail, "2 limits reset soon · Claude 5-hour resets in 42m")
     }
 
     func testManualSubtitleDoesNotGroupDistinctResetsWithSameDisplayedUnit() {
@@ -591,7 +660,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Codex resets in 1h")
+        XCTAssertEqual(viewModel.detail, "Codex · resets in 1h")
     }
 
     func testManualSubtitleGroupsProvidersWithSameResetBoundary() {
@@ -654,7 +723,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.detail,
-            "Codex resets in 3h"
+            "Codex · resets in 3h"
         )
     }
 
@@ -725,8 +794,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.headline, "Use Codex before it resets")
-        XCTAssertEqual(viewModel.detail, "Codex resets in 38m")
+        XCTAssertEqual(viewModel.headline, "Use your Codex 5-hour juice")
+        XCTAssertEqual(viewModel.detail, "58% left · resets in 38m")
     }
 
     func testManualVerdictIsCalmWhenHealthy() {
@@ -781,7 +850,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Codex resets in 3h")
+        XCTAssertEqual(viewModel.detail, "Codex · resets in 3h")
     }
 
     func testManualSubtitleUsesAvailableResetWhenCodexIsUnavailable() {
@@ -795,7 +864,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Claude resets in 3h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 3h")
     }
 
     func testEnabledProvidersDefaultToAllWhenKeyIsAbsent() {
@@ -831,7 +900,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibleSnapshots.map(\.provider), [.codex])
         XCTAssertEqual(viewModel.aggregateSeverity, .healthy)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Codex resets in 3h")
+        XCTAssertEqual(viewModel.detail, "Codex · resets in 3h")
         XCTAssertEqual(viewModel.menuBarRemainingPercent, 65)
     }
 
@@ -1430,13 +1499,13 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
 
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
         XCTAssertEqual(viewModel.headerRemainingPercent, 88)
         XCTAssertEqual(viewModel.headerSeverity, .healthy)
     }
@@ -1452,15 +1521,14 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let claude = viewModel.visibleSnapshots.first { $0.provider == .claude }!
 
         XCTAssertNil(viewModel.selectedProvider)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
         XCTAssertEqual(viewModel.sessionRemainingPercentDisplayValueText(for: claude), "80%")
         XCTAssertEqual(viewModel.remainingPercentDisplayValueText(for: claude), "80%")
-        XCTAssertEqual(claude.effectiveRemainingPercent, 65)
 
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
         XCTAssertEqual(viewModel.headerRemainingPercent, 80)
         XCTAssertEqual(
             viewModel.weeklyText(for: claude),
@@ -1470,7 +1538,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.toggleSelection(.codex)
 
         XCTAssertEqual(viewModel.selectedProvider, .codex)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
         XCTAssertEqual(viewModel.headerRemainingPercent, 80)
         XCTAssertEqual(
             viewModel.weeklyText(for: viewModel.visibleSnapshots.first { $0.provider == .codex }!),
@@ -1494,7 +1562,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.toggleSelection(.claude)
 
         XCTAssertEqual(viewModel.selectedProvider, .claude)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
     }
 
     func testSelectingCodexKeepsVisibleOverview() {
@@ -1510,7 +1578,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.selectedProvider, .codex)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
         XCTAssertEqual(viewModel.headerRemainingPercent, 88)
     }
 
@@ -1528,7 +1596,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
     }
 
     func testUnavailableProviderCannotBeSelected() {
@@ -1558,12 +1626,12 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.toggleSelection(.codex)
         XCTAssertEqual(viewModel.selectedProvider, .codex)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
 
         viewModel.dismissCurrentWindow()
 
         XCTAssertNil(viewModel.selectedProvider)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
     }
 
     func testClearSelectionReturnsToOverview() {
@@ -1582,7 +1650,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
-        XCTAssertEqual(viewModel.detail, "Claude resets in 4h")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 4h")
     }
 
         private func makeFixture(notificationsEnabled: Bool? = true) -> (

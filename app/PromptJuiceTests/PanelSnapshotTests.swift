@@ -45,6 +45,9 @@ final class PanelSnapshotTests: XCTestCase {
             fableRemaining: 9,
             fableResetMinutes: 23 * 60
         ))
+        for scenario in MultiAmberFixtureClient.Scenario.allCases {
+            try render("multi-amber-\(scenario.rawValue)", MultiAmberFixtureClient(scenario: scenario))
+        }
         try render("codex-weekly-only", MultiWindowFixtureClient(codexHasFiveHour: false), enabledProviders: [.codex])
         try render(
             "codex-five-hour-weekly",
@@ -304,6 +307,74 @@ private struct MultiWindowFixtureClient: UsageProviderClient {
             rateWindow: .available(
                 usedPercent: 100 - remaining,
                 resetAt: now.addingTimeInterval(TimeInterval(resetMinutes * 60)),
+                durationMinutes: kind.durationMinutes
+            ),
+            updatedAt: now
+        )
+    }
+}
+
+private struct MultiAmberFixtureClient: UsageProviderClient {
+    enum Scenario: String, CaseIterable {
+        case claudeTwo = "claude-two"
+        case claudeThree = "claude-three"
+        case codexTwo = "codex-two"
+        case acrossProviders = "across-providers"
+        case allFive = "all-five"
+    }
+
+    let source: SnapshotSource = .fixture
+    let scenario: Scenario
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        let claudeFiveAmber = scenario == .claudeThree
+            || scenario == .acrossProviders || scenario == .allFive
+        let claudeWeeklyAmber = scenario == .claudeTwo
+            || scenario == .claudeThree || scenario == .allFive
+        let codexFivePresent = scenario == .codexTwo || scenario == .allFive
+        let codexWeeklyAmber = scenario == .codexTwo
+            || scenario == .acrossProviders || scenario == .allFive
+
+        let claude = ProviderSnapshot(
+            identity: .claude,
+            windows: [
+                make(.fiveHour, remaining: 83, minutes: claudeFiveAmber ? 33 : 176, now: now),
+                make(.weekly, remaining: claudeWeeklyAmber ? 55 : 95,
+                     minutes: claudeWeeklyAmber ? 1_380 : 7_200, now: now),
+                make(.weeklyModel("Fable"), remaining: claudeWeeklyAmber ? 62 : 93,
+                     minutes: claudeWeeklyAmber ? 1_380 : 7_200, now: now)
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )
+        var codexWindows: [LimitWindow] = []
+        if codexFivePresent {
+            codexWindows.append(make(.fiveHour, remaining: 78, minutes: 52, now: now))
+        }
+        codexWindows.append(make(.weekly, remaining: 69,
+                                 minutes: codexWeeklyAmber ? 1_380 : 7_200, now: now))
+        let codex = ProviderSnapshot(
+            identity: .codex,
+            windows: codexWindows,
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )
+        return [claude, codex]
+    }
+
+    private func make(
+        _ kind: LimitWindow.Kind,
+        remaining: Double,
+        minutes: Int,
+        now: Date
+    ) -> LimitWindow {
+        LimitWindow(
+            kind: kind,
+            rateWindow: .available(
+                usedPercent: 100 - remaining,
+                resetAt: now.addingTimeInterval(TimeInterval(minutes * 60)),
                 durationMinutes: kind.durationMinutes
             ),
             updatedAt: now

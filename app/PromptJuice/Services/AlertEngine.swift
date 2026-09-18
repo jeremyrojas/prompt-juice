@@ -1,6 +1,14 @@
 import Foundation
 
 struct AlertEngine {
+    func isLockedOut(_ snapshot: ProviderSnapshot, now: Date = Date()) -> Bool {
+        snapshot.windows.contains { window in
+            window.kind == .weekly
+                && window.rateWindow.resetAt.map { $0 > now } == true
+                && window.rateWindow.remainingPercent.map { $0 <= 0 } == true
+        }
+    }
+
     func shouldUseSoon(
         for window: LimitWindow,
         in snapshot: ProviderSnapshot,
@@ -23,46 +31,17 @@ struct AlertEngine {
     func shouldUseSoon(
         for snapshot: ProviderSnapshot,
         thresholds: AlertThresholds,
+        weeklyThresholds: AlertThresholds = .weeklyDefault,
         now: Date = Date()
     ) -> Bool {
-        guard snapshot.confidence.canTriggerAlert,
-              !snapshot.isFreshSessionWindow,
-              !snapshot.isExpired(at: now),
-              let minutesUntilReset = snapshot.rateWindow.minutesUntilReset(now: now),
-              snapshot.rateWindow.remainingPercent != nil else {
-            return false
+        snapshot.windows.contains { window in
+            shouldUseSoon(
+                for: window,
+                in: snapshot,
+                thresholds: window.kind.cadenceIsWeekly ? weeklyThresholds : thresholds,
+                now: now
+            )
         }
-
-        return minutesUntilReset <= thresholds.remainingMinutes
-            && snapshot.sessionRemainingPercent >= Double(thresholds.remainingPercent)
-    }
-
-    func alertingSnapshots(
-        in snapshots: [ProviderSnapshot],
-        thresholds: AlertThresholds,
-        now: Date = Date()
-    ) -> [ProviderSnapshot] {
-        snapshots.filter {
-            shouldUseSoon(for: $0, thresholds: thresholds, now: now)
-        }
-    }
-
-    func preferredSnapshot(
-        in snapshots: [ProviderSnapshot],
-        thresholds: AlertThresholds,
-        now: Date = Date()
-    ) -> ProviderSnapshot? {
-        if let highestRemainingAlert = alertingSnapshots(
-            in: snapshots,
-            thresholds: thresholds,
-            now: now
-        ).max(by: { $0.sessionRemainingPercent < $1.sessionRemainingPercent }) {
-            return highestRemainingAlert
-        }
-
-        return snapshots
-            .filter { $0.hasActiveResetWindow(at: now) }
-            .max { $0.sessionRemainingPercent < $1.sessionRemainingPercent }
     }
 
     /// The single judgment for one provider, used by the chip, row/bar color,
@@ -71,12 +50,15 @@ struct AlertEngine {
     func severity(
         for snapshot: ProviderSnapshot,
         thresholds: AlertThresholds,
+        weeklyThresholds: AlertThresholds = .weeklyDefault,
         now: Date = Date()
     ) -> UsageSeverity {
         guard snapshot.isAvailable,
               !snapshot.isExpired(at: now) else {
             return .unavailable
         }
+
+        if isLockedOut(snapshot, now: now) { return .empty }
 
         let remaining = snapshot.remainingPercent
 
@@ -85,7 +67,12 @@ struct AlertEngine {
         }
 
         // The orange nudge takes priority; below it, "running low" is a calm state.
-        if shouldUseSoon(for: snapshot, thresholds: thresholds, now: now) {
+        if shouldUseSoon(
+            for: snapshot,
+            thresholds: thresholds,
+            weeklyThresholds: weeklyThresholds,
+            now: now
+        ) {
             return .useSoon
         }
 
@@ -102,10 +89,11 @@ struct AlertEngine {
     func aggregateSeverity(
         in snapshots: [ProviderSnapshot],
         thresholds: AlertThresholds,
+        weeklyThresholds: AlertThresholds = .weeklyDefault,
         now: Date = Date()
     ) -> UsageSeverity {
         let available = snapshots
-            .map { severity(for: $0, thresholds: thresholds, now: now) }
+            .map { severity(for: $0, thresholds: thresholds, weeklyThresholds: weeklyThresholds, now: now) }
             .filter { $0 != .unavailable }
 
         return available.max { $0.rank < $1.rank } ?? .unavailable
@@ -114,9 +102,10 @@ struct AlertEngine {
     func statusText(
         for snapshot: ProviderSnapshot,
         thresholds: AlertThresholds,
+        weeklyThresholds: AlertThresholds = .weeklyDefault,
         now: Date = Date()
     ) -> String {
-        if shouldUseSoon(for: snapshot, thresholds: thresholds, now: now) {
+        if shouldUseSoon(for: snapshot, thresholds: thresholds, weeklyThresholds: weeklyThresholds, now: now) {
             return "Use soon"
         }
 

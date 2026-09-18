@@ -8,4 +8,9 @@ struct AlertThresholds: Equatable {
         remainingMinutes: 60,
         remainingPercent: 40
     )
+
+    static let weeklyDefault = AlertThresholds(
+        remainingMinutes: 1_440,
+        remainingPercent: 40
+    )
 }
