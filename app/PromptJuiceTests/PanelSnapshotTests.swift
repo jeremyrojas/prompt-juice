@@ -24,6 +24,9 @@ final class PanelSnapshotTests: XCTestCase {
         try render("clash", ClashFixtureClient())
         try render("stale-claude", StaleClaudeFixtureClient())
         try render("codexonly", CodexOnlyFixtureClient(), enabledProviders: [.codex])
+        try render("claude-three-windows", MultiWindowFixtureClient(codexHasFiveHour: false))
+        try render("codex-weekly-only", MultiWindowFixtureClient(codexHasFiveHour: false), enabledProviders: [.codex])
+        try render("codex-five-hour-weekly", MultiWindowFixtureClient(codexHasFiveHour: true), enabledProviders: [.codex])
         try render(
             "claudeonly-notmeasured",
             ClaudeOnlyNotMeasuredFixtureClient(),
@@ -54,7 +57,7 @@ final class PanelSnapshotTests: XCTestCase {
         XCTAssertTrue(viewModel.shouldOfferUseSoonNotificationPrime)
 
         let panelHeight = PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count,
+            windowCounts: viewModel.visibleWindowCounts,
             showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
         )
 
@@ -132,7 +135,7 @@ final class PanelSnapshotTests: XCTestCase {
         )
         viewModel.showManualCheck()
         let panelHeight = PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count
+            windowCounts: viewModel.visibleWindowCounts
         )
 
         let content = ZStack {
@@ -228,6 +231,55 @@ private func codexExact(_ now: Date, usedPercent: Double = 1) -> ProviderSnapsho
         confidence: .exact,
         updatedAt: now
     )
+}
+
+private struct MultiWindowFixtureClient: UsageProviderClient {
+    let source: SnapshotSource = .fixture
+    let codexHasFiveHour: Bool
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        let claude = ProviderSnapshot(
+            identity: .claude,
+            windows: [
+                window(.fiveHour, remaining: 83, resetMinutes: 176, now: now),
+                window(.weekly, remaining: 95, resetMinutes: 5 * 24 * 60, now: now),
+                window(.weeklyModel("Fable"), remaining: 93, resetMinutes: 5 * 24 * 60, now: now)
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )
+        var codexWindows: [LimitWindow] = []
+        if codexHasFiveHour {
+            codexWindows.append(window(.fiveHour, remaining: 92, resetMinutes: 176, now: now))
+        }
+        codexWindows.append(window(.weekly, remaining: 56, resetMinutes: 5 * 24 * 60, now: now))
+        let codex = ProviderSnapshot(
+            identity: .codex,
+            windows: codexWindows,
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )
+        return [claude, codex]
+    }
+
+    private func window(
+        _ kind: LimitWindow.Kind,
+        remaining: Double,
+        resetMinutes: Int,
+        now: Date
+    ) -> LimitWindow {
+        LimitWindow(
+            kind: kind,
+            rateWindow: .available(
+                usedPercent: 100 - remaining,
+                resetAt: now.addingTimeInterval(TimeInterval(resetMinutes * 60)),
+                durationMinutes: kind.durationMinutes
+            ),
+            updatedAt: now
+        )
+    }
 }
 
 private struct LowFixtureClient: UsageProviderClient {

@@ -17,7 +17,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
         let initialHeight = PromptJuicePanelMetrics.height(
-            rowCount: 2
+            windowCounts: viewModel.visibleWindowCounts
         )
 
         controller.show()
@@ -161,7 +161,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
             onClaudeGuidanceRequested: { guidanceRequests.append($0) }
         )
         let expectedHeight = PromptJuicePanelMetrics.height(
-            rowCount: 2
+            windowCounts: viewModel.visibleWindowCounts
         )
 
         controller.show()

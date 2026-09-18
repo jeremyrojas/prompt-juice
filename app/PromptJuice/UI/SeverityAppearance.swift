@@ -5,6 +5,8 @@ import SwiftUI
 /// every surface tells the same story. Orange is the session-reset nudge; calm
 /// low/empty states use muted color.
 enum JuicePalette {
+    static let claude = Color(red: 1, green: 0.624, blue: 0.039)
+    static let codex = Color(red: 0.196, green: 0.831, blue: 0.871)
     static let green = Color(red: 0.373, green: 0.820, blue: 0.122)
     static let orange = Color(red: 0.941, green: 0.639, blue: 0.165)
     static let muted = Color(red: 0.59, green: 0.61, blue: 0.65)

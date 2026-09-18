@@ -654,7 +654,7 @@ final class JuicebarPanelController: NSObject {
         NSSize(
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: viewModel.visibleSnapshots.count,
+                windowCounts: viewModel.visibleWindowCounts,
                 showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
             )
         )

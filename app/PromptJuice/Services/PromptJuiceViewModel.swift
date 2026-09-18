@@ -210,6 +210,21 @@ final class PromptJuiceViewModel: ObservableObject {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
 
+    func measuredWindows(for snapshot: UsageSnapshot) -> [LimitWindow] {
+        guard snapshot.confidence != .unavailable,
+              snapshot.provider != .claude || claudePresentation.showsReading,
+              !snapshot.isFreshSessionWindow else {
+            return []
+        }
+        return snapshot.windows.filter { $0.rateWindow.isAvailable }
+    }
+
+    var visibleWindowCounts: [Int] {
+        visibleSnapshots.map { measuredWindows(for: $0).count }
+    }
+
+    var currentDate: Date { now() }
+
     var claudePresentation: ClaudeUsagePresentation {
         ClaudeUsagePresentation.resolve(
             access: claudeAccessState,

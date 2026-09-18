@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showDebugPanelPreview() {
         let height = PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count,
+            windowCounts: viewModel.visibleWindowCounts,
             showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
         )
         let window = NSWindow(
