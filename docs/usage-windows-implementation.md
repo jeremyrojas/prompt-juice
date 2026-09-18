@@ -36,8 +36,12 @@ shown at all.
    (no Spark bucket). The lower-tier shape is **inferred, not captured**: the existing mapper
    implies `primary` = 300 and `secondary` = 10080, but no real payload has been seen. Jeremy has a
    non-Pro account and can run the capture — ask him for it during slice 2 and add it as a fixture.
-   **Rule: classify a window by its duration, never by its slot**, so either slot order works; an
-   unexpected duration (neither ~5 hours nor ~7 days) should be surfaced, not silently dropped.
+   **Rule: classify a window by its duration, never by its slot**, so either slot order works.
+   Known durations get canonical labels (300 min → `5-hour limit`, 10080 min → `Weekly`). Any other
+   duration is still a valid row, labelled from its real length with the same single-unit rule
+   (`24-hour limit`, `3-day limit`) and logged once — never an error state and never mislabelled
+   `Weekly`. Thresholds follow cadence class: under 1 day uses the 5-hour pair, 1 day and up uses
+   the weekly pair. Providers change limits without notice; the row set must survive that.
 4. **Codex's 5-hour is real, not hypothetical.** The mockups previously labelled that state
    "hypothetical"; it is the lower-tier reality and must be built and tested as a first-class case.
 5. **Claude non-measured states exist now** (`ClaudeGuidanceView`, `ClaudeUsagePresentation`:
@@ -111,7 +115,7 @@ Serial, because nearly every slice touches `PromptJuicePanelView.swift`,
 | # | Slice | Main files | Gate |
 |---|---|---|---|
 | 1 | **Reset formatter.** Pure `ResetFormatter`; replace `resetText` / `fullResetText` / `weeklyResetText`. Every surface already routes through these in the view model — rows, header detail (`:403–413`, which already coalesces providers that share a reset time), the Settings status line (`:1076`) and the use-soon notification copy (`:8–72`) — so this is one file plus tests. Fixes `146h 4m` immediately. | `PromptJuiceViewModel` | unit table |
-| 2 | **Windows model.** `LimitWindow { kind: .fiveHour / .weekly / .weeklyModel(name), rateWindow, updatedAt }`; `ProviderSnapshot.windows` ordered by cadence, `mainWindow` = first. Codex mapper classifies by `windowDurationMins` (< 1 day → 5-hour, else weekly) and stops requiring a session-shaped `primary`. Claude coordinator maps `modelSpecificWeekly`. Caches carry the list. Keep `rateWindow`/`weeklyWindow` as computed shims so untouched call sites compile; delete the "retained for future weekly UI" comments. `resetWindowID` becomes per-window. | `ProviderSnapshot`, `RateWindow`, `CodexRateLimitResponse`, `ClaudeUsageCoordinator`, `ProviderWindowSnapshotCache`, `CodexSnapshotCache`, fixtures | unit; no visible change except Codex Pro labelled Weekly |
+| 2 | **Windows model.** `LimitWindow { kind: .fiveHour / .weekly / .weeklyModel(name) / .other(durationMinutes), rateWindow, updatedAt }`; `ProviderSnapshot.windows` ordered by cadence, `mainWindow` = first. Codex mapper classifies by `windowDurationMins` (300 → 5-hour, 10080 → weekly, anything else → a window labelled by its actual duration; see section 2 item 3) and stops requiring a session-shaped `primary`. Claude coordinator maps `modelSpecificWeekly`. Caches carry the list. Keep `rateWindow`/`weeklyWindow` as computed shims so untouched call sites compile; delete the "retained for future weekly UI" comments. `resetWindowID` becomes per-window. | `ProviderSnapshot`, `RateWindow`, `CodexRateLimitResponse`, `ClaudeUsageCoordinator`, `ProviderWindowSnapshotCache`, `CodexSnapshotCache`, fixtures | unit; no visible change except Codex Pro labelled Weekly |
 | 3 | **Row anatomy.** Card header + labelled rows + flat bars; `PromptJuicePanelMetrics.height` becomes a function of visible rows. All windows rendered expanded in this slice. | `PromptJuicePanelView`, `SeverityAppearance` | snapshot PNGs |
 | 4 | **Disclosure.** Chevron hit-rects in `PanelClickRouter`, per-provider expanded flag in `PromptJuiceSettingsStore`, panel resize in `JuicebarPanelController`, amber punch-through. | `JuicebarPanelController`, `PromptJuicePanelView`, `PromptJuiceSettingsStore` | router tests + snapshots + **computer use #1** |
 | 5 | **Alerts.** Per-window use-soon with per-cadence thresholds and in-use guard; per-window severity; header cascade as a pure function; notification latch keyed by provider + window (today `notifiedUseSoonWindowIDs` is keyed by provider only, so a weekly alert would clobber the 5-hour latch); coalesced notification. | `AlertEngine`, `AlertThresholds`, `UsageSeverity`, `PromptJuiceViewModel` (header detail and notification copy live here; extend the existing shared-reset coalescing rather than rewriting it) | unit matrix (below) |
