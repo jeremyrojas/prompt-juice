@@ -3,7 +3,15 @@ import SwiftUI
 
 enum SettingsWindowMetrics {
     static let width: CGFloat = 430
-    static let height: CGFloat = 494
+    static let settingsHeight: CGFloat = 610
+    static let firstRunHeight: CGFloat = 494
+
+    static func height(for mode: SettingsWindowMode) -> CGFloat {
+        switch mode {
+        case .settings: settingsHeight
+        case .firstRun: firstRunHeight
+        }
+    }
 }
 
 struct SettingsView: View {
@@ -20,7 +28,7 @@ struct SettingsView: View {
                 firstRunView
             }
         }
-        .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height)
+        .frame(width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height(for: state.mode))
         .sheet(item: $state.claudeGuidanceJourney) { journey in
             ClaudeGuidanceSheetView(
                 viewModel: viewModel,
@@ -125,9 +133,19 @@ struct SettingsView: View {
     @ViewBuilder
     private var useJuiceSection: some View {
         Section {
-            UseJuiceThresholdRows(viewModel: viewModel)
+            UseJuiceThresholdRows(viewModel: viewModel, cadence: .fiveHour)
         } header: {
-            Text("Use the juice")
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Use the juice")
+                    .font(.headline)
+                Text("5-hour limits")
+            }
+        }
+
+        Section {
+            UseJuiceThresholdRows(viewModel: viewModel, cadence: .weekly)
+        } header: {
+            Text("Weekly limits")
         } footer: {
             Text("Turns your menu-bar droplet orange when a usage limit window is this close to resetting.")
                 .font(.footnote)
@@ -361,6 +379,7 @@ private struct ClaudeMeasurementPopover: View {
 
 private struct UseJuiceThresholdRows: View {
     @ObservedObject var viewModel: PromptJuiceViewModel
+    let cadence: LimitCadence
 
     var body: some View {
         VStack(spacing: 0) {
@@ -385,29 +404,44 @@ private struct UseJuiceThresholdRows: View {
 
     private var minutesSelection: Binding<Int> {
         Binding {
-            viewModel.thresholds.remainingMinutes
+            pair.remainingMinutes
         } set: { minutes in
-            viewModel.setRemainingMinutesThreshold(minutes)
+            viewModel.setRemainingMinutesThreshold(minutes, cadence: cadence)
         }
     }
 
     private var percentSelection: Binding<Int> {
         Binding {
-            viewModel.thresholds.remainingPercent
+            pair.remainingPercent
         } set: { percent in
-            viewModel.setRemainingPercentThreshold(percent)
+            viewModel.setRemainingPercentThreshold(percent, cadence: cadence)
         }
+    }
+
+    private var pair: AlertThresholds {
+        cadence == .fiveHour ? viewModel.fiveHourThresholds : viewModel.weeklyThresholds
     }
 
     private var minutesPicker: some View {
         Picker("Reset window", selection: minutesSelection) {
-            ForEach([30, 45, 60, 90], id: \.self) { minutes in
-                Text("\(minutes) minutes").tag(minutes)
+            ForEach(minutesOptions, id: \.self) { minutes in
+                Text(minutesLabel(minutes)).tag(minutes)
             }
         }
         .labelsHidden()
         .pickerStyle(.menu)
         .fixedSize()
+    }
+
+    private var minutesOptions: [Int] {
+        cadence == .fiveHour ? [30, 45, 60, 90] : [720, 1_440, 2_880, 4_320]
+    }
+
+    private func minutesLabel(_ minutes: Int) -> String {
+        if cadence == .fiveHour { return "\(minutes) minutes" }
+        if minutes == 720 { return "12 hours" }
+        let days = minutes / 1_440
+        return "\(days) \(days == 1 ? "day" : "days")"
     }
 
     private var percentPicker: some View {

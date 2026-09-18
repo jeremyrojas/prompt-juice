@@ -5,6 +5,57 @@ import XCTest
 
 @MainActor
 final class PromptJuiceViewModelTests: XCTestCase {
+    func testCadenceSettingsChangeOnlyTheirWindows() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.codex]
+        let codex = ProviderSnapshot(
+            identity: .codex,
+            windows: [
+                LimitWindow(
+                    kind: .fiveHour,
+                    rateWindow: .available(
+                        usedPercent: 20,
+                        resetAt: Self.fixedNow.addingTimeInterval(52 * 60),
+                        durationMinutes: 300
+                    ),
+                    updatedAt: Self.fixedNow
+                ),
+                LimitWindow(
+                    kind: .weekly,
+                    rateWindow: .available(
+                        usedPercent: 30,
+                        resetAt: Self.fixedNow.addingTimeInterval(2 * 24 * 60 * 60),
+                        durationMinutes: 10_080
+                    ),
+                    updatedAt: Self.fixedNow
+                )
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: Self.fixedNow
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [codex]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).map(\.kind),
+                       [.fiveHour])
+        viewModel.setRemainingMinutesThreshold(2_880, cadence: .weekly)
+        XCTAssertEqual(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).map(\.kind),
+                       [.fiveHour, .weekly])
+        XCTAssertEqual(viewModel.visibleWindowCounts, [2])
+        viewModel.setRemainingMinutesThreshold(30, cadence: .fiveHour)
+        XCTAssertEqual(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).map(\.kind),
+                       [.weekly])
+        viewModel.setRemainingPercentThreshold(75, cadence: .weekly)
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(fixture.store.sharedThresholds(for: .fiveHour).remainingMinutes, 30)
+        XCTAssertEqual(fixture.store.sharedThresholds(for: .weekly).remainingPercent, 75)
+    }
+
     func testHiddenWeeklyAndFableAlertAndLatchIndependently() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

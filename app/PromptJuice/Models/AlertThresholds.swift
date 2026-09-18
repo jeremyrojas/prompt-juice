@@ -1,5 +1,14 @@
 import Foundation
 
+enum LimitCadence: String, CaseIterable, Sendable {
+    case fiveHour
+    case weekly
+
+    init(kind: LimitWindow.Kind) {
+        self = kind.cadenceIsWeekly ? .weekly : .fiveHour
+    }
+}
+
 struct AlertThresholds: Equatable {
     var remainingMinutes: Int
     var remainingPercent: Int

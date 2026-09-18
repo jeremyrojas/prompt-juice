@@ -328,7 +328,7 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(
             engine.aggregateSeverity(
                 in: [healthy, useSoon],
-                thresholds: thresholds,
+                thresholdsFor: { _, cadence in cadence == .fiveHour ? thresholds : .weeklyDefault },
                 now: now
             ),
             .useSoon
@@ -353,7 +353,7 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(
             engine.aggregateSeverity(
                 in: [healthy, unavailable],
-                thresholds: thresholds,
+                thresholdsFor: { _, cadence in cadence == .fiveHour ? thresholds : .weeklyDefault },
                 now: now
             ),
             .healthy
@@ -362,7 +362,7 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(
             engine.aggregateSeverity(
                 in: [unavailable],
-                thresholds: thresholds,
+                thresholdsFor: { _, cadence in cadence == .fiveHour ? thresholds : .weeklyDefault },
                 now: now
             ),
             .unavailable

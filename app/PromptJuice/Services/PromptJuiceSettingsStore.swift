@@ -10,6 +10,10 @@ final class PromptJuiceSettingsStore {
         static let expandedProviders = "expandedProviders"
         static let remainingMinutesThreshold = "remainingMinutesThreshold"
         static let remainingPercentThreshold = "remainingPercentThreshold"
+        static let fiveHourMinutes = "fiveHourRemainingMinutesThreshold"
+        static let fiveHourPercent = "fiveHourRemainingPercentThreshold"
+        static let weeklyMinutes = "weeklyRemainingMinutesThreshold"
+        static let weeklyPercent = "weeklyRemainingPercentThreshold"
         static let notifiedUseSoonWindowIDs = "notifiedUseSoonWindowIDs"
         static let useSoonNotificationsEnabled = "useSoonNotificationsEnabled"
         static let didOfferUseSoonNotification = "didOfferUseSoonNotification"
@@ -23,13 +27,29 @@ final class PromptJuiceSettingsStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        migrateLegacyThresholds()
         registerDefaults()
     }
 
-    var thresholds: AlertThresholds {
-        AlertThresholds(
-            remainingMinutes: defaults.integer(forKey: Key.remainingMinutesThreshold),
-            remainingPercent: defaults.integer(forKey: Key.remainingPercentThreshold)
+    func sharedThresholds(for cadence: LimitCadence) -> AlertThresholds {
+        let keys = sharedThresholdKeys(for: cadence)
+        return AlertThresholds(
+            remainingMinutes: defaults.integer(forKey: keys.minutes),
+            remainingPercent: defaults.integer(forKey: keys.percent)
+        )
+    }
+
+    func thresholds(for provider: UsageProvider, cadence: LimitCadence) -> AlertThresholds {
+        let prefix = "thresholds.\(provider.rawValue).\(cadence.rawValue)"
+        let minutesKey = "\(prefix).minutes"
+        let percentKey = "\(prefix).percent"
+        guard defaults.object(forKey: minutesKey) != nil,
+              defaults.object(forKey: percentKey) != nil else {
+            return sharedThresholds(for: cadence)
+        }
+        return AlertThresholds(
+            remainingMinutes: defaults.integer(forKey: minutesKey),
+            remainingPercent: defaults.integer(forKey: percentKey)
         )
     }
 
@@ -171,15 +191,54 @@ final class PromptJuiceSettingsStore {
         }
     }
 
-    func saveThresholds(_ thresholds: AlertThresholds) {
-        defaults.set(thresholds.remainingMinutes, forKey: Key.remainingMinutesThreshold)
-        defaults.set(thresholds.remainingPercent, forKey: Key.remainingPercentThreshold)
+    func saveThresholds(
+        _ thresholds: AlertThresholds,
+        for cadence: LimitCadence,
+        provider: UsageProvider? = nil
+    ) {
+        let keys: (minutes: String, percent: String)
+        if let provider {
+            let prefix = "thresholds.\(provider.rawValue).\(cadence.rawValue)"
+            keys = ("\(prefix).minutes", "\(prefix).percent")
+        } else {
+            keys = sharedThresholdKeys(for: cadence)
+        }
+        defaults.set(thresholds.remainingMinutes, forKey: keys.minutes)
+        defaults.set(thresholds.remainingPercent, forKey: keys.percent)
+    }
+
+    private func sharedThresholdKeys(for cadence: LimitCadence) -> (minutes: String, percent: String) {
+        switch cadence {
+        case .fiveHour: (Key.fiveHourMinutes, Key.fiveHourPercent)
+        case .weekly: (Key.weeklyMinutes, Key.weeklyPercent)
+        }
+    }
+
+    private func migrateLegacyThresholds() {
+        let newMinutes = defaults.integer(forKey: Key.fiveHourMinutes)
+        if defaults.object(forKey: Key.remainingMinutesThreshold) != nil,
+           newMinutes == 0 || newMinutes == AlertThresholds.default.remainingMinutes {
+            let oldMinutes = defaults.integer(forKey: Key.remainingMinutesThreshold)
+            defaults.set(oldMinutes > 0 ? oldMinutes : AlertThresholds.default.remainingMinutes,
+                         forKey: Key.fiveHourMinutes)
+        }
+        let newPercent = defaults.integer(forKey: Key.fiveHourPercent)
+        if defaults.object(forKey: Key.remainingPercentThreshold) != nil,
+           newPercent == 0 || newPercent == AlertThresholds.default.remainingPercent {
+            let oldPercent = defaults.integer(forKey: Key.remainingPercentThreshold)
+            defaults.set(oldPercent > 0 ? oldPercent : AlertThresholds.default.remainingPercent,
+                         forKey: Key.fiveHourPercent)
+        }
+        defaults.removeObject(forKey: Key.remainingMinutesThreshold)
+        defaults.removeObject(forKey: Key.remainingPercentThreshold)
     }
 
     private func registerDefaults() {
         defaults.register(defaults: [
-            Key.remainingMinutesThreshold: AlertThresholds.default.remainingMinutes,
-            Key.remainingPercentThreshold: AlertThresholds.default.remainingPercent,
+            Key.fiveHourMinutes: AlertThresholds.default.remainingMinutes,
+            Key.fiveHourPercent: AlertThresholds.default.remainingPercent,
+            Key.weeklyMinutes: AlertThresholds.weeklyDefault.remainingMinutes,
+            Key.weeklyPercent: AlertThresholds.weeklyDefault.remainingPercent,
             Key.useSoonNotificationsEnabled: false,
             Key.usageSourceMode: UsageSourceMode.defaultMode.rawValue
         ])

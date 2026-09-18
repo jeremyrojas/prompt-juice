@@ -119,7 +119,8 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var selectedProvider: UsageProvider?
     @Published private(set) var hoveredPanelTarget: PanelClickTarget?
     @Published private(set) var actionMessage: String?
-    @Published private(set) var thresholds: AlertThresholds
+    @Published private(set) var fiveHourThresholds: AlertThresholds
+    @Published private(set) var weeklyThresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
     @Published private(set) var enabledProviders: Set<UsageProvider>
     @Published private(set) var expandedProviders: Set<UsageProvider>
@@ -200,7 +201,8 @@ final class PromptJuiceViewModel: ObservableObject {
         self.didOfferUseSoonNotification = settingsStore.didOfferUseSoonNotification
         claudeAccessState = initialClaudeAccessState ?? .checking
         claudeRefreshState = initialClaudeRefreshState ?? .idle
-        thresholds = settingsStore.thresholds
+        fiveHourThresholds = settingsStore.sharedThresholds(for: .fiveHour)
+        weeklyThresholds = settingsStore.sharedThresholds(for: .weekly)
         snapshots = if let initialSnapshots {
             initialSnapshots
         } else if let providerClient {
@@ -239,11 +241,13 @@ final class PromptJuiceViewModel: ObservableObject {
         alertEngine.shouldUseSoon(
             for: window,
             in: snapshot,
-            thresholds: window.kind.cadenceIsWeekly
-                ? .weeklyDefault
-                : thresholds,
+            thresholds: thresholds(for: window, provider: snapshot.provider),
             now: now()
         )
+    }
+
+    private func thresholds(for window: LimitWindow, provider: UsageProvider) -> AlertThresholds {
+        settingsStore.thresholds(for: provider, cadence: LimitCadence(kind: window.kind))
     }
 
     func windowSeverity(_ window: LimitWindow, in snapshot: UsageSnapshot) -> UsageSeverity {
@@ -347,8 +351,8 @@ final class PromptJuiceViewModel: ObservableObject {
     func severity(for snapshot: UsageSnapshot) -> UsageSeverity {
         alertEngine.severity(
             for: snapshot,
-            thresholds: thresholds,
-            weeklyThresholds: .weeklyDefault,
+            thresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .fiveHour),
+            weeklyThresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .weekly),
             now: now()
         )
     }
@@ -357,8 +361,9 @@ final class PromptJuiceViewModel: ObservableObject {
     var aggregateSeverity: UsageSeverity {
         alertEngine.aggregateSeverity(
             in: quotaBearingVisibleSnapshots,
-            thresholds: thresholds,
-            weeklyThresholds: .weeklyDefault,
+            thresholdsFor: { provider, cadence in
+                settingsStore.thresholds(for: provider, cadence: cadence)
+            },
             now: now()
         )
     }
@@ -578,7 +583,7 @@ final class PromptJuiceViewModel: ObservableObject {
     private func alertingLimits(at date: Date) -> [AlertingLimit] {
         quotaBearingVisibleSnapshots.flatMap { snapshot in
             snapshot.windows.enumerated().compactMap { index, window in
-                let pair = window.kind.cadenceIsWeekly ? AlertThresholds.weeklyDefault : thresholds
+                let pair = thresholds(for: window, provider: snapshot.provider)
                 guard alertEngine.shouldUseSoon(
                     for: window,
                     in: snapshot,
@@ -618,15 +623,21 @@ final class PromptJuiceViewModel: ObservableObject {
         selectedProvider = nil
     }
 
-    func setRemainingMinutesThreshold(_ value: Int) {
-        thresholds.remainingMinutes = value
-        settingsStore.saveThresholds(thresholds)
+    func setRemainingMinutesThreshold(_ value: Int, cadence: LimitCadence) {
+        var pair = settingsStore.sharedThresholds(for: cadence)
+        pair.remainingMinutes = value
+        settingsStore.saveThresholds(pair, for: cadence)
+        if cadence == .fiveHour { fiveHourThresholds = pair }
+        else { weeklyThresholds = pair }
         refreshModeForThresholds()
     }
 
-    func setRemainingPercentThreshold(_ value: Int) {
-        thresholds.remainingPercent = value
-        settingsStore.saveThresholds(thresholds)
+    func setRemainingPercentThreshold(_ value: Int, cadence: LimitCadence) {
+        var pair = settingsStore.sharedThresholds(for: cadence)
+        pair.remainingPercent = value
+        settingsStore.saveThresholds(pair, for: cadence)
+        if cadence == .fiveHour { fiveHourThresholds = pair }
+        else { weeklyThresholds = pair }
         refreshModeForThresholds()
     }
 
@@ -750,7 +761,7 @@ final class PromptJuiceViewModel: ObservableObject {
 
         return quotaBearingVisibleSnapshots.flatMap { snapshot in
             snapshot.windows.enumerated().compactMap { index, window -> UseSoonNotice? in
-                let pair = window.kind.cadenceIsWeekly ? AlertThresholds.weeklyDefault : thresholds
+                let pair = thresholds(for: window, provider: snapshot.provider)
                 let latchKey = "\(snapshot.provider.rawValue):\(window.kind.identifier)"
                 let windowID = window.resetWindowID(provider: snapshot.provider)
                 guard alertEngine.shouldUseSoon(
@@ -1048,7 +1059,8 @@ final class PromptJuiceViewModel: ObservableObject {
     func shouldUseSoon(for snapshot: UsageSnapshot) -> Bool {
         alertEngine.shouldUseSoon(
             for: snapshot,
-            thresholds: thresholds,
+            thresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .fiveHour),
+            weeklyThresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .weekly),
             now: now()
         )
     }
@@ -1060,7 +1072,8 @@ final class PromptJuiceViewModel: ObservableObject {
 
         return alertEngine.statusText(
             for: snapshot,
-            thresholds: thresholds,
+            thresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .fiveHour),
+            weeklyThresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .weekly),
             now: now()
         )
     }

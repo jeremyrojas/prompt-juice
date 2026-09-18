@@ -88,12 +88,18 @@ struct AlertEngine {
     /// menu-bar glyph tint.
     func aggregateSeverity(
         in snapshots: [ProviderSnapshot],
-        thresholds: AlertThresholds,
-        weeklyThresholds: AlertThresholds = .weeklyDefault,
+        thresholdsFor: (UsageProvider, LimitCadence) -> AlertThresholds,
         now: Date = Date()
     ) -> UsageSeverity {
         let available = snapshots
-            .map { severity(for: $0, thresholds: thresholds, weeklyThresholds: weeklyThresholds, now: now) }
+            .map { snapshot in
+                severity(
+                    for: snapshot,
+                    thresholds: thresholdsFor(snapshot.provider, .fiveHour),
+                    weeklyThresholds: thresholdsFor(snapshot.provider, .weekly),
+                    now: now
+                )
+            }
             .filter { $0 != .unavailable }
 
         return available.max { $0.rank < $1.rank } ?? .unavailable
