@@ -80,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 )
             case "tooltip":
                 self.showDebugToolTipPreview()
+            case "interactive-panel":
+                self.panelController.show()
             default:
                 self.showDebugPanelPreview()
             }

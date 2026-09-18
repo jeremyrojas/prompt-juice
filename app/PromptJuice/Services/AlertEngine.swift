@@ -2,6 +2,25 @@ import Foundation
 
 struct AlertEngine {
     func shouldUseSoon(
+        for window: LimitWindow,
+        in snapshot: ProviderSnapshot,
+        thresholds: AlertThresholds,
+        now: Date = Date()
+    ) -> Bool {
+        guard snapshot.confidence.canTriggerAlert,
+              window.rateWindow.isAvailable,
+              let resetAt = window.rateWindow.resetAt,
+              resetAt > now,
+              let minutes = window.rateWindow.minutesUntilReset(now: now),
+              let used = window.rateWindow.clampedUsedPercent,
+              let remaining = window.rateWindow.remainingPercent else {
+            return false
+        }
+        return used >= 5
+            && minutes <= thresholds.remainingMinutes
+            && remaining >= Double(thresholds.remainingPercent)
+    }
+    func shouldUseSoon(
         for snapshot: ProviderSnapshot,
         thresholds: AlertThresholds,
         now: Date = Date()

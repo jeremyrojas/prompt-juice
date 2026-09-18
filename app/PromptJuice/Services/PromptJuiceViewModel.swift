@@ -117,6 +117,7 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var thresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
     @Published private(set) var enabledProviders: Set<UsageProvider>
+    @Published private(set) var expandedProviders: Set<UsageProvider>
     @Published private(set) var useSoonNotificationsEnabled: Bool
     @Published private(set) var claudeAccessState: ClaudeAccessState
     @Published private(set) var claudeRefreshState: ClaudeRefreshState
@@ -184,6 +185,7 @@ final class PromptJuiceViewModel: ObservableObject {
         }
         self.sourceMode = initialSourceMode
         self.enabledProviders = initialEnabledProviders
+        self.expandedProviders = settingsStore.expandedProviders
         self.providerClient = providerClient ?? Self.makeProviderClient(
             sourceMode: initialSourceMode
         )
@@ -219,8 +221,47 @@ final class PromptJuiceViewModel: ObservableObject {
         return snapshot.windows.filter { $0.rateWindow.isAvailable }
     }
 
+    func visibleWindows(for snapshot: UsageSnapshot) -> [LimitWindow] {
+        let measured = measuredWindows(for: snapshot)
+        guard let main = measured.first else { return [] }
+        guard !expandedProviders.contains(snapshot.provider) else { return measured }
+        return [main] + measured.dropFirst().filter { window in
+            isWindowUseSoon(window, in: snapshot)
+        }
+    }
+
+    func isWindowUseSoon(_ window: LimitWindow, in snapshot: UsageSnapshot) -> Bool {
+        alertEngine.shouldUseSoon(
+            for: window,
+            in: snapshot,
+            thresholds: window.kind.cadenceIsWeekly
+                ? AlertThresholds(remainingMinutes: 1_440, remainingPercent: 40)
+                : thresholds,
+            now: now()
+        )
+    }
+
+    func windowSeverity(_ window: LimitWindow, in snapshot: UsageSnapshot) -> UsageSeverity {
+        guard let remaining = window.rateWindow.remainingPercent,
+              let resetAt = window.rateWindow.resetAt,
+              resetAt > now() else { return .unavailable }
+        if remaining <= 0 { return .empty }
+        if isWindowUseSoon(window, in: snapshot) { return .useSoon }
+        if remaining < Double(UsageSeverity.lowRemainingFloor) { return .low }
+        return .healthy
+    }
+
+    func toggleExpanded(_ provider: UsageProvider) {
+        if expandedProviders.contains(provider) {
+            expandedProviders.remove(provider)
+        } else {
+            expandedProviders.insert(provider)
+        }
+        settingsStore.expandedProviders = expandedProviders
+    }
+
     var visibleWindowCounts: [Int] {
-        visibleSnapshots.map { measuredWindows(for: $0).count }
+        visibleSnapshots.map { visibleWindows(for: $0).count }
     }
 
     var currentDate: Date { now() }

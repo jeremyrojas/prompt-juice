@@ -7,6 +7,7 @@ final class PromptJuiceSettingsStore {
 
     private enum Key {
         static let enabledProviders = "enabledProviders"
+        static let expandedProviders = "expandedProviders"
         static let remainingMinutesThreshold = "remainingMinutesThreshold"
         static let remainingPercentThreshold = "remainingPercentThreshold"
         static let notifiedUseSoonWindowIDs = "notifiedUseSoonWindowIDs"
@@ -50,6 +51,19 @@ final class PromptJuiceSettingsStore {
                 .filter { newValue.contains($0) }
                 .map(\.rawValue)
             defaults.set(rawValues, forKey: Key.enabledProviders)
+        }
+    }
+
+    var expandedProviders: Set<UsageProvider> {
+        get {
+            Set((defaults.stringArray(forKey: Key.expandedProviders) ?? [])
+                .compactMap(UsageProvider.init(rawValue:)))
+        }
+        set {
+            defaults.set(
+                UsageProvider.allCases.filter { newValue.contains($0) }.map(\.rawValue),
+                forKey: Key.expandedProviders
+            )
         }
     }
 

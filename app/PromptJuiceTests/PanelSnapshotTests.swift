@@ -24,9 +24,34 @@ final class PanelSnapshotTests: XCTestCase {
         try render("clash", ClashFixtureClient())
         try render("stale-claude", StaleClaudeFixtureClient())
         try render("codexonly", CodexOnlyFixtureClient(), enabledProviders: [.codex])
-        try render("claude-three-windows", MultiWindowFixtureClient(codexHasFiveHour: false))
+        try render(
+            "claude-three-windows",
+            MultiWindowFixtureClient(codexHasFiveHour: false),
+            expandedProviders: [.claude]
+        )
+        try render("collapsed", MultiWindowFixtureClient(codexHasFiveHour: false))
+        try render(
+            "claude-expanded",
+            MultiWindowFixtureClient(codexHasFiveHour: false),
+            expandedProviders: [.claude]
+        )
+        try render("fable-amber-collapsed", MultiWindowFixtureClient(
+            codexHasFiveHour: false,
+            fableRemaining: 62,
+            fableResetMinutes: 23 * 60
+        ))
+        try render("fable-low-collapsed", MultiWindowFixtureClient(
+            codexHasFiveHour: false,
+            fableRemaining: 9,
+            fableResetMinutes: 23 * 60
+        ))
         try render("codex-weekly-only", MultiWindowFixtureClient(codexHasFiveHour: false), enabledProviders: [.codex])
-        try render("codex-five-hour-weekly", MultiWindowFixtureClient(codexHasFiveHour: true), enabledProviders: [.codex])
+        try render(
+            "codex-five-hour-weekly",
+            MultiWindowFixtureClient(codexHasFiveHour: true),
+            enabledProviders: [.codex],
+            expandedProviders: [.codex]
+        )
         try render(
             "claudeonly-notmeasured",
             ClaudeOnlyNotMeasuredFixtureClient(),
@@ -116,7 +141,8 @@ final class PanelSnapshotTests: XCTestCase {
         private func render(
         _ name: String,
         _ client: any UsageProviderClient,
-        enabledProviders: Set<UsageProvider>? = nil
+        enabledProviders: Set<UsageProvider>? = nil,
+        expandedProviders: Set<UsageProvider> = []
     ) throws {
         let suiteName = "PanelSnapshotTests.\(name).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -124,6 +150,7 @@ final class PanelSnapshotTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = PromptJuiceSettingsStore(defaults: defaults)
+        store.expandedProviders = expandedProviders
         if let enabledProviders {
             store.enabledProviders = enabledProviders
         }
@@ -236,6 +263,8 @@ private func codexExact(_ now: Date, usedPercent: Double = 1) -> ProviderSnapsho
 private struct MultiWindowFixtureClient: UsageProviderClient {
     let source: SnapshotSource = .fixture
     let codexHasFiveHour: Bool
+    var fableRemaining: Double = 93
+    var fableResetMinutes: Int = 5 * 24 * 60
 
     func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
         let claude = ProviderSnapshot(
@@ -243,7 +272,7 @@ private struct MultiWindowFixtureClient: UsageProviderClient {
             windows: [
                 window(.fiveHour, remaining: 83, resetMinutes: 176, now: now),
                 window(.weekly, remaining: 95, resetMinutes: 5 * 24 * 60, now: now),
-                window(.weeklyModel("Fable"), remaining: 93, resetMinutes: 5 * 24 * 60, now: now)
+                window(.weeklyModel("Fable"), remaining: fableRemaining, resetMinutes: fableResetMinutes, now: now)
             ],
             source: .fixture,
             confidence: .exact,

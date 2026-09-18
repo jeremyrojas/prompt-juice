@@ -43,9 +43,7 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertLessThan(rows[1].rect.maxY, bounds.height)
         XCTAssertEqual(
             bounds.height,
-            PromptJuicePanelMetrics.chromeHeight
-                + PromptJuicePanelMetrics.plainRowHeight * 2
-                + PromptJuicePanelMetrics.rowSpacing
+            PromptJuicePanelMetrics.height(windowCounts: [0, 0])
         )
         XCTAssertEqual(
             PanelClickRouter.target(
@@ -72,13 +70,13 @@ final class PanelClickRouterTests: XCTestCase {
             y: 0,
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: providers.count,
+                windowCounts: [0, 0],
                 showsNotificationPrime: true
             )
         )
         let rects = PanelClickRouter.notificationPrimeButtonRects(
             in: bounds,
-            rowCount: providers.count
+            windowCounts: [0, 0]
         )
 
         XCTAssertEqual(
@@ -119,6 +117,40 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertLessThan(rects.enable.maxX, bounds.width)
     }
 
+    func testDisclosureHitRectsFollowExpandedCardHeights() {
+        let providers: [UsageProvider] = [.claude, .codex]
+        let counts = [3, 1]
+        let bounds = NSRect(
+            x: 0,
+            y: 0,
+            width: PromptJuicePanelMetrics.width,
+            height: PromptJuicePanelMetrics.height(windowCounts: counts)
+        )
+        let rows = PanelClickRouter.rowRects(
+            in: bounds,
+            providers: providers,
+            windowCounts: counts
+        )
+        XCTAssertEqual(rows.map(\.rect.height), [
+            PromptJuicePanelMetrics.cardHeight(windowCount: 3),
+            PromptJuicePanelMetrics.cardHeight(windowCount: 1)
+        ])
+        XCTAssertGreaterThan(rows[1].rect.minY, rows[0].rect.maxY)
+
+        for row in rows {
+            let chevron = NSPoint(x: row.rect.maxX - 20, y: row.rect.minY + 20)
+            XCTAssertEqual(
+                PanelClickRouter.target(
+                    at: chevron,
+                    in: bounds,
+                    providers: providers,
+                    windowCounts: counts
+                ),
+                .disclosure(row.provider)
+            )
+        }
+    }
+
     private func assertSingleProvider(_ provider: UsageProvider) {
         let providers = [provider]
         let bounds = panelBounds(providerCount: providers.count)
@@ -156,7 +188,7 @@ final class PanelClickRouterTests: XCTestCase {
             y: 0,
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: providerCount
+                windowCounts: Array(repeating: 0, count: providerCount)
             )
         )
     }

@@ -265,7 +265,7 @@ private struct ProviderUsageRow: View {
     }
 
     private var measuredWindows: [LimitWindow] {
-        viewModel.measuredWindows(for: snapshot)
+        viewModel.visibleWindows(for: snapshot)
     }
 
     private var measuredCard: some View {
@@ -278,6 +278,14 @@ private struct ProviderUsageRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.92))
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.35))
+                    .rotationEffect(.degrees(viewModel.expandedProviders.contains(snapshot.provider) ? 90 : 0))
+                    .frame(width: 16, height: 16)
+                    .accessibilityLabel(viewModel.expandedProviders.contains(snapshot.provider)
+                        ? "Collapse \(snapshot.displayName) limits"
+                        : "Expand \(snapshot.displayName) limits")
             }
             .frame(height: PromptJuicePanelMetrics.cardHeaderHeight)
 
@@ -286,7 +294,7 @@ private struct ProviderUsageRow: View {
                     window: window,
                     isMain: index == 0,
                     isEstimate: snapshot.confidence == .estimated,
-                    severity: index == 0 ? severity : secondarySeverity(for: window),
+                    severity: viewModel.windowSeverity(window, in: snapshot),
                     now: viewModel.currentDate
                 )
             }
@@ -304,13 +312,6 @@ private struct ProviderUsageRow: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(snapshot.displayName) juice")
-    }
-
-    private func secondarySeverity(for window: LimitWindow) -> UsageSeverity {
-        guard let remaining = window.rateWindow.remainingPercent else { return .unavailable }
-        if remaining <= 0 { return .empty }
-        if remaining < 15 { return .low }
-        return .healthy
     }
 
     private var fallbackRow: some View {
