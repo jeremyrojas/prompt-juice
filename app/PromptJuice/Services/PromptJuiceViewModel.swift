@@ -1,11 +1,30 @@
 import Foundation
 import SwiftUI
 
+enum ResetFormatter {
+    static func duration(until resetAt: Date, now: Date) -> String {
+        let seconds = max(0, resetAt.timeIntervalSince(now))
+
+        if seconds < 60 * 60 {
+            return "\(Int(seconds / 60))m"
+        }
+        if seconds < 24 * 60 * 60 {
+            return "\(Int(seconds / (60 * 60)))h"
+        }
+        return "\(Int(seconds / (24 * 60 * 60)))d"
+    }
+
+    static func text(until resetAt: Date, now: Date) -> String {
+        "resets in \(duration(until: resetAt, now: now))"
+    }
+}
+
 struct UseSoonNotice: Equatable {
     let provider: UsageProvider
     let providerDisplayName: String
     let remainingPercent: Int
     let resetText: String
+    let resetAt: Date
     let windowID: String
 
     var title: String {
@@ -13,7 +32,7 @@ struct UseSoonNotice: Equatable {
     }
 
     var body: String {
-        "You have \(remainingPercent)% left with \(resetText) until reset"
+        "You have \(remainingPercent)% left, resets in \(resetText)"
     }
 
     var notificationIdentifier: String {
@@ -61,15 +80,15 @@ struct MergedUseSoonNotification: Equatable {
         let names = notices.map(\.providerDisplayName)
         title = "Use \(names.joined(separator: " and ")) before they reset"
 
-        let sharesResetTime = Set(notices.map(\.resetText)).count == 1
+        let sharesResetTime = Set(notices.map(\.resetAt)).count == 1
         if sharesResetTime {
             let leadIn = notices
                 .map { "\($0.providerDisplayName) \($0.remainingPercent)%" }
                 .joined(separator: " · ")
-            body = "\(leadIn) left, resetting in \(first.resetText)"
+            body = "\(leadIn) left, resets in \(first.resetText)"
         } else {
             body = notices
-                .map { "\($0.providerDisplayName) \($0.remainingPercent)% left in \($0.resetText)" }
+                .map { "\($0.providerDisplayName) \($0.remainingPercent)% left, resets in \($0.resetText)" }
                 .joined(separator: " · ")
         }
 
@@ -400,11 +419,12 @@ final class PromptJuiceViewModel: ObservableObject {
             from: resetSnapshots,
             at: refreshDate
         )
-        let resetTexts = contextualResetSnapshots.map { resetText(for: $0) }
-        if let sharedText = resetTexts.first,
-           resetTexts.allSatisfy({ $0 == sharedText }) {
+        let resetDates = contextualResetSnapshots.compactMap(\.rateWindow.resetAt)
+        if let sharedResetAt = resetDates.first,
+           resetDates.count == contextualResetSnapshots.count,
+           resetDates.allSatisfy({ $0 == sharedResetAt }) {
             let verb = contextualResetSnapshots.count == 1 ? "resets" : "reset"
-            return "\(providerNameList(contextualResetSnapshots)) \(verb) in \(sharedText)"
+            return "\(providerNameList(contextualResetSnapshots)) \(verb) in \(ResetFormatter.duration(until: sharedResetAt, now: refreshDate))"
         }
 
         if let soonest = contextualResetSnapshots.min(by: { first, second in
@@ -662,12 +682,17 @@ final class PromptJuiceViewModel: ObservableObject {
             .sorted { first, second in
                 first.provider.sortIndex < second.provider.sortIndex
             }
-            .map { snapshot in
-                UseSoonNotice(
+            .compactMap { snapshot -> UseSoonNotice? in
+                guard let resetAt = snapshot.rateWindow.resetAt else {
+                    return nil
+                }
+
+                return UseSoonNotice(
                     provider: snapshot.provider,
                     providerDisplayName: snapshot.displayName,
                     remainingPercent: Int(snapshot.sessionRemainingPercent.rounded()),
                     resetText: resetText(for: snapshot),
+                    resetAt: resetAt,
                     windowID: snapshot.resetWindowID
                 )
             }
@@ -904,17 +929,11 @@ final class PromptJuiceViewModel: ObservableObject {
             return "fresh"
         }
 
-        guard let minutes = snapshot.rateWindow.minutesUntilReset(now: now()) else {
+        guard let resetAt = snapshot.rateWindow.resetAt else {
             return "n/a"
         }
 
-        if minutes < 60 {
-            return "\(minutes)m"
-        }
-
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        return "\(hours)h \(remainder)m"
+        return ResetFormatter.duration(until: resetAt, now: now())
     }
 
     func fullResetText(for snapshot: UsageSnapshot) -> String {
@@ -922,7 +941,11 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Fresh window"
         }
 
-        return "resets in \(resetText(for: snapshot))"
+        guard let resetAt = snapshot.rateWindow.resetAt else {
+            return "resets in n/a"
+        }
+
+        return ResetFormatter.text(until: resetAt, now: now())
     }
 
     func shouldUseSoon(for snapshot: UsageSnapshot) -> Bool {
@@ -956,7 +979,10 @@ final class PromptJuiceViewModel: ObservableObject {
             return nil
         }
 
-        var text = "Week: \(Int(remaining.rounded()))% left · resets in \(weeklyResetText(for: weeklyWindow))"
+        let resetText = weeklyWindow.resetAt.map {
+            ResetFormatter.text(until: $0, now: now())
+        } ?? "resets in n/a"
+        var text = "Week: \(Int(remaining.rounded()))% left · \(resetText)"
 
         if let weeklyUpdatedAt = snapshot.weeklyUpdatedAt,
            now().timeIntervalSince(weeklyUpdatedAt) > 30 * 60 {
@@ -964,26 +990,6 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return text
-    }
-
-    // retained for future weekly UI; not currently displayed
-    private func weeklyResetText(for window: RateWindow) -> String {
-        guard let minutes = window.minutesUntilReset(now: now()) else {
-            return "n/a"
-        }
-
-        let hours = max(1, minutes / 60)
-        if hours < 24 {
-            return "\(hours)h"
-        }
-
-        let days = hours / 24
-        let remainderHours = hours % 24
-        if remainderHours == 0 {
-            return "\(days)d"
-        }
-
-        return "\(days)d \(remainderHours)h"
     }
 
     /// Friendly hover text for a row — where the reading came from, stated as a
