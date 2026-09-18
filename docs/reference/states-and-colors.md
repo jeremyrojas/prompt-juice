@@ -8,25 +8,29 @@ Source: [`SeverityAppearance.swift`](../../app/PromptJuice/UI/SeverityAppearance
 
 | Token | Hex | Use |
 | --- | --- | --- |
-| `green` | `#5FD11F` | healthy capacity |
-| `orange` | `#F0A32A` | use-soon nudge |
+| `green` | `#5FD11F` | healthy main bar |
+| `orange` | `#F0A32A` | use-soon reset text and bar |
 | `muted` | `#969CA6` | calm low, empty, or unavailable |
 
-Provider identity dots use system orange for Claude and system cyan for Codex.
+Provider identity dots use `#FF9F0A` for Claude and `#32D4DE` for Codex. A healthy secondary bar is white at 22% opacity.
 
 ## 2. Severity axis
 
 Source: [`UsageSeverity.swift`](../../app/PromptJuice/Models/UsageSeverity.swift) and [`AlertEngine.swift`](../../app/PromptJuice/Services/AlertEngine.swift)
 
-| Severity | Trigger | Color | Chip | Notification |
-| --- | --- | --- | --- | --- |
-| `empty` | session remaining is 0% | muted | — | — |
-| `useSoon` | reset is within the time threshold and remaining capacity meets the juice threshold | orange | **Use soon** | eligible |
-| `low` | session remaining is below 15% | muted | — | — |
-| `healthy` | other usable session windows | green | — | — |
-| `unavailable` | no usable reading | muted | — | — |
+| Severity | Trigger | Bar | Notification |
+| --- | --- | --- | --- |
+| `empty` | a window has 0% left | muted | — |
+| `useSoon` | reset is within its cadence threshold, enough remains, and at least 5% was used this cycle | orange | eligible |
+| `low` | a window has less than 15% left | muted | — |
+| `healthy` | other usable windows | green for the main bar, grey for secondary bars | — |
+| `unavailable` | no usable reading | muted | — |
 
-The default use-soon thresholds are 60 minutes and 40% remaining. Settings offers 30/45/60/90 minutes and 25/40/50/60%.
+There are no status chips in measured cards. The percentage remains white on an amber row; its reset text and bar turn amber. Low stays calm.
+
+The 5-hour defaults are 60 minutes and 40% remaining, with 30/45/60/90 minute choices. Weekly defaults are 1 day and 40% remaining, with 12 hours / 1 day / 2 days / 3 days choices. Both percentage pickers offer 25/40/50/60%. Other Codex durations use the 5-hour pair below 1 day and the weekly pair from 1 day up.
+
+The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider and reads as empty; an exhausted model-specific weekly such as Fable mutes only its own row.
 
 ## 3. Confidence and source
 
@@ -68,18 +72,22 @@ Freshness text has five tiers: just now, minutes ago, clock time today, yesterda
 
 ## 5. Rows and interaction
 
-Rows are fixed-height session rows with provider identity, session bar, remaining percentage, and reset countdown. Claude prerequisite states can show a compact journey button. Available provider rows remain display-only. The settings row includes an information popover describing direct `/usage` reads, the local estimate, and the current state.
+Each measured provider card has a header and one row per visible limit. The rows show a label, remaining percentage, reset countdown, and flat 4-point main or 3-point secondary bar. Cards grow with their visible rows. The chevron expands or collapses each provider independently, and the choice survives relaunch. A hidden amber window appears while the card stays collapsed; a low window stays tucked away. Hidden windows still participate in alerts and notifications.
+
+Countdowns use the largest single unit, floored from the reset timestamp: minutes below 1 hour, hours below 24 hours, days thereafter. Claude prerequisite states can show a compact journey button. Measured provider rows stay display-only. The Settings row includes an information popover describing direct `/usage` reads, the local estimate, and the current state.
+
+The header names a single amber window, a provider when several of its windows are amber, or “juice” when both providers are involved. It ranks the soonest reset first, joins windows with the same reset boundary, and uses a count plus the soonest reset when the full line would not fit.
 
 ## 6. Notifications
 
-When **Notify me** is on, each visible provider at `useSoon` severity can contribute one notice per reset window. PromptJuice merges simultaneous provider notices into one macOS banner and records a per-provider window latch.
+When **Notify me** is on, each qualifying window can contribute one notice per reset cycle, even while collapsed. PromptJuice combines simultaneous notices into one macOS banner using the panel header wording. It records a latch for each provider and window kind.
 
 ## 7. Menu-bar glyph
 
 | Property | Rule |
 | --- | --- |
 | Tint | orange when any visible provider is `useSoon`; plain otherwise |
-| Fill | use-soon provider session remaining during a nudge; otherwise the lowest available visible session remaining |
+| Fill | main-window remaining for the provider with the soonest amber limit; otherwise the lowest available main-window remaining; 0 for an all-models Weekly lockout |
 | Redraw | approximately every second, deduplicated by percentage and severity |
 
 ## 8. Enabled providers and aggregates

@@ -6,12 +6,13 @@
 </div>
 
 PromptJuice keeps the useful part of your AI rate limits visible: how much
-session capacity remains, when it resets, and how fresh the reading is. The
+capacity remains in each limit, when it resets, and how fresh the reading is. The
 menu-bar droplet gives you the glance; the Juice Bar gives you the details.
 
 PromptJuice is built around one valuable moment: **plenty of capacity remains,
 and very little time remains before the window resets**. You choose the time and
-remaining-juice thresholds that define that moment. When both are met, the
+remaining-juice thresholds for 5-hour and weekly limits. When a limit has been
+used this cycle and both thresholds are met, the
 droplet turns orange and PromptJuice can send one timely macOS notification.
 
 That orange window is your cue to spend bigger: start the ambitious task, fan
@@ -19,7 +20,7 @@ work out to more agents, use fast mode, or reach for a stronger model while the
 capacity is already yours. Squeeze the window before the window resets.
 
 <div align="center">
-  <img src="design/assets/promptjuice-juicebar.png" alt="PromptJuice Juice Bar: Claude at 97% left with a healthy green bar resetting in 2h 37m, and Codex at 61% left flagged Use soon with an orange bar resetting in 14m" width="440">
+  <img src="design/assets/promptjuice-juicebar.png" alt="PromptJuice Juice Bar with Claude's 5-hour, Weekly and Fable limits expanded, plus a Codex Weekly limit" width="440">
 </div>
 
 ## Quick Start
@@ -59,11 +60,11 @@ on the same well-tested path.
 
 ## What You Get
 
-- A menu-bar droplet whose fill reflects remaining session capacity.
-- A compact Juice Bar with Claude and Codex percentages and reset countdowns.
+- A menu-bar droplet whose fill reflects each provider's main limit.
+- A compact Juice Bar with labeled 5-hour, Weekly, and model-specific limits; expand each provider to see more.
 - Clear **Live**, **Earlier**, **Estimate**, and prerequisite-aware unavailable states.
-- Configurable time-to-reset and remaining-capacity thresholds for the orange cue.
-- One merged macOS notification for providers that enter the same use-soon moment.
+- Separate 5-hour and weekly time-to-reset and remaining-capacity thresholds for the orange cue.
+- One merged macOS notification when several limits enter the same use-soon moment.
 - A pinnable, draggable Juice Bar that remembers its position.
 - Local caches that carry valid last-good readings through brief provider outages.
 
@@ -86,8 +87,10 @@ view. Every row identifies the quality of its reading:
 
 PromptJuice locates the local Codex executable, launches `codex app-server` over
 stdio, and calls `account/rateLimits/read`. Install and sign in to Codex, then
-PromptJuice can read the primary session window automatically. A valid secondary
-weekly window is cached for future UI.
+PromptJuice shows every reported window. Codex Pro currently reports Weekly as
+its only limit; plans with a 5-hour limit show that row first and Weekly on
+expand. The lower-tier payload shape is inferred in tests and awaits live
+validation on a non-Pro account.
 
 Automatic lookup checks the current ChatGPT app, the earlier Codex app,
 Homebrew locations, and `PATH`. Set
@@ -178,9 +181,8 @@ A public release should use Apple Developer ID signing and notarization.
 
 Current boundaries:
 
-- Provider rows show the active session window at a fixed height.
-- Weekly windows are read and cached while their dedicated UI is being refined.
 - Exact Claude readings require a supported Claude Code installation and subscription sign-in.
+- The lower-tier Codex rate-limit shape awaits a live non-Pro check.
 
 ## Project Map
 
