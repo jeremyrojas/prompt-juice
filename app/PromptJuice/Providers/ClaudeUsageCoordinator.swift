@@ -616,26 +616,47 @@ actor ClaudeUsageCoordinator: ClaudeUsageSnapshotProviding {
     }
 
     private static func snapshot(from reading: ClaudeUsageReading) -> ProviderSnapshot {
-        ProviderSnapshot(
-            identity: .claude,
+        var windows = [LimitWindow(
+            kind: .fiveHour,
             rateWindow: .available(
                 usedPercent: reading.session.usedPercent,
                 resetAt: reading.session.resetAt,
                 durationMinutes: 5 * 60
             ),
-            weeklyWindow: reading.weekly.map {
-                .available(
-                    usedPercent: $0.usedPercent,
-                    resetAt: $0.resetAt,
+            updatedAt: reading.measuredAt
+        )]
+        if let weekly = reading.weekly {
+            windows.append(LimitWindow(
+                kind: .weekly,
+                rateWindow: .available(
+                    usedPercent: weekly.usedPercent,
+                    resetAt: weekly.resetAt,
                     durationMinutes: 7 * 24 * 60
-                )
-            },
+                ),
+                updatedAt: reading.measuredAt
+            ))
+        }
+        windows += reading.modelSpecificWeekly.compactMap { model -> LimitWindow? in
+            guard case .weeklyModel(let name) = model.kind else {
+                return nil
+            }
+            return LimitWindow(
+                kind: .weeklyModel(name),
+                rateWindow: .available(
+                    usedPercent: model.usedPercent,
+                    resetAt: model.resetAt,
+                    durationMinutes: 7 * 24 * 60
+                ),
+                updatedAt: reading.measuredAt
+            )
+        }
+
+        return ProviderSnapshot(
+            identity: .claude,
+            windows: windows,
             source: .claudeUsageCLI,
             confidence: reading.isSavedReading ? .stale : .exact,
-            updatedAt: reading.measuredAt,
-            weeklyUpdatedAt: reading.weekly == nil ? nil : reading.measuredAt,
-            isFreshSessionWindow: false,
-            isFreshWeeklyWindow: false
+            updatedAt: reading.measuredAt
         )
     }
 

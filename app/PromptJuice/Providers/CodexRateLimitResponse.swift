@@ -13,26 +13,29 @@ struct CodexRateLimitReadResult: Decodable, Equatable {
             throw CodexRateLimitMappingError.missingCodexBucket
         }
 
-        guard let primary = bucket.primary,
-              let primaryWindow = primary.rateWindow() else {
-            throw CodexRateLimitMappingError.missingPrimaryWindow
+        let windows = [bucket.primary, bucket.secondary].compactMap { slot -> LimitWindow? in
+            guard let slot,
+                  let rateWindow = slot.rateWindowIfUnexpired(now: now) else {
+                return nil
+            }
+
+            let kind = LimitWindow.Kind.codexKind(durationMinutes: slot.windowDurationMins)
+            if case .other(let durationMinutes) = kind {
+                CodexUnexpectedDurationLog.shared.logOnce(durationMinutes)
+            }
+            return LimitWindow(kind: kind, rateWindow: rateWindow, updatedAt: now)
         }
 
-        guard let resetAt = primaryWindow.resetAt,
-              resetAt > now else {
-            throw CodexRateLimitMappingError.expiredPrimaryWindow
+        guard !windows.isEmpty else {
+            throw CodexRateLimitMappingError.noUsableWindows
         }
-
-        let weeklyWindow = bucket.secondary?.rateWindowIfUnexpired(now: now)
 
         return ProviderSnapshot(
             identity: .codex,
-            rateWindow: primaryWindow,
-            weeklyWindow: weeklyWindow,
+            windows: windows,
             source: .codexAppServer,
             confidence: .exact,
             updatedAt: now,
-            weeklyUpdatedAt: weeklyWindow == nil ? nil : now,
             statusDetail: bucket.rateLimitReachedType
         )
     }
@@ -79,17 +82,31 @@ struct CodexRateLimitWindow: Decodable, Equatable {
 
 enum CodexRateLimitMappingError: Error, LocalizedError, Equatable {
     case missingCodexBucket
-    case missingPrimaryWindow
-    case expiredPrimaryWindow
+    case noUsableWindows
 
     var errorDescription: String? {
         switch self {
         case .missingCodexBucket:
             return "Codex rate-limit bucket unavailable"
-        case .missingPrimaryWindow:
-            return "Codex primary rate-limit window unavailable"
-        case .expiredPrimaryWindow:
-            return "Codex primary rate-limit window expired"
+        case .noUsableWindows:
+            return "Codex rate-limit windows unavailable"
+        }
+    }
+}
+
+private final class CodexUnexpectedDurationLog: @unchecked Sendable {
+    static let shared = CodexUnexpectedDurationLog()
+
+    private let lock = NSLock()
+    private var loggedDurations: Set<Int> = []
+
+    func logOnce(_ durationMinutes: Int) {
+        lock.lock()
+        let shouldLog = loggedDurations.insert(durationMinutes).inserted
+        lock.unlock()
+
+        if shouldLog {
+            PromptJuiceLog.usage.notice("Codex reported a \(durationMinutes)-minute rate window")
         }
     }
 }

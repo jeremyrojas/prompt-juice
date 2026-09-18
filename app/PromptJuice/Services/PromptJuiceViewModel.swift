@@ -968,7 +968,6 @@ final class PromptJuiceViewModel: ObservableObject {
         )
     }
 
-    // retained for future weekly UI; not currently displayed
     func weeklyText(for snapshot: UsageSnapshot) -> String? {
         if snapshot.isFreshWeeklyWindow {
             return "Week: 100% left · fresh week"
@@ -1562,12 +1561,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
         return ProviderSnapshot(
             identity: existing.identity,
-            rateWindow: existing.rateWindow,
-            weeklyWindow: existing.weeklyWindow,
+            windows: existing.windows,
             source: existing.source,
             confidence: existing.confidence,
             updatedAt: existing.updatedAt,
-            weeklyUpdatedAt: existing.weeklyUpdatedAt,
             statusDetail: refreshed.statusDetail,
             isFreshSessionWindow: existing.isFreshSessionWindow,
             isFreshWeeklyWindow: existing.isFreshWeeklyWindow
@@ -1608,6 +1605,10 @@ final class PromptJuiceViewModel: ObservableObject {
                     return snapshot
                 }
 
+                let current = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
+                if !current.windows.isEmpty {
+                    return current
+                }
                 return Self.unavailableSnapshot(
                     identity: snapshot.identity,
                     source: snapshot.source,
@@ -1695,6 +1696,24 @@ final class PromptJuiceViewModel: ObservableObject {
     ) -> ProviderSnapshot {
         guard snapshot.isExpired(at: now) else {
             return snapshot
+        }
+
+        let activeWindows = snapshot.windows.filter {
+            guard let resetAt = $0.rateWindow.resetAt else {
+                return false
+            }
+            return resetAt > now
+        }
+        if !activeWindows.isEmpty {
+            return ProviderSnapshot(
+                identity: snapshot.identity,
+                windows: activeWindows,
+                source: snapshot.source,
+                confidence: snapshot.confidence,
+                updatedAt: snapshot.updatedAt,
+                statusDetail: snapshot.statusDetail,
+                isFreshWeeklyWindow: snapshot.isFreshWeeklyWindow
+            )
         }
 
         return ProviderSnapshot(
