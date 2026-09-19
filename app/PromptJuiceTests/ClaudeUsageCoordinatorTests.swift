@@ -505,6 +505,54 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(probe.callCount, 1)
     }
 
+    func testCoordinatorCarriesModelSpecificWeeklyWindow() async throws {
+        let fixture = try makeCoordinatorFixture()
+        defer { fixture.remove() }
+        let now = date(2026, 7, 21, 14, 0)
+        let weeklyReset = now.addingTimeInterval(5 * 24 * 60 * 60)
+        let reading = ClaudeUsageReading(
+            session: ClaudeUsageQuotaWindow(
+                kind: .session,
+                usedPercent: 17,
+                resetAt: now.addingTimeInterval(2 * 60 * 60)
+            ),
+            weekly: ClaudeUsageQuotaWindow(
+                kind: .weeklyAllModels,
+                usedPercent: 5,
+                resetAt: weeklyReset
+            ),
+            modelSpecificWeekly: [ClaudeUsageQuotaWindow(
+                kind: .weeklyModel("Fable"),
+                usedPercent: 38,
+                resetAt: weeklyReset
+            )],
+            plan: "Max",
+            measuredAt: now,
+            isSavedReading: false
+        )
+        let probe = ScriptedClaudeUsageProbe([
+            .parsed(ClaudeUsageParseResult(
+                reading: reading,
+                rateLimitObserved: false,
+                failure: nil
+            ))
+        ])
+        let coordinator = makeCoordinator(
+            fixture: fixture,
+            access: .subscription(plan: "Max"),
+            probe: probe
+        )
+
+        let state = await coordinator.snapshot(now: now, reason: .manual, force: true)
+
+        XCTAssertEqual(state.snapshot?.windows.map(\.kind), [
+            .fiveHour, .weekly, .weeklyModel("Fable")
+        ])
+        XCTAssertEqual(state.snapshot?.windows.last?.rateWindow.usedPercent, 38)
+        let windowIDs = state.snapshot?.windows.map { $0.resetWindowID(provider: .claude) } ?? []
+        XCTAssertEqual(Set(windowIDs).count, 3)
+    }
+
     func testAuthenticationRecoveryBypassesExhaustedUsageBudgetAndClearsAttempts() async throws {
         let now = date(2026, 7, 21, 14, 0)
 
@@ -947,12 +995,10 @@ private final class MemoryClaudeUsageCache: ClaudeExactUsageCaching, @unchecked 
         }
         return ProviderSnapshot(
             identity: storedSnapshot.identity,
-            rateWindow: storedSnapshot.rateWindow,
-            weeklyWindow: storedSnapshot.weeklyWindow,
+            windows: storedSnapshot.windows,
             source: .claudeCache,
             confidence: .stale,
             updatedAt: storedSnapshot.updatedAt,
-            weeklyUpdatedAt: storedSnapshot.weeklyUpdatedAt,
             isFreshSessionWindow: false,
             isFreshWeeklyWindow: false
         )

@@ -48,6 +48,7 @@ final class SettingsWindowController: NSWindowController {
 
         let window = ensureWindow()
         state.mode = .settings
+        resize(window, for: .settings)
         window.title = "PromptJuice Settings"
         NSApp.activate(ignoringOtherApps: true)
 
@@ -65,6 +66,7 @@ final class SettingsWindowController: NSWindowController {
 
         let window = ensureWindow()
         state.mode = .firstRun
+        resize(window, for: .firstRun)
         state.firstRunEnabledProviders = viewModel.enabledProviders
         window.title = "PromptJuice"
         NSApp.activate(ignoringOtherApps: true)
@@ -87,7 +89,7 @@ final class SettingsWindowController: NSWindowController {
                 x: 0,
                 y: 0,
                 width: SettingsWindowMetrics.width,
-                height: SettingsWindowMetrics.height
+                height: SettingsWindowMetrics.settingsHeight
             ),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
@@ -98,7 +100,7 @@ final class SettingsWindowController: NSWindowController {
         window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         let contentSize = NSSize(
             width: SettingsWindowMetrics.width,
-            height: SettingsWindowMetrics.height
+            height: SettingsWindowMetrics.settingsHeight
         )
         window.contentMinSize = contentSize
         window.contentMaxSize = contentSize
@@ -125,6 +127,16 @@ final class SettingsWindowController: NSWindowController {
         window.contentView = NSHostingView(rootView: rootView)
         self.window = window
         return window
+    }
+
+    private func resize(_ window: NSWindow, for mode: SettingsWindowMode) {
+        let size = NSSize(
+            width: SettingsWindowMetrics.width,
+            height: SettingsWindowMetrics.height(for: mode)
+        )
+        window.contentMinSize = size
+        window.contentMaxSize = size
+        window.setContentSize(size)
     }
 
     func finishFirstRun() {

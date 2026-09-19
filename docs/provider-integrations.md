@@ -11,7 +11,9 @@ PromptJuice reads Codex usage through the local Codex app-server:
 3. Complete the initialization handshake.
 4. Call `account/rateLimits/read`.
 5. Prefer `rateLimitsByLimitId["codex"]`, with `rateLimits` as the compatible fallback.
-6. Map the primary window to the visible session and retain a valid secondary weekly window.
+6. Classify every usable window by `windowDurationMins`, regardless of whether it appears in the primary or secondary slot.
+
+`300` minutes is a **5-hour limit**; `10080` minutes is **Weekly**. Any other duration stays visible with a label made from its actual length, such as **24-hour limit** or **3-day limit**, and is logged once. The shortest reported cadence is the main row. Codex Pro currently reports Weekly in the primary slot with no secondary; lower-tier plans are expected to report 5-hour plus Weekly. The lower-tier test fixture is inferred, and its live shape still needs validation on a non-Pro account.
 
 Executable lookup order:
 
@@ -24,7 +26,7 @@ Executable lookup order:
 
 ### Codex source labels
 
-- `codexAppServer` + `exact`: a complete current primary window.
+- `codexAppServer` + `exact`: current usable windows from the app-server response.
 - `codexCache` + `stale`: a valid last-good window carried through a read failure.
 - `codexAppServer` + `unavailable`: executable, launch, handshake, timeout, server, or parser failure.
 
@@ -42,6 +44,8 @@ PromptJuice reads Claude plan usage through Claude Code's built-in `/usage` scre
 2. Valid last-good exact reading from the derived-only cache.
 3. Local Claude Code activity estimate.
 4. Unavailable state with a guided recovery action when applicable.
+
+The parser carries Claude's 5-hour, all-models Weekly, and model-specific weekly windows (including Fable) into the provider snapshot. Each window retains its own reset timestamp and update time. The all-models Weekly can lock the whole provider at 0%; a model-specific weekly affects its own model row.
 
 ### Prerequisites
 

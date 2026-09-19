@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage windows — UI spec</title>
+<style>
+  /* =========================================================
+     TOKENS
+     ========================================================= */
+  :root{
+    --green:#5FD11F;
+    --amber:#F0A32A;
+    --muted:#969CA6;
+    --claude:#FF9F0A;
+    --codex:#32D4DE;
+    --blue:#0A84FF;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{height:100%;}
+  body{
+    font-family:var(--font);
+    color:#e8eaed;
+    background:
+      radial-gradient(1200px 700px at 18% -10%, rgba(58,74,120,0.28), transparent 60%),
+      radial-gradient(900px 600px at 92% 8%, rgba(120,58,110,0.20), transparent 55%),
+      radial-gradient(1000px 800px at 60% 120%, rgba(40,90,90,0.18), transparent 60%),
+      linear-gradient(160deg,#1a1d24 0%,#12141a 55%,#0d0f14 100%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    min-height:100%;
+  }
+
+  /* =========================================================
+     STICKY TOP NAV
+     ========================================================= */
+  .topnav{
+    position:sticky;top:0;z-index:50;
+    display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;
+    padding:11px 40px;
+    background:rgba(16,18,23,0.82);
+    -webkit-backdrop-filter:blur(18px) saturate(1.4);
+    backdrop-filter:blur(18px) saturate(1.4);
+    border-bottom:1px solid rgba(255,255,255,0.08);
+  }
+  .topnav a{
+    font-size:12.5px;font-weight:600;letter-spacing:-0.005em;
+    color:rgba(255,255,255,0.58);text-decoration:none;
+    padding:3px 2px;white-space:nowrap;
+  }
+  .topnav a:hover,.topnav a:focus{color:#fff;}
+  .navsep{font-size:12px;color:rgba(255,255,255,0.22);}
+
+  /* =========================================================
+     PAGE CHROME
+     ========================================================= */
+  .page{max-width:1720px;margin:0 auto;padding:44px 40px 96px;}
+  h1{
+    font-size:34px;font-weight:700;letter-spacing:-0.02em;color:#f5f6f8;
+    margin-bottom:14px;line-height:1.1;
+  }
+  .subline-lead{
+    font-size:16px;font-weight:400;line-height:1.55;color:rgba(255,255,255,0.68);
+    max-width:900px;
+  }
+  .subline-lead b{color:#fff;font-weight:600;}
+
+  .sec{margin-top:88px;}
+  .sec > h2{
+    font-size:24px;font-weight:700;letter-spacing:-0.02em;color:#f5f6f8;
+    line-height:1.15;margin-bottom:12px;
+    padding-top:18px;border-top:1px solid rgba(255,255,255,0.09);
+  }
+
+  /* horizontal-scroll rail for wide blocks (tables, native windows) */
+  .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+
+  /* =========================================================
+     MOCK GRID + LABELS (shared by all four sections)
+     ========================================================= */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(min(384px,100%),1fr));
+    gap:44px 40px;
+    margin-top:36px;
+    align-items:start;
+    justify-items:center;
+  }
+  @media(min-width:1720px){ .grid{grid-template-columns:repeat(4,1fr);} }
+
+  .mock{width:384px;max-width:100%;}
+  .mock-head{display:flex;align-items:baseline;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .mock-title{font-size:14px;font-weight:600;letter-spacing:-0.01em;color:#eef0f3;}
+  .chip-label{
+    font-size:9.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+    padding:3px 8px;border-radius:999px;line-height:1;white-space:nowrap;
+  }
+  /* green chips */
+  .chip-real{color:#7fe06a;background:rgba(95,209,31,0.14);border:1px solid rgba(95,209,31,0.32);}
+  .chip-calm{color:#7fe06a;background:rgba(95,209,31,0.14);border:1px solid rgba(95,209,31,0.32);}
+  .chip-prop{color:#7fe06a;background:rgba(95,209,31,0.14);border:1px solid rgba(95,209,31,0.32);}
+  /* neutral chips */
+  .chip-muted{color:var(--muted);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);}
+  .chip-mem{color:var(--muted);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);}
+  .chip-cur{color:var(--muted);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);}
+  /* amber chips */
+  .chip-amber{color:#ffbf6b;background:rgba(240,163,42,0.14);border:1px solid rgba(240,163,42,0.3);}
+  .chip-prov{color:#ffbf6b;background:rgba(240,163,42,0.14);border:1px solid rgba(240,163,42,0.3);}
+  .chip-gen{color:#ffbf6b;background:rgba(240,163,42,0.14);border:1px solid rgba(240,163,42,0.3);}
+  .chip-max{color:#ffbf6b;background:rgba(240,163,42,0.14);border:1px solid rgba(240,163,42,0.3);}
+
+  .notes{margin-top:18px;display:flex;flex-direction:column;gap:9px;}
+  .note{display:flex;gap:9px;font-size:11.5px;line-height:1.45;color:rgba(255,255,255,0.5);}
+  .note::before{content:"";flex:none;width:4px;height:4px;border-radius:50%;
+    background:rgba(255,255,255,0.32);margin-top:6px;}
+  .note b{color:rgba(255,255,255,0.72);font-weight:600;}
+
+  /* =========================================================
+     THE GLASS PANEL (sections 1–3)
+     ========================================================= */
+  .panel{
+    position:relative;width:384px;max-width:100%;border-radius:22px;
+    background:rgba(30,32,38,0.82);
+    -webkit-backdrop-filter:blur(40px) saturate(1.6);
+    backdrop-filter:blur(40px) saturate(1.6);
+    border:1px solid rgba(255,255,255,0.10);
+    box-shadow:0 24px 60px -12px rgba(0,0,0,0.62), 0 8px 20px -8px rgba(0,0,0,0.5);
+    padding:14px;overflow:hidden;
+  }
+  .panel::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 12% -8%, rgba(255,255,255,0.14), rgba(255,255,255,0) 42%);
+    mix-blend-mode:screen;border-radius:22px;
+  }
+  .panel > *{position:relative;z-index:1;}
+
+  /* header — the single alert voice */
+  .hdr{display:flex;align-items:center;gap:11px;height:68px;padding:0 4px;}
+  .droplet-chip{
+    flex:none;width:30px;height:30px;border-radius:50%;
+    background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+  .hdr-text{flex:1 1 auto;min-width:0;}
+  .hdr-title{font-size:14px;font-weight:600;color:#fff;letter-spacing:-0.01em;line-height:1.25;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hdr-sub{font-size:11px;font-weight:500;color:rgba(255,255,255,0.58);margin-top:2px;line-height:1.2;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .close-btn{
+    flex:none;width:24px;height:24px;border-radius:50%;
+    background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);
+    display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,0.55);font-size:10px;font-weight:700;line-height:1;
+  }
+
+  /* provider cards + rows */
+  .pstack{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+  .pcard{
+    border-radius:14px;
+    background:rgba(255,255,255,0.05);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.075);
+    padding:12px;display:flex;flex-direction:column;gap:10px;
+  }
+  .pcard-head{display:flex;align-items:center;gap:8px;}
+  .pdot{flex:none;width:6px;height:6px;border-radius:50%;}   /* plain, no glow */
+  .pdot-claude{background:var(--claude);}
+  .pdot-codex{background:var(--codex);}
+  .pname2{font-size:13px;font-weight:600;color:rgba(255,255,255,0.92);letter-spacing:-0.005em;}
+  /* disclosure chevron — right-aligned after the name */
+  .chev{margin-left:auto;font-size:14px;line-height:1;color:rgba(255,255,255,0.35);
+    display:inline-block;font-weight:600;}
+  .chev.open{transform:rotate(90deg);}
+
+  .wrow{display:flex;flex-direction:column;gap:5px;}
+  .wrow-line{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+  .wlabel{font-size:11px;font-weight:500;color:rgba(255,255,255,0.55);white-space:nowrap;}
+  .wvals{display:flex;align-items:baseline;gap:5px;white-space:nowrap;
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  .wpct{font-size:12.5px;font-weight:600;color:rgba(255,255,255,0.90);}
+  .wsep{font-size:11px;color:rgba(255,255,255,0.30);}
+  .wreset{font-size:11px;font-weight:500;color:rgba(255,255,255,0.55);}
+
+  /* flat bars — no gradient, no glow, rounded caps */
+  .fbar{width:100%;border-radius:999px;background:rgba(255,255,255,0.07);overflow:hidden;}
+  .fbar-p{height:4px;}
+  .fbar-s{height:3px;}
+  .fbar-fill{height:100%;border-radius:999px;}
+  .fbar-fill.green{background:rgba(95,209,31,0.85);}
+  .fbar-fill.grey{background:rgba(255,255,255,0.22);}   /* healthy secondary */
+  .fbar-fill.muted{background:rgba(150,156,166,0.72);}  /* low */
+  .fbar-fill.amber{background:rgba(240,163,42,0.90);}   /* use-soon */
+
+  /* state text colors — percent stays white, only reset text shifts */
+  .wpct.muted,.wreset.muted,.wlabel.muted{color:var(--muted);}
+  .wreset.amber{color:var(--amber);}
+
+  /* =========================================================
+     1 · SPEC BLOCKS — reset standard + row anatomy
+     ========================================================= */
+  .standard{margin-top:64px;max-width:560px;}
+  .standard > h3{font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:16px;}
+  .std-table{width:100%;min-width:360px;border-collapse:collapse;}
+  .std-table td{
+    padding:10px 14px;font-size:12.5px;line-height:1.4;
+    border-top:1px solid rgba(255,255,255,0.08);vertical-align:baseline;
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum";
+  }
+  .std-table tr:first-child td{border-top:none;}
+  .std-in{color:rgba(255,255,255,0.5);width:46%;}
+  .std-arrow{color:rgba(255,255,255,0.3);width:8%;text-align:center;}
+  .std-out{color:rgba(255,255,255,0.88);font-weight:600;}
+  .std-cap{margin-top:14px;font-size:11px;color:rgba(255,255,255,0.4);line-height:1.55;}
+
+  .rowanat{margin-top:56px;max-width:820px;}
+  .rowanat > h3{font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:20px;}
+  .anat-demo{
+    background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px;padding:22px 24px 18px;max-width:440px;min-width:0;
+  }
+  .anat-row{display:flex;flex-direction:column;gap:8px;}
+  .anat-line{display:flex;align-items:baseline;justify-content:space-between;gap:16px;}
+  .anat-label{font-size:13px;font-weight:500;color:rgba(255,255,255,0.55);}
+  .anat-vals{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  .anat-pct{font-size:15px;font-weight:600;color:rgba(255,255,255,0.90);}
+  .anat-vals .d{font-size:13px;color:rgba(255,255,255,0.30);margin:0 3px;}
+  .anat-reset{font-size:13px;font-weight:500;color:rgba(255,255,255,0.55);}
+  .anat-bar{width:100%;height:6px;border-radius:999px;background:rgba(255,255,255,0.07);overflow:hidden;}
+  .anat-bar-fill{height:100%;border-radius:999px;background:rgba(95,209,31,0.85);}
+  .anat-caps{display:flex;justify-content:space-between;gap:14px;margin-top:12px;}
+  .anat-cap{font-size:10px;line-height:1.4;color:rgba(255,255,255,0.4);flex:1 1 0;}
+  .anat-cap .arw{display:block;color:rgba(255,255,255,0.28);margin-bottom:3px;font-size:11px;}
+  .anat-cap.mid{text-align:center;}
+  .anat-cap.right{text-align:right;}
+  .anat-rules{list-style:none;margin-top:22px;display:flex;flex-direction:column;gap:10px;}
+  .anat-rules li{display:flex;gap:10px;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.6);}
+  .anat-rules li::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;
+    background:rgba(255,255,255,0.3);margin-top:7px;}
+  .anat-rules b{color:rgba(255,255,255,0.85);font-weight:600;}
+
+  /* =========================================================
+     2 · SPEC BLOCK — disclosure rules
+     ========================================================= */
+  .rules{margin-top:64px;max-width:860px;}
+  .rules > h3{font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:18px;}
+  .rules ul{list-style:none;display:flex;flex-direction:column;gap:11px;}
+  .rules li{display:flex;gap:10px;font-size:13.5px;line-height:1.55;color:rgba(255,255,255,0.62);}
+  .rules li::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;
+    background:rgba(255,255,255,0.3);margin-top:8px;}
+  .rules b{color:rgba(255,255,255,0.85);font-weight:600;}
+  .rules .chev-inline{color:rgba(255,255,255,0.55);font-weight:600;}
+
+  /* =========================================================
+     3 · SPEC BLOCK — the title rule
+     ========================================================= */
+  .titlerule{margin-top:64px;max-width:900px;}
+  .titlerule > h3{font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:20px;}
+  .tr-grid{display:flex;gap:44px;flex-wrap:wrap;}
+  .tr-col{flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:8px;}
+  .tr-cap{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+    color:rgba(255,255,255,0.42);}
+  .tr-cap.gap{margin-top:14px;}
+  .tr-list{list-style:none;display:flex;flex-direction:column;gap:8px;}
+  .tr-list li{display:flex;gap:9px;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.62);}
+  .tr-list li::before{content:"";flex:none;width:4px;height:4px;border-radius:50%;
+    background:rgba(255,255,255,0.3);margin-top:8px;}
+  .tr-list b{color:rgba(255,255,255,0.85);font-weight:600;}
+  .tr-list .ex{color:rgba(255,255,255,0.45);}
+  .tr-foot{margin-top:20px;font-size:11.5px;color:rgba(255,255,255,0.4);line-height:1.55;
+    border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;}
+
+  /* =========================================================
+     4 · NATIVE macOS SETTINGS WINDOW — flat, NOT dark-glass.
+     Scoped to #settings so the flat native look never mixes
+     with the glass panel styles above.
+     ========================================================= */
+  #settings .win-grid{display:flex;gap:40px;flex-wrap:wrap;justify-content:center;margin-top:36px;align-items:flex-start;}
+  #settings .winmock{flex:1 1 500px;max-width:560px;min-width:0;}
+
+  #settings .win{
+    background:#1c1c1e;
+    border:1px solid rgba(255,255,255,0.09);
+    border-radius:12px;overflow:hidden;
+    box-shadow:0 26px 64px -14px rgba(0,0,0,0.66), 0 8px 22px -10px rgba(0,0,0,0.5);
+    min-width:420px;
+  }
+  #settings .win-bar{
+    position:relative;height:40px;display:flex;align-items:center;padding:0 14px;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    background:linear-gradient(180deg,#2a2a2c,#232325);
+  }
+  #settings .lights{display:flex;gap:8px;z-index:1;}
+  #settings .lt{width:12px;height:12px;border-radius:50%;}
+  #settings .lt.r{background:#FF5F57;}
+  #settings .lt.y{background:#FEBC2E;}
+  #settings .lt.g{background:#5a5d61;}          /* grey third light, per the app */
+  #settings .win-title{position:absolute;left:0;right:0;text-align:center;
+    font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);letter-spacing:-0.01em;}
+  #settings .win-body{padding:16px 20px 22px;}
+
+  #settings .sec-h{font-size:17px;font-weight:600;color:rgba(255,255,255,0.92);letter-spacing:-0.01em;
+    margin:20px 2px 10px;}
+  #settings .sec-h:first-child{margin-top:4px;}
+
+  /* group subheader — names the cadence once, above its own card */
+  #settings .grp-h{font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);letter-spacing:-0.005em;
+    margin:14px 2px 7px;}
+  #settings .grp-h:first-of-type{margin-top:0;}
+  #settings .grp-h .suffix{font-size:12px;font-weight:400;color:rgba(255,255,255,0.45);}
+
+  #settings .card{background:#2a2a2c;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.3);}
+  #settings .card > div + div{border-top:1px solid rgba(255,255,255,0.08);}
+
+  #settings .s-row{display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:46px;}
+  #settings .s-text{flex:1 1 auto;min-width:0;}
+  #settings .s-label{font-size:15px;font-weight:400;color:rgba(255,255,255,0.92);line-height:1.25;}
+  #settings .s-sub{font-size:12px;font-weight:400;color:rgba(255,255,255,0.42);margin-top:2px;}
+  #settings .info{color:rgba(255,255,255,0.4);font-size:12px;}
+
+  /* indented sub-rows (window toggles) */
+  #settings .sub-row{display:flex;align-items:center;gap:12px;padding:8px 14px 8px 42px;min-height:38px;}
+  #settings .sub-row .s-label{font-size:13px;color:rgba(255,255,255,0.86);}
+  #settings .sub-cap{padding:9px 14px 9px 42px;font-size:11.5px;line-height:1.45;color:var(--muted);}
+
+  /* native toggle */
+  #settings .toggle{flex:none;width:38px;height:22px;border-radius:999px;background:#48484a;position:relative;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,0.06);}
+  #settings .toggle::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.35);transition:none;}
+  #settings .toggle.on{background:var(--blue);}
+  #settings .toggle.on::after{left:18px;}
+  #settings .toggle.sm{width:32px;height:20px;}
+  #settings .toggle.sm::after{width:16px;height:16px;top:2px;}
+  #settings .toggle.sm.on::after{left:14px;}
+
+  /* stepper */
+  #settings .stepper{flex:none;display:flex;align-items:center;gap:8px;}
+  #settings .st-val{font-size:13px;color:rgba(255,255,255,0.9);font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  #settings .st-btns{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#3a3a3c;border-radius:5px;padding:1px 5px;line-height:0.9;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.05);}
+  #settings .st-btns span{font-size:9px;color:rgba(255,255,255,0.6);}
+
+  #settings .foot{font-size:12px;color:rgba(255,255,255,0.4);line-height:1.45;padding:8px 4px 0;}
+  #settings .foot + .foot{padding-top:5px;}
+
+  /* =========================================================
+     SUMMARY
+     ========================================================= */
+  .summary{
+    margin-top:56px;max-width:900px;
+    padding:26px 28px;border-radius:16px;
+    background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.08);
+  }
+  .summary > h2{font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:16px;}
+  .summary ul{list-style:none;display:flex;flex-direction:column;gap:11px;}
+  .summary li{display:flex;gap:10px;font-size:14px;line-height:1.6;color:rgba(255,255,255,0.72);}
+  .summary li::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;
+    background:rgba(255,255,255,0.3);margin-top:9px;}
+  .summary b{color:#fff;font-weight:600;}
+  .summary .g{color:#8de368;font-weight:600;}
+  .summary .a{color:var(--amber);font-weight:600;}
+
+  /* =========================================================
+     NARROW WIDTHS
+     ========================================================= */
+  @media(max-width:820px){
+    .page{padding:32px 20px 72px;}
+    .topnav{padding:10px 20px;}
+    .sec{margin-top:64px;}
+    .grid{gap:36px 24px;}
+    .tr-grid{gap:28px;}
+  }
+  @media(max-width:520px){
+    .page{padding:26px 16px 64px;}
+    .topnav{padding:9px 16px;gap:2px 10px;}
+    h1{font-size:27px;}
+    .sec > h2{font-size:20px;}
+    .subline-lead{font-size:15px;}
+    .anat-caps{flex-direction:column;gap:9px;}
+    .anat-cap.mid,.anat-cap.right{text-align:left;}
+    .anat-demo{padding:18px 16px 14px;}
+    .summary{padding:20px 18px;}
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav" aria-label="Sections">
+  <a href="#anatomy">1 Anatomy</a>
+  <span class="navsep" aria-hidden="true">·</span>
+  <a href="#disclosure">2 Disclosure</a>
+  <span class="navsep" aria-hidden="true">·</span>
+  <a href="#multi-amber">3 Multi-amber</a>
+  <span class="navsep" aria-hidden="true">·</span>
+  <a href="#settings">4 Settings</a>
+</nav>
+
+<div class="page">
+  <h1>Usage windows — UI spec</h1>
+  <p class="subline-lead">Approved spec for multi-window provider rows: Claude (5-hour, Weekly, Fable) and Codex (Weekly, plus a 5-hour on plans that have one).</p>
+
+  <!-- =====================================================================
+       1 · ANATOMY
+       ===================================================================== -->
+  <section class="sec" id="anatomy">
+    <h2>1 · Anatomy</h2>
+    <p class="subline-lead">Apple anatomy + the reset standard: <b>single unit, floored</b> — minutes under an hour, hours under a day, days beyond. The word is always <b>"resets in"</b>.</p>
+
+    <div class="grid">
+
+      <!-- ============ PANEL 1 — TODAY ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Today</span>
+          <span class="chip-label chip-real">real data</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop1"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(95,209,31,0.18)"/>
+                <rect x="0" y="6" width="17" height="13" fill="rgba(95,209,31,0.85)" clip-path="url(#drop1)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(160,240,120,0.9)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Plenty of prompt juice left</div>
+              <div class="hdr-sub">Claude · resets in 2h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">93% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:93%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>The user's <b>actual numbers today</b> — single-unit resets throughout.</span></div>
+          <div class="note"><span>Codex Weekly is the <b>main bar</b> — the only limit this plan reports.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 2 — CODEX PLAN WITH A 5-HOUR ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Codex on a plan with a 5-hour limit</span>
+          <span class="chip-label chip-muted">lower-tier plans</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop2"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(95,209,31,0.18)"/>
+                <rect x="0" y="6" width="17" height="13" fill="rgba(95,209,31,0.85)" clip-path="url(#drop2)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(160,240,120,0.9)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Plenty of prompt juice left</div>
+              <div class="hdr-sub">Claude · resets in 2h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">93% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:93%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">92% left</span><span class="wsep">·</span><span class="wreset">resets in 5h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:92%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Lower-tier Codex plans have a <b>5-hour limit plus the Weekly</b>; <b>Pro has the Weekly only</b>.</span></div>
+          <div class="note"><span>The short window takes the <b>main row</b>; the weekly goes grey secondary — Codex reads <b>symmetric with Claude</b>.</span></div>
+          <div class="note"><span>The row set is driven by <b>what the provider reports</b>, classified by <b>window duration</b>.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 3 — Fable use-soon ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Fable use-soon fires</span>
+          <span class="chip-label chip-amber">amber twice, nothing else</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop3"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop3)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your Fable juice</div>
+              <div class="hdr-sub">62% left · resets in 23h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">62% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:62%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Weekly use-soon (reset ≤ 24h <b>AND</b> ≥ 40% left <b>AND</b> in use) per the standard — <b>"resets in 23h"</b>, not "tomorrow".</span></div>
+          <div class="note"><span>Amber appears <b>exactly twice</b>: the header and the Fable row.</span></div>
+          <div class="note"><span>Title names the window, so the subtitle <b>drops the name</b>.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 4 — Fable low, calm ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Fable low — calm</span>
+          <span class="chip-label chip-muted">muted, no alert</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop4"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(95,209,31,0.18)"/>
+                <rect x="0" y="6" width="17" height="13" fill="rgba(95,209,31,0.85)" clip-path="url(#drop4)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(160,240,120,0.9)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Plenty of prompt juice left</div>
+              <div class="hdr-sub">Claude · resets in 2h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel muted">Fable</span><span class="wvals"><span class="wpct muted">9% left</span><span class="wsep">·</span><span class="wreset muted">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill muted" style="width:9%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Same layout as the others — <b>only color moves</b>, the row cools to grey.</span></div>
+          <div class="note"><span>Low <b>never alerts</b> — the header stays green with <b>zero mention</b> of it.</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ THE RESET STANDARD ============ -->
+    <div class="standard">
+      <h3>The reset standard</h3>
+      <div class="scrollx">
+        <table class="std-table">
+          <tr><td class="std-in">33 minutes</td><td class="std-arrow">→</td><td class="std-out">resets in 33m</td></tr>
+          <tr><td class="std-in">1h 32m</td><td class="std-arrow">→</td><td class="std-out">resets in 1h</td></tr>
+          <tr><td class="std-in">5h 10m</td><td class="std-arrow">→</td><td class="std-out">resets in 5h</td></tr>
+          <tr><td class="std-in">23h 40m</td><td class="std-arrow">→</td><td class="std-out">resets in 23h</td></tr>
+          <tr><td class="std-in">25 hours</td><td class="std-arrow">→</td><td class="std-out">resets in 1d</td></tr>
+          <tr><td class="std-in">6d 2h</td><td class="std-arrow">→</td><td class="std-out">resets in 6d</td></tr>
+        </table>
+      </div>
+      <div class="std-cap">Floored to the single largest unit; the word is always <b style="color:rgba(255,255,255,0.7)">resets in</b>; no weekday names, no dates.</div>
+    </div>
+
+    <!-- ============ ROW ANATOMY ============ -->
+    <div class="rowanat">
+      <h3>Row anatomy</h3>
+      <div class="anat-demo">
+        <div class="anat-row">
+          <div class="anat-line">
+            <span class="anat-label">5-hour limit</span>
+            <span class="anat-vals"><span class="anat-pct">83% left</span><span class="d">·</span><span class="anat-reset">resets in 2h</span></span>
+          </div>
+          <div class="anat-bar"><div class="anat-bar-fill" style="width:83%"></div></div>
+        </div>
+        <div class="anat-caps">
+          <span class="anat-cap"><span class="arw">↑</span>label — 11px, 55% white</span>
+          <span class="anat-cap mid"><span class="arw">↑</span>values — 12.5px semibold % + 11px "resets in t", tabular, right</span>
+          <span class="anat-cap right"><span class="arw">↑</span>4px flat bar (secondary 3px)</span>
+        </div>
+      </div>
+      <ul class="anat-rules">
+        <li><span>Bars thin &amp; flat — <b>no gradients, no glows</b>, subtle rounded caps.</span></li>
+        <li><span>Healthy secondary = <b>grey fill</b>, so green never multiplies.</span></li>
+        <li><span>Amber appears <b>at most twice</b>: header verdict + the affected row. The <b>percent stays white</b>; only the reset text and bar go amber.</span></li>
+        <li><span><b>No chips</b> — color and header copy carry the alert.</span></li>
+        <li><span>Layout <b>constant across states</b> — only color changes, like the battery icon.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       2 · DISCLOSURE
+       ===================================================================== -->
+  <section class="sec" id="disclosure">
+    <h2>2 · Disclosure</h2>
+    <p class="subline-lead">Collapsed shows each provider's main limit. A small chevron expands the rest — and the app <b>remembers your choice per provider</b>. Amber never hides: a limit that needs you surfaces even when collapsed.</p>
+
+    <div class="grid">
+
+      <!-- ============ PANEL 1 — collapsed default ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Collapsed (default)</span>
+          <span class="chip-label chip-calm">calm baseline</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop5"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(95,209,31,0.18)"/>
+                <rect x="0" y="6" width="17" height="13" fill="rgba(95,209,31,0.85)" clip-path="url(#drop5)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(160,240,120,0.9)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Plenty of prompt juice left</div>
+              <div class="hdr-sub">Claude · resets in 2h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Each provider shows only its <b>main limit</b> — the tightest, most-perishable window.</span></div>
+          <div class="note"><span>Cards stay ~48pt; the chevron <span class="chev-inline">&#8250;</span> is the only new chrome.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 2 — Claude expanded ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Claude expanded</span>
+          <span class="chip-label chip-mem">remembered per provider</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop6"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(95,209,31,0.18)"/>
+                <rect x="0" y="6" width="17" height="13" fill="rgba(95,209,31,0.85)" clip-path="url(#drop6)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(160,240,120,0.9)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Plenty of prompt juice left</div>
+              <div class="hdr-sub">Claude · resets in 2h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span><span class="chev open">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">93% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:93%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Expansion <b>persists</b> — set once, it stays that way next time you open the panel.</span></div>
+          <div class="note"><span>Collapsed Codex is unaffected — disclosure is <b>per-provider state</b>.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 3 — collapsed but Fable amber ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Collapsed, but Fable is amber</span>
+          <span class="chip-label chip-amber">amber never hides</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop7"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop7)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your Fable juice</div>
+              <div class="hdr-sub">62% left · resets in 23h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">62% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:62%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>An amber limit <b>forces its row visible</b> regardless of disclosure — alerts never sit behind a click.</span></div>
+          <div class="note"><span>The card is still collapsed (Weekly stays hidden); only the amber Fable row breaks through.</span></div>
+          <div class="note"><span>When it calms down, the row <b>tucks back away</b>.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 4 — collapsed, Fable low ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Collapsed, Fable low</span>
+          <span class="chip-label chip-mem">low stays tucked</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop8"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(95,209,31,0.18)"/>
+                <rect x="0" y="6" width="17" height="13" fill="rgba(95,209,31,0.85)" clip-path="url(#drop8)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(160,240,120,0.9)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Plenty of prompt juice left</div>
+              <div class="hdr-sub">Claude · resets in 2h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span><span class="chev">&#8250;</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span><b>Low does not surface</b> — low is not an alert, so a nearly-used Fable stays tucked behind the chevron.</span></div>
+          <div class="note"><span>It's there on expand. A low Fable <b>never changes the droplet or the verdict</b> — other models still have juice.</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ DISCLOSURE RULES ============ -->
+    <div class="rules">
+      <h3>The disclosure rules</h3>
+      <ul>
+        <li><span><b>Collapsed = main limit.</b> Each provider shows only its shortest-cadence window; the chevron <span class="chev-inline">&#8250;</span> reveals the rest. Today that's Claude's 5-hour and Codex's Weekly. On Codex plans that include a 5-hour limit, that window takes the collapsed slot and Weekly moves behind the chevron. No special cases.</span></li>
+        <li><span>The chevron <b>toggles</b> the provider, and the choice is <b>remembered per provider</b> — Claude open, Codex closed, independently.</span></li>
+        <li><span><b>Amber auto-surfaces</b>, low does not — a use-soon limit breaks through a collapsed card; a merely-low one waits for expand.</span></li>
+        <li><span><b>Live, too</b> — if a limit crosses the amber threshold while the panel is already open, its row appears right then; when it calms, it tucks back away. Only the amber row surfaces — the rest of the card stays collapsed, and your saved expand/collapse choice is never overwritten.</span></li>
+        <li><span>Hidden windows are still <b>measured</b>: they can go amber, fire notifications, and surface — disclosure changes what's drawn, never what's measured.</span></li>
+        <li><span><b>Droplet and verdict follow the main window</b> of each provider, exactly as today. Amber from any window turns them amber. One exception, <b>lockout</b>: when a limit that blocks the whole provider is exhausted (the all-models Weekly at 0%), that provider reads as empty. A model-specific weekly such as Fable running out only mutes its own row.</span></li>
+        <li><span>This <b>replaces the Show Weekly / Show Fable settings toggles</b> — disclosure is the curation, in the panel where you actually look.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       3 · MULTI-AMBER
+       ===================================================================== -->
+  <section class="sec" id="multi-amber">
+    <h2>3 · Multi-amber</h2>
+    <p class="subline-lead">Rows state their own facts; the header speaks once. Title names the <b>narrowest scope that covers everything amber</b>; subtitle lists soonest first.</p>
+
+    <div class="grid">
+
+      <!-- ============ PANEL 1 — two ambers, one provider ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Two ambers, one provider</span>
+          <span class="chip-label chip-prov">provider title</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop9"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop9)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your Claude juice</div>
+              <div class="hdr-sub">Weekly &amp; Fable reset in 23h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">55% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:55%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">62% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:62%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Two ambers inside Claude → title goes <b>provider-scope</b>.</span></div>
+          <div class="note"><span>Same reset boundary <b>coalesces</b> in the subtitle — listed in row order.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 2 — all three Claude amber ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">All three Claude windows amber</span>
+          <span class="chip-label chip-prov">provider title</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop10"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop10)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your Claude juice</div>
+              <div class="hdr-sub">5-hour resets in 33m · Weekly &amp; Fable reset in 23h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset amber">resets in 33m</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill amber" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">55% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:55%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">62% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:62%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">56% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:56%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Soonest (<b>5-hour, 33m</b>) leads the subtitle.</span></div>
+          <div class="note"><span>The same-boundary pair coalesces after it — two groups, still one sentence.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 3 — Codex-only multi-amber ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Two ambers, Codex only</span>
+          <span class="chip-label chip-prov">provider title · plans with a 5-hour</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop11"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop11)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your Codex juice</div>
+              <div class="hdr-sub">5-hour resets in 52m · Weekly resets in 23h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset">resets in 2h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill green" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">93% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:93%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">78% left</span><span class="wsep">·</span><span class="wreset amber">resets in 52m</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill amber" style="width:78%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">69% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:69%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Codex-only multi-amber occurs on <b>Codex plans that include the 5-hour limit</b>; on Weekly-only plans Codex has a <b>single limit</b>.</span></div>
+          <div class="note"><span>Cross-cadence ranking — <b>52m beats 23h</b>, so the 5-hour leads the subtitle.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 4 — cross-provider ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Amber on both providers</span>
+          <span class="chip-label chip-gen">generic title</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop12"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop12)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your juice</div>
+              <div class="hdr-sub">Claude 5-hour resets in 33m · Codex Weekly resets in 23h</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset amber">resets in 33m</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill amber" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">95% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:95%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">93% left</span><span class="wsep">·</span><span class="wreset">resets in 5d</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill grey" style="width:93%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">69% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill amber" style="width:69%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Ambers <b>cross providers</b> → generic title.</span></div>
+          <div class="note"><span>Subtitle carries the <b>provider names</b> since the title no longer does.</span></div>
+        </div>
+      </div>
+
+      <!-- ============ PANEL 5 — everything amber ============ -->
+      <div class="mock">
+        <div class="mock-head">
+          <span class="mock-title">Everything amber</span>
+          <span class="chip-label chip-max">the maximum</span>
+        </div>
+        <div class="panel">
+          <div class="hdr">
+            <div class="droplet-chip">
+              <svg width="17" height="19" viewBox="0 0 17 19" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs><clipPath id="drop13"><path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z"/></clipPath></defs>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" fill="rgba(240,163,42,0.18)"/>
+                <rect x="0" y="4" width="17" height="15" fill="rgba(240,163,42,0.9)" clip-path="url(#drop13)"/>
+                <path d="M8.5 1C8.5 1 2 8 2 12.2C2 15.6 4.9 18 8.5 18C12.1 18 15 15.6 15 12.2C15 8 8.5 1 8.5 1Z" stroke="rgba(245,190,110,0.95)" stroke-width="1.1"/>
+              </svg>
+            </div>
+            <div class="hdr-text">
+              <div class="hdr-title">Use your juice</div>
+              <div class="hdr-sub">5 limits reset soon · Claude 5-hour resets in 33m</div>
+            </div>
+            <div class="close-btn">✕</div>
+          </div>
+          <div class="pstack">
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-claude"></span><span class="pname2">Claude</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">83% left</span><span class="wsep">·</span><span class="wreset amber">resets in 33m</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill amber" style="width:83%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">55% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:55%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Fable</span><span class="wvals"><span class="wpct">62% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:62%"></div></div>
+              </div>
+            </div>
+            <div class="pcard">
+              <div class="pcard-head"><span class="pdot pdot-codex"></span><span class="pname2">Codex</span></div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">5-hour limit</span><span class="wvals"><span class="wpct">78% left</span><span class="wsep">·</span><span class="wreset amber">resets in 52m</span></span></div>
+                <div class="fbar fbar-p"><div class="fbar-fill amber" style="width:78%"></div></div>
+              </div>
+              <div class="wrow">
+                <div class="wrow-line"><span class="wlabel">Weekly</span><span class="wvals"><span class="wpct">69% left</span><span class="wsep">·</span><span class="wreset amber">resets in 23h</span></span></div>
+                <div class="fbar fbar-s"><div class="fbar-fill amber" style="width:69%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>Beyond two groups the subtitle distills to a <b>count + the soonest</b>.</span></div>
+          <div class="note"><span>Every row still tells its own truth — when everything is expiring, everything is amber, and that's honest.</span></div>
+          <div class="note"><span>The header stays <b>one calm sentence</b>.</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ THE TITLE RULE ============ -->
+    <div class="titlerule">
+      <h3>The title rule</h3>
+      <div class="tr-grid">
+        <div class="tr-col">
+          <div class="tr-cap">Title scope — narrowest that covers all amber</div>
+          <ul class="tr-list">
+            <li><span><b>1 window</b> → name it <span class="ex">· "Use your Fable juice"</span>, and the subtitle drops the name.</span></li>
+            <li><span><b>&gt;1, one provider</b> → name the provider <span class="ex">· "Use your Claude juice"</span></span></li>
+            <li><span class="ex">e.g. Codex 5-hour &amp; Weekly both amber → "Use your Codex juice"</span></li>
+            <li><span><b>across providers</b> → <span class="ex">"Use your juice"</span></span></li>
+          </ul>
+        </div>
+        <div class="tr-col">
+          <div class="tr-cap">Ranking</div>
+          <ul class="tr-list">
+            <li><span>Soonest reset first.</span></li>
+            <li><span>Tie (same reset boundary) → <b>higher remaining % wins</b> — more juice at stake.</span></li>
+          </ul>
+          <div class="tr-cap gap">Subtitle</div>
+          <ul class="tr-list">
+            <li><span>Soonest first; coalesce same-reset windows in <b>row order</b>. <b>Every group carries its verb</b> <span class="ex">("Weekly &amp; Fable reset in 23h", "5-hour resets in 33m")</span>.</span></li>
+            <li><span>Count form drops the em-dash <span class="ex">("&lt;N&gt; limits reset soon · &lt;soonest window&gt; resets in &lt;t&gt;")</span>.</span></li>
+            <li><span><b>Enumerate only if it fits the header line</b>; otherwise fall to the count form early — <b>never ellipsize</b> <span class="ex">(the two-group cross-provider case is the borderline one)</span>.</span></li>
+          </ul>
+          <div class="tr-cap gap">Count ladder</div>
+          <ul class="tr-list">
+            <li><span><b>1 amber</b> → title names it, subtitle drops the name.</span></li>
+            <li><span><b>≤ 2 groups</b> after coalescing → enumerate <span class="ex">("5-hour resets in 33m · Weekly &amp; Fable reset in 23h")</span>.</span></li>
+            <li><span><b>&gt; 2 groups</b> → true count + soonest <span class="ex">("3 limits reset soon · …", "4 limits…", "5 limits reset soon · Claude 5-hour resets in 33m")</span>.</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="tr-foot">Rows always show their own amber independently — rows are facts, the header is the one voice. Windows going amber at the same moment coalesce into a single notification.</div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       4 · SETTINGS — native flat macOS windows, NOT dark glass
+       ===================================================================== -->
+  <section class="sec" id="settings">
+    <h2>4 · Settings</h2>
+    <p class="subline-lead">Visibility moved to the panel's <b>per-provider disclosure</b>. Settings keeps what it's best at — the use-soon thresholds — now <b>one pair per cadence</b>: 5-hour and weekly.</p>
+
+    <div class="win-grid">
+
+      <!-- ================= WINDOW A — TODAY ================= -->
+      <div class="winmock">
+        <div class="mock-head">
+          <span class="mock-title">Today</span>
+          <span class="chip-label chip-cur">current app</span>
+        </div>
+        <div class="scrollx">
+          <div class="win">
+            <div class="win-bar">
+              <div class="lights"><span class="lt r"></span><span class="lt y"></span><span class="lt g"></span></div>
+              <div class="win-title">PromptJuice Settings</div>
+            </div>
+            <div class="win-body">
+              <div class="sec-h">Providers</div>
+              <div class="card">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">Claude</div><div class="s-sub">Updated 7 min ago <span class="info">ⓘ</span></div></div>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">Codex</div><div class="s-sub">Live · resets in 118h 50m</div></div>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+
+              <div class="sec-h">Use the juice</div>
+              <div class="card">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">When reset is within</div></div>
+                  <div class="stepper"><span class="st-val">60 minutes</span><span class="st-btns"><span>⌃</span><span>⌄</span></span></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">and I still have at least</div></div>
+                  <div class="stepper"><span class="st-val">40%</span><span class="st-btns"><span>⌃</span><span>⌄</span></span></div>
+                </div>
+              </div>
+              <div class="foot">Turns your menu-bar droplet orange when a usage limit window is this close to resetting.</div>
+
+              <div class="card" style="margin-top:18px">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">Notify me</div><div class="s-sub">Sends a macOS notification to use your juice</div></div>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span>The current shipping window — one toggle per provider, one global use-soon threshold.</span></div>
+          <div class="note"><span>Codex's status still shows the old <b>"resets in 118h 50m"</b> raw countdown.</span></div>
+        </div>
+      </div>
+
+      <!-- ================= WINDOW B — THRESHOLDS PER CADENCE ================= -->
+      <div class="winmock">
+        <div class="mock-head">
+          <span class="mock-title">Thresholds per cadence</span>
+          <span class="chip-label chip-prop">proposed</span>
+        </div>
+        <div class="scrollx">
+          <div class="win">
+            <div class="win-bar">
+              <div class="lights"><span class="lt r"></span><span class="lt y"></span><span class="lt g"></span></div>
+              <div class="win-title">PromptJuice Settings</div>
+            </div>
+            <div class="win-body">
+              <div class="sec-h">Providers</div>
+              <div class="card">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">Claude</div><div class="s-sub">Updated 7 min ago <span class="info">ⓘ</span></div></div>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">Codex</div><div class="s-sub">Live · resets in 4d</div></div>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+
+              <div class="sec-h">Use the juice</div>
+
+              <div class="grp-h">5-hour limits</div>
+              <div class="card">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">When reset is within</div></div>
+                  <div class="stepper"><span class="st-val">60 minutes</span><span class="st-btns"><span>⌃</span><span>⌄</span></span></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">and I still have at least</div></div>
+                  <div class="stepper"><span class="st-val">40%</span><span class="st-btns"><span>⌃</span><span>⌄</span></span></div>
+                </div>
+              </div>
+
+              <div class="grp-h">Weekly limits</div>
+              <div class="card">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">When reset is within</div></div>
+                  <div class="stepper"><span class="st-val">1 day</span><span class="st-btns"><span>⌃</span><span>⌄</span></span></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">and I still have at least</div></div>
+                  <div class="stepper"><span class="st-val">40%</span><span class="st-btns"><span>⌃</span><span>⌄</span></span></div>
+                </div>
+              </div>
+              <div class="foot">Turns your menu-bar droplet orange when a usage limit window is this close to resetting.</div>
+
+              <div class="card" style="margin-top:18px">
+                <div class="s-row">
+                  <div class="s-text"><div class="s-label">Notify me</div><div class="s-sub">Sends a macOS notification to use your juice</div></div>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="notes">
+          <div class="note"><span><b>Name the cadence once as a header</b>, thresholds inside — no repeated rows differentiated by fine print.</span></div>
+          <div class="note"><span><b>Disclosure in the panel</b> replaces the visibility toggles — Settings no longer lists windows.</span></div>
+          <div class="note"><span>Settings owns <b>thresholds only</b>; both groups feed the <b>same amber grammar</b> — reset within, and still at least this much left.</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       SUMMARY
+       ===================================================================== -->
+  <section class="summary" id="summary">
+    <h2>Summary</h2>
+    <ul>
+      <li><span>Apple anatomy and the <b>reset standard</b> are locked: floored to one unit, always the words <b>"resets in"</b>, one formatter shared verbatim by every row, the header, and every notification.</span></li>
+      <li><span>Ship <span class="g">per-provider disclosure</span> — collapsed to the main limit, a chevron to expand, the choice remembered per provider — with the safety rail that <b>amber always surfaces</b> and low never does.</span></li>
+      <li><span>The header is one voice: the <span class="a">scope cascade</span> window → provider → generic, soonest-reset ranking, same-boundary coalescing. Rows stay independent facts; title and subtitle are a pure function of the amber set, reused by the panel and the coalesced notification.</span></li>
+      <li><span>Ship <span class="g">Window B</span> in Settings — visibility lives in the panel now, so Settings keeps only the use-soon thresholds, <b>one pair per cadence</b> (5-hour and weekly), both feeding the same amber grammar.</span></li>
+      <li><span>The row set follows <b>what each provider reports</b>, classified by window duration: Claude's 5-hour, Weekly and Fable; Codex's Weekly, plus a <b>5-hour on the plans that include one</b>.</span></li>
+    </ul>
+  </section>
+
+</div>
+</body>
+</html>

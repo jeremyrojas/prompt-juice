@@ -1,19 +1,52 @@
 import Foundation
 import SwiftUI
 
+enum ResetFormatter {
+    static func duration(until resetAt: Date, now: Date) -> String {
+        let seconds = max(0, resetAt.timeIntervalSince(now))
+
+        if seconds < 60 * 60 {
+            return "\(Int(seconds / 60))m"
+        }
+        if seconds < 24 * 60 * 60 {
+            return "\(Int(seconds / (60 * 60)))h"
+        }
+        return "\(Int(seconds / (24 * 60 * 60)))d"
+    }
+
+    static func text(until resetAt: Date, now: Date) -> String {
+        "resets in \(duration(until: resetAt, now: now))"
+    }
+}
+
 struct UseSoonNotice: Equatable {
     let provider: UsageProvider
     let providerDisplayName: String
     let remainingPercent: Int
     let resetText: String
+    let resetAt: Date
     let windowID: String
+    var kind: LimitWindow.Kind = .fiveHour
+    var rowOrder: Int = 0
+
+    var latchKey: String { "\(provider.rawValue):\(kind.identifier)" }
+
+    var alertingLimit: AlertingLimit {
+        AlertingLimit(
+            provider: provider,
+            kind: kind,
+            remainingPercent: remainingPercent,
+            resetAt: resetAt,
+            rowOrder: rowOrder
+        )
+    }
 
     var title: String {
-        "Use \(providerDisplayName) before it resets"
+        UseSoonHeader.make(alerts: [alertingLimit], now: resetAt)?.title ?? "Use your juice"
     }
 
     var body: String {
-        "You have \(remainingPercent)% left with \(resetText) until reset"
+        "\(remainingPercent)% left · resets in \(resetText)"
     }
 
     var notificationIdentifier: String {
@@ -28,15 +61,14 @@ struct UseSoonNotice: Equatable {
 struct UseSoonNotificationWithdrawal: Equatable {
     let provider: UsageProvider
     let windowID: String
+    var latchKey: String = ""
 
     var notificationIdentifier: String {
         UseSoonNotice.notificationIdentifier(provider: provider, windowID: windowID)
     }
 }
 
-/// The single macOS notification actually delivered. When more than one provider
-/// is orange at once their per-provider `UseSoonNotice`s are merged into this so
-/// the user gets one banner listing every provider, not one banner each.
+/// The single macOS notification delivered for all newly orange windows.
 struct MergedUseSoonNotification: Equatable {
     let title: String
     let body: String
@@ -46,7 +78,7 @@ struct MergedUseSoonNotification: Equatable {
     /// already sorted by provider order. Returns `nil` when there's nothing to
     /// send. One provider reuses its own copy; two or more are combined, and the
     /// reset clause collapses when the windows share a time (matching the panel).
-    init?(notices: [UseSoonNotice]) {
+    init?(notices: [UseSoonNotice], now: Date = Date()) {
         guard let first = notices.first else {
             return nil
         }
@@ -58,20 +90,12 @@ struct MergedUseSoonNotification: Equatable {
             return
         }
 
-        let names = notices.map(\.providerDisplayName)
-        title = "Use \(names.joined(separator: " and ")) before they reset"
-
-        let sharesResetTime = Set(notices.map(\.resetText)).count == 1
-        if sharesResetTime {
-            let leadIn = notices
-                .map { "\($0.providerDisplayName) \($0.remainingPercent)%" }
-                .joined(separator: " · ")
-            body = "\(leadIn) left, resetting in \(first.resetText)"
-        } else {
-            body = notices
-                .map { "\($0.providerDisplayName) \($0.remainingPercent)% left in \($0.resetText)" }
-                .joined(separator: " · ")
-        }
+        guard let header = UseSoonHeader.make(
+            alerts: notices.map(\.alertingLimit),
+            now: now
+        ) else { return nil }
+        title = header.title
+        body = notices.count == 1 ? first.body : header.subtitle
 
         identifier = "promptjuice.use-soon.merged." + notices
             .map { "\($0.provider.rawValue).\($0.windowID)" }
@@ -95,9 +119,11 @@ final class PromptJuiceViewModel: ObservableObject {
     @Published private(set) var selectedProvider: UsageProvider?
     @Published private(set) var hoveredPanelTarget: PanelClickTarget?
     @Published private(set) var actionMessage: String?
-    @Published private(set) var thresholds: AlertThresholds
+    @Published private(set) var fiveHourThresholds: AlertThresholds
+    @Published private(set) var weeklyThresholds: AlertThresholds
     @Published private(set) var sourceMode: UsageSourceMode
     @Published private(set) var enabledProviders: Set<UsageProvider>
+    @Published private(set) var expandedProviders: Set<UsageProvider>
     @Published private(set) var useSoonNotificationsEnabled: Bool
     @Published private(set) var claudeAccessState: ClaudeAccessState
     @Published private(set) var claudeRefreshState: ClaudeRefreshState
@@ -165,6 +191,7 @@ final class PromptJuiceViewModel: ObservableObject {
         }
         self.sourceMode = initialSourceMode
         self.enabledProviders = initialEnabledProviders
+        self.expandedProviders = settingsStore.expandedProviders
         self.providerClient = providerClient ?? Self.makeProviderClient(
             sourceMode: initialSourceMode
         )
@@ -174,7 +201,8 @@ final class PromptJuiceViewModel: ObservableObject {
         self.didOfferUseSoonNotification = settingsStore.didOfferUseSoonNotification
         claudeAccessState = initialClaudeAccessState ?? .checking
         claudeRefreshState = initialClaudeRefreshState ?? .idle
-        thresholds = settingsStore.thresholds
+        fiveHourThresholds = settingsStore.sharedThresholds(for: .fiveHour)
+        weeklyThresholds = settingsStore.sharedThresholds(for: .weekly)
         snapshots = if let initialSnapshots {
             initialSnapshots
         } else if let providerClient {
@@ -190,6 +218,72 @@ final class PromptJuiceViewModel: ObservableObject {
     var visibleSnapshots: [UsageSnapshot] {
         snapshots.filter { enabledProviders.contains($0.provider) }
     }
+
+    func measuredWindows(for snapshot: UsageSnapshot) -> [LimitWindow] {
+        guard snapshot.confidence != .unavailable,
+              snapshot.provider != .claude || claudePresentation.showsReading,
+              !snapshot.isFreshSessionWindow else {
+            return []
+        }
+        return snapshot.windows.filter { $0.rateWindow.isAvailable }
+    }
+
+    func visibleWindows(for snapshot: UsageSnapshot) -> [LimitWindow] {
+        let measured = measuredWindows(for: snapshot)
+        guard let main = measured.first else { return [] }
+        guard !expandedProviders.contains(snapshot.provider) else { return measured }
+        return [main] + measured.dropFirst().filter { window in
+            isWindowUseSoon(window, in: snapshot)
+        }
+    }
+
+    func isWindowUseSoon(_ window: LimitWindow, in snapshot: UsageSnapshot) -> Bool {
+        alertEngine.shouldUseSoon(
+            for: window,
+            in: snapshot,
+            thresholds: thresholds(for: window, provider: snapshot.provider),
+            now: now()
+        )
+    }
+
+    private func thresholds(for window: LimitWindow, provider: UsageProvider) -> AlertThresholds {
+        settingsStore.thresholds(for: provider, cadence: LimitCadence(kind: window.kind))
+    }
+
+    func windowSeverity(_ window: LimitWindow, in snapshot: UsageSnapshot) -> UsageSeverity {
+        guard let remaining = window.rateWindow.remainingPercent,
+              let resetAt = window.rateWindow.resetAt,
+              resetAt > now() else { return .unavailable }
+        if remaining <= 0 { return .empty }
+        if isWindowUseSoon(window, in: snapshot) { return .useSoon }
+        if remaining < Double(UsageSeverity.lowRemainingFloor) { return .low }
+        return .healthy
+    }
+
+    func toggleExpanded(_ provider: UsageProvider) {
+        if expandedProviders.contains(provider) {
+            expandedProviders.remove(provider)
+        } else {
+            expandedProviders.insert(provider)
+        }
+        settingsStore.expandedProviders = expandedProviders
+    }
+
+    var visibleWindowCounts: [Int] {
+        visibleSnapshots.map { visibleWindows(for: $0).count }
+    }
+
+    var disclosureProviders: Set<UsageProvider> {
+        Set(visibleSnapshots.compactMap { snapshot in
+            let windowCount = measuredWindows(for: snapshot).count
+            guard windowCount > 0 else { return nil }
+            return (snapshot.provider == .claude || windowCount > 1)
+                ? snapshot.provider
+                : nil
+        })
+    }
+
+    var currentDate: Date { now() }
 
     var claudePresentation: ClaudeUsagePresentation {
         ClaudeUsagePresentation.resolve(
@@ -265,14 +359,21 @@ final class PromptJuiceViewModel: ObservableObject {
 
     /// Per-provider judgment for the row chip, bar color, and header tint.
     func severity(for snapshot: UsageSnapshot) -> UsageSeverity {
-        alertEngine.severity(for: snapshot, thresholds: thresholds, now: now())
+        alertEngine.severity(
+            for: snapshot,
+            thresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .fiveHour),
+            weeklyThresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .weekly),
+            now: now()
+        )
     }
 
     /// Worst-wins judgment across all providers.
     var aggregateSeverity: UsageSeverity {
         alertEngine.aggregateSeverity(
             in: quotaBearingVisibleSnapshots,
-            thresholds: thresholds,
+            thresholdsFor: { provider, cadence in
+                settingsStore.thresholds(for: provider, cadence: cadence)
+            },
             now: now()
         )
     }
@@ -297,8 +398,15 @@ final class PromptJuiceViewModel: ObservableObject {
     var menuBarRemainingPercent: Double {
         // Clash rule: when a use-soon nudge is active, the fill follows the nudged
         // provider's session remaining so the orange droplet matches its headline.
-        if aggregateSeverity == .useSoon, let alertSnapshot {
-            return alertSnapshot.remainingPercent
+        if aggregateSeverity == .useSoon,
+           let first = alertingLimits(at: now()).first,
+           let snapshot = quotaBearingVisibleSnapshots.first(where: { $0.provider == first.provider }) {
+            return snapshot.remainingPercent
+        }
+
+        if aggregateSeverity == .empty,
+           quotaBearingVisibleSnapshots.contains(where: { alertEngine.isLockedOut($0, now: now()) }) {
+            return 0
         }
 
         let available = quotaBearingVisibleSnapshots.filter(\.isAvailable)
@@ -335,14 +443,7 @@ final class PromptJuiceViewModel: ObservableObject {
         case .healthy:
             return "Plenty of prompt juice left"
         case .useSoon:
-            let soon = alertingSnapshots
-            if soon.count > 1 {
-                return "Use prompt juice soon"
-            }
-            if let one = soon.first {
-                return "Use \(one.displayName) before it resets"
-            }
-            return "Use prompt juice soon"
+            return useSoonHeader?.title ?? "Use your juice"
         case .low:
             let lows = lowSnapshots
             if lows.count > 1 {
@@ -381,6 +482,10 @@ final class PromptJuiceViewModel: ObservableObject {
             return neutralClaudeHeader.detail
         }
 
+        if let useSoonHeader {
+            return useSoonHeader.subtitle
+        }
+
         guard quotaBearingVisibleSnapshots.contains(where: \.isAvailable) else {
             return "Usage unavailable"
         }
@@ -396,21 +501,20 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Fresh window"
         }
 
-        let contextualResetSnapshots = resetSnapshotsForHeaderDetail(
-            from: resetSnapshots,
-            at: refreshDate
-        )
-        let resetTexts = contextualResetSnapshots.map { resetText(for: $0) }
-        if let sharedText = resetTexts.first,
-           resetTexts.allSatisfy({ $0 == sharedText }) {
-            let verb = contextualResetSnapshots.count == 1 ? "resets" : "reset"
-            return "\(providerNameList(contextualResetSnapshots)) \(verb) in \(sharedText)"
+        let contextualResetSnapshots = resetSnapshots
+        let resetDates = contextualResetSnapshots.compactMap(\.rateWindow.resetAt)
+        if let sharedResetAt = resetDates.first,
+           resetDates.count == contextualResetSnapshots.count,
+           resetDates.allSatisfy({ $0 == sharedResetAt }) {
+            let names = providerNameList(contextualResetSnapshots)
+            let prefix = contextualResetSnapshots.count == 1 ? "\(names) · resets" : "\(names) reset"
+            return "\(prefix) in \(ResetFormatter.duration(until: sharedResetAt, now: refreshDate))"
         }
 
         if let soonest = contextualResetSnapshots.min(by: { first, second in
             (first.rateWindow.resetAt ?? .distantFuture) < (second.rateWindow.resetAt ?? .distantFuture)
         }) {
-            return "\(soonest.displayName) resets in \(resetText(for: soonest))"
+            return "\(soonest.displayName) · resets in \(resetText(for: soonest))"
         }
 
         return "Fresh window"
@@ -434,20 +538,6 @@ final class PromptJuiceViewModel: ObservableObject {
             "Usage unavailable"
         }
         return ("Claude plan usage unavailable", detail)
-    }
-
-    private func resetSnapshotsForHeaderDetail(
-        from resetSnapshots: [UsageSnapshot],
-        at refreshDate: Date
-    ) -> [UsageSnapshot] {
-        guard aggregateSeverity == .useSoon else {
-            return resetSnapshots
-        }
-
-        let alerting = alertingSnapshots.filter {
-            $0.hasActiveResetWindow(at: refreshDate)
-        }
-        return alerting.isEmpty ? resetSnapshots : alerting
     }
 
     private func providerNameList(_ snapshots: [UsageSnapshot]) -> String {
@@ -496,20 +586,41 @@ final class PromptJuiceViewModel: ObservableObject {
         hoveredPanelTarget = target
     }
 
-    private var alertSnapshot: UsageSnapshot? {
-        alertEngine.preferredSnapshot(
-            in: quotaBearingVisibleSnapshots,
-            thresholds: thresholds,
-            now: now()
-        )
+    private var useSoonHeader: UseSoonHeader? {
+        UseSoonHeader.make(alerts: alertingLimits(at: now()), now: now())
     }
 
-    private var alertingSnapshots: [UsageSnapshot] {
-        alertEngine.alertingSnapshots(
-            in: quotaBearingVisibleSnapshots,
-            thresholds: thresholds,
-            now: now()
-        )
+    private func alertingLimits(at date: Date) -> [AlertingLimit] {
+        quotaBearingVisibleSnapshots.flatMap { snapshot in
+            snapshot.windows.enumerated().compactMap { index, window in
+                let pair = thresholds(for: window, provider: snapshot.provider)
+                guard alertEngine.shouldUseSoon(
+                    for: window,
+                    in: snapshot,
+                    thresholds: pair,
+                    now: date
+                ), let resetAt = window.rateWindow.resetAt,
+                   let remaining = window.rateWindow.remainingPercent else {
+                    return nil
+                }
+                return AlertingLimit(
+                    provider: snapshot.provider,
+                    kind: window.kind,
+                    remainingPercent: Int(remaining.rounded()),
+                    resetAt: resetAt,
+                    rowOrder: index
+                )
+            }
+        }.sorted { first, second in
+            if first.resetAt != second.resetAt { return first.resetAt < second.resetAt }
+            if first.remainingPercent != second.remainingPercent {
+                return first.remainingPercent > second.remainingPercent
+            }
+            if first.provider.sortIndex != second.provider.sortIndex {
+                return first.provider.sortIndex < second.provider.sortIndex
+            }
+            return first.rowOrder < second.rowOrder
+        }
     }
 
     func showManualCheck() {
@@ -522,15 +633,21 @@ final class PromptJuiceViewModel: ObservableObject {
         selectedProvider = nil
     }
 
-    func setRemainingMinutesThreshold(_ value: Int) {
-        thresholds.remainingMinutes = value
-        settingsStore.saveThresholds(thresholds)
+    func setRemainingMinutesThreshold(_ value: Int, cadence: LimitCadence) {
+        var pair = settingsStore.sharedThresholds(for: cadence)
+        pair.remainingMinutes = value
+        settingsStore.saveThresholds(pair, for: cadence)
+        if cadence == .fiveHour { fiveHourThresholds = pair }
+        else { weeklyThresholds = pair }
         refreshModeForThresholds()
     }
 
-    func setRemainingPercentThreshold(_ value: Int) {
-        thresholds.remainingPercent = value
-        settingsStore.saveThresholds(thresholds)
+    func setRemainingPercentThreshold(_ value: Int, cadence: LimitCadence) {
+        var pair = settingsStore.sharedThresholds(for: cadence)
+        pair.remainingPercent = value
+        settingsStore.saveThresholds(pair, for: cadence)
+        if cadence == .fiveHour { fiveHourThresholds = pair }
+        else { weeklyThresholds = pair }
         refreshModeForThresholds()
     }
 
@@ -652,36 +769,53 @@ final class PromptJuiceViewModel: ObservableObject {
 
         let notifiedWindowIDs = settingsStore.notifiedUseSoonWindowIDs
 
-        return quotaBearingVisibleSnapshots
-            .filter { snapshot in
-                snapshot.isAvailable
-                    && snapshot.hasActiveResetWindow(at: noticeDate)
-                    && alertEngine.severity(for: snapshot, thresholds: thresholds, now: noticeDate) == .useSoon
-                    && notifiedWindowIDs[snapshot.provider.rawValue] != snapshot.resetWindowID
-            }
-            .sorted { first, second in
-                first.provider.sortIndex < second.provider.sortIndex
-            }
-            .map { snapshot in
-                UseSoonNotice(
+        return quotaBearingVisibleSnapshots.flatMap { snapshot in
+            snapshot.windows.enumerated().compactMap { index, window -> UseSoonNotice? in
+                let pair = thresholds(for: window, provider: snapshot.provider)
+                let latchKey = "\(snapshot.provider.rawValue):\(window.kind.identifier)"
+                let windowID = window.resetWindowID(provider: snapshot.provider)
+                guard alertEngine.shouldUseSoon(
+                    for: window,
+                    in: snapshot,
+                    thresholds: pair,
+                    now: noticeDate
+                ), notifiedWindowIDs[latchKey] != windowID,
+                   let resetAt = window.rateWindow.resetAt,
+                   let remaining = window.rateWindow.remainingPercent else {
+                    return nil
+                }
+                return UseSoonNotice(
                     provider: snapshot.provider,
                     providerDisplayName: snapshot.displayName,
-                    remainingPercent: Int(snapshot.sessionRemainingPercent.rounded()),
-                    resetText: resetText(for: snapshot),
-                    windowID: snapshot.resetWindowID
+                    remainingPercent: Int(remaining.rounded()),
+                    resetText: ResetFormatter.duration(until: resetAt, now: noticeDate),
+                    resetAt: resetAt,
+                    windowID: windowID,
+                    kind: window.kind,
+                    rowOrder: index
                 )
             }
+        }.sorted { first, second in
+            if first.resetAt != second.resetAt { return first.resetAt < second.resetAt }
+            if first.remainingPercent != second.remainingPercent {
+                return first.remainingPercent > second.remainingPercent
+            }
+            if first.provider.sortIndex != second.provider.sortIndex {
+                return first.provider.sortIndex < second.provider.sortIndex
+            }
+            return first.rowOrder < second.rowOrder
+        }
     }
 
     /// The single banner to deliver for the current pending notices — the merge
     /// of every orange provider into one notification.
     func mergedUseSoonNotification(now noticeDate: Date) -> MergedUseSoonNotification? {
-        MergedUseSoonNotification(notices: pendingUseSoonNotifications(now: noticeDate))
+        MergedUseSoonNotification(notices: pendingUseSoonNotifications(now: noticeDate), now: noticeDate)
     }
 
     func markUseSoonNoticeDispatched(_ notice: UseSoonNotice) {
         settingsStore.markUseSoonWindowNotified(
-            provider: notice.provider,
+            latchKey: notice.latchKey,
             windowID: notice.windowID
         )
     }
@@ -709,28 +843,37 @@ final class PromptJuiceViewModel: ObservableObject {
             uniqueKeysWithValues: quotaBearingVisibleSnapshots.map { ($0.provider, $0) }
         )
 
-        return settingsStore.notifiedUseSoonWindowIDs.compactMap { providerRawValue, windowID in
-            guard let provider = UsageProvider(rawValue: providerRawValue) else {
+        return settingsStore.notifiedUseSoonWindowIDs.compactMap { latchKey, windowID in
+            guard let providerRawValue = windowID.split(separator: ":").first,
+                  let provider = UsageProvider(rawValue: String(providerRawValue)) else {
                 return nil
             }
 
             guard let storedResetAt = resetDate(fromWindowID: windowID) else {
-                return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+                return UseSoonNotificationWithdrawal(
+                    provider: provider, windowID: windowID, latchKey: latchKey
+                )
             }
 
             if storedResetAt <= withdrawalDate {
-                return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+                return UseSoonNotificationWithdrawal(
+                    provider: provider, windowID: windowID, latchKey: latchKey
+                )
             }
 
             guard let snapshot = snapshotsByProvider[provider],
-                  snapshot.hasActiveResetWindow(at: withdrawalDate),
-                  snapshot.resetWindowID != windowID,
-                  let currentResetAt = snapshot.rateWindow.resetAt,
+                  let current = snapshot.windows.first(where: {
+                      "\(provider.rawValue):\($0.kind.identifier)" == latchKey
+                  }),
+                  let currentResetAt = current.rateWindow.resetAt,
+                  current.resetWindowID(provider: provider) != windowID,
                   currentResetAt > storedResetAt else {
                 return nil
             }
 
-            return UseSoonNotificationWithdrawal(provider: provider, windowID: windowID)
+            return UseSoonNotificationWithdrawal(
+                provider: provider, windowID: windowID, latchKey: latchKey
+            )
         }
     }
 
@@ -744,7 +887,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func clearUseSoonNotificationLatch(for withdrawal: UseSoonNotificationWithdrawal) {
-        settingsStore.clearUseSoonWindowNotification(provider: withdrawal.provider)
+        settingsStore.clearUseSoonWindowNotification(latchKey: withdrawal.latchKey)
     }
 
     func tick() {
@@ -904,17 +1047,11 @@ final class PromptJuiceViewModel: ObservableObject {
             return "fresh"
         }
 
-        guard let minutes = snapshot.rateWindow.minutesUntilReset(now: now()) else {
+        guard let resetAt = snapshot.rateWindow.resetAt else {
             return "n/a"
         }
 
-        if minutes < 60 {
-            return "\(minutes)m"
-        }
-
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        return "\(hours)h \(remainder)m"
+        return ResetFormatter.duration(until: resetAt, now: now())
     }
 
     func fullResetText(for snapshot: UsageSnapshot) -> String {
@@ -922,13 +1059,18 @@ final class PromptJuiceViewModel: ObservableObject {
             return "Fresh window"
         }
 
-        return "resets in \(resetText(for: snapshot))"
+        guard let resetAt = snapshot.rateWindow.resetAt else {
+            return "resets in n/a"
+        }
+
+        return ResetFormatter.text(until: resetAt, now: now())
     }
 
     func shouldUseSoon(for snapshot: UsageSnapshot) -> Bool {
         alertEngine.shouldUseSoon(
             for: snapshot,
-            thresholds: thresholds,
+            thresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .fiveHour),
+            weeklyThresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .weekly),
             now: now()
         )
     }
@@ -940,12 +1082,12 @@ final class PromptJuiceViewModel: ObservableObject {
 
         return alertEngine.statusText(
             for: snapshot,
-            thresholds: thresholds,
+            thresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .fiveHour),
+            weeklyThresholds: settingsStore.thresholds(for: snapshot.provider, cadence: .weekly),
             now: now()
         )
     }
 
-    // retained for future weekly UI; not currently displayed
     func weeklyText(for snapshot: UsageSnapshot) -> String? {
         if snapshot.isFreshWeeklyWindow {
             return "Week: 100% left · fresh week"
@@ -956,7 +1098,10 @@ final class PromptJuiceViewModel: ObservableObject {
             return nil
         }
 
-        var text = "Week: \(Int(remaining.rounded()))% left · resets in \(weeklyResetText(for: weeklyWindow))"
+        let resetText = weeklyWindow.resetAt.map {
+            ResetFormatter.text(until: $0, now: now())
+        } ?? "resets in n/a"
+        var text = "Week: \(Int(remaining.rounded()))% left · \(resetText)"
 
         if let weeklyUpdatedAt = snapshot.weeklyUpdatedAt,
            now().timeIntervalSince(weeklyUpdatedAt) > 30 * 60 {
@@ -964,26 +1109,6 @@ final class PromptJuiceViewModel: ObservableObject {
         }
 
         return text
-    }
-
-    // retained for future weekly UI; not currently displayed
-    private func weeklyResetText(for window: RateWindow) -> String {
-        guard let minutes = window.minutesUntilReset(now: now()) else {
-            return "n/a"
-        }
-
-        let hours = max(1, minutes / 60)
-        if hours < 24 {
-            return "\(hours)h"
-        }
-
-        let days = hours / 24
-        let remainderHours = hours % 24
-        if remainderHours == 0 {
-            return "\(days)d"
-        }
-
-        return "\(days)d \(remainderHours)h"
     }
 
     /// Friendly hover text for a row — where the reading came from, stated as a
@@ -1556,12 +1681,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
         return ProviderSnapshot(
             identity: existing.identity,
-            rateWindow: existing.rateWindow,
-            weeklyWindow: existing.weeklyWindow,
+            windows: existing.windows,
             source: existing.source,
             confidence: existing.confidence,
             updatedAt: existing.updatedAt,
-            weeklyUpdatedAt: existing.weeklyUpdatedAt,
             statusDetail: refreshed.statusDetail,
             isFreshSessionWindow: existing.isFreshSessionWindow,
             isFreshWeeklyWindow: existing.isFreshWeeklyWindow
@@ -1602,6 +1725,10 @@ final class PromptJuiceViewModel: ObservableObject {
                     return snapshot
                 }
 
+                let current = Self.currentOrUnavailableSnapshot(snapshot, now: refreshDate)
+                if !current.windows.isEmpty {
+                    return current
+                }
                 return Self.unavailableSnapshot(
                     identity: snapshot.identity,
                     source: snapshot.source,
@@ -1689,6 +1816,24 @@ final class PromptJuiceViewModel: ObservableObject {
     ) -> ProviderSnapshot {
         guard snapshot.isExpired(at: now) else {
             return snapshot
+        }
+
+        let activeWindows = snapshot.windows.filter {
+            guard let resetAt = $0.rateWindow.resetAt else {
+                return false
+            }
+            return resetAt > now
+        }
+        if !activeWindows.isEmpty {
+            return ProviderSnapshot(
+                identity: snapshot.identity,
+                windows: activeWindows,
+                source: snapshot.source,
+                confidence: snapshot.confidence,
+                updatedAt: snapshot.updatedAt,
+                statusDetail: snapshot.statusDetail,
+                isFreshWeeklyWindow: snapshot.isFreshWeeklyWindow
+            )
         }
 
         return ProviderSnapshot(

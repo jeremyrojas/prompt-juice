@@ -6,6 +6,89 @@ final class AlertEngineTests: XCTestCase {
     private let thresholds = AlertThresholds.default
     private let engine = AlertEngine()
 
+    func testUntouchedWindowNeverAlerts() {
+        let snapshot = makeSnapshot(
+            usedPercent: 0,
+            resetMinutesFromNow: 20,
+            confidence: .exact
+        )
+        XCTAssertFalse(engine.shouldUseSoon(for: snapshot, thresholds: thresholds, now: now))
+    }
+
+    func testFivePercentUsedIsEligibleForUseSoon() {
+        let snapshot = makeSnapshot(
+            usedPercent: 5,
+            resetMinutesFromNow: 60,
+            confidence: .exact
+        )
+        XCTAssertTrue(engine.shouldUseSoon(for: snapshot, thresholds: thresholds, now: now))
+    }
+
+    func testUnexpectedDurationUsesItsCadenceThreshold() {
+        let short = LimitWindow(
+            kind: .other(180),
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: now.addingTimeInterval(61 * 60),
+                durationMinutes: 180
+            ),
+            updatedAt: now
+        )
+        let long = LimitWindow(
+            kind: .other(1_440),
+            rateWindow: .available(
+                usedPercent: 20,
+                resetAt: now.addingTimeInterval(23 * 60 * 60),
+                durationMinutes: 1_440
+            ),
+            updatedAt: now
+        )
+        let snapshot = ProviderSnapshot(
+            identity: .codex,
+            windows: [short, long],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )
+        XCTAssertFalse(engine.shouldUseSoon(
+            for: short, in: snapshot, thresholds: .default, now: now
+        ))
+        XCTAssertTrue(engine.shouldUseSoon(
+            for: long, in: snapshot, thresholds: .weeklyDefault, now: now
+        ))
+        XCTAssertEqual(engine.severity(for: snapshot, thresholds: .default, now: now), .useSoon)
+    }
+
+    func testFableEmptyDoesNotMakeClaudeEmpty() {
+        let snapshot = ProviderSnapshot(
+            identity: .claude,
+            windows: [
+                LimitWindow(
+                    kind: .fiveHour,
+                    rateWindow: .available(
+                        usedPercent: 17,
+                        resetAt: now.addingTimeInterval(180 * 60),
+                        durationMinutes: 300
+                    ),
+                    updatedAt: now
+                ),
+                LimitWindow(
+                    kind: .weeklyModel("Fable"),
+                    rateWindow: .available(
+                        usedPercent: 100,
+                        resetAt: now.addingTimeInterval(23 * 60 * 60),
+                        durationMinutes: 10_080
+                    ),
+                    updatedAt: now
+                )
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )
+        XCTAssertEqual(engine.severity(for: snapshot, thresholds: .default, now: now), .healthy)
+    }
+
     func testUseSoonWhenWindowIsNearResetWithEnoughRemaining() {
         let snapshot = makeSnapshot(
             usedPercent: 31,
@@ -70,64 +153,6 @@ final class AlertEngineTests: XCTestCase {
                 now: now
             ),
             "Unavailable"
-        )
-    }
-
-    func testPreferredSnapshotUsesHighestRemainingAlert() {
-        let claude = makeSnapshot(
-            identity: .claude,
-            usedPercent: 36,
-            resetMinutesFromNow: 47,
-            confidence: .exact
-        )
-        let codex = makeSnapshot(
-            identity: .codex,
-            usedPercent: 31,
-            resetMinutesFromNow: 52,
-            confidence: .exact
-        )
-
-        XCTAssertEqual(
-            engine.preferredSnapshot(
-                in: [claude, codex],
-                thresholds: thresholds,
-                now: now
-            ),
-            codex
-        )
-    }
-
-    func testPreferredSnapshotFallbackUsesSnapshotsWithResetWindows() {
-        let freshClaude = ProviderSnapshot(
-            identity: .claude,
-            rateWindow: .unavailable,
-            source: .claudeUsageCLI,
-            confidence: .exact,
-            updatedAt: now.addingTimeInterval(-2 * 60 * 60),
-            statusDetail: "Fresh window",
-            isFreshSessionWindow: true
-        )
-        let codex = makeSnapshot(
-            identity: .codex,
-            usedPercent: 20,
-            resetMinutesFromNow: 180,
-            confidence: .exact
-        )
-
-        XCTAssertEqual(
-            engine.preferredSnapshot(
-                in: [freshClaude, codex],
-                thresholds: thresholds,
-                now: now
-            ),
-            codex
-        )
-        XCTAssertNil(
-            engine.preferredSnapshot(
-                in: [freshClaude],
-                thresholds: thresholds,
-                now: now
-            )
         )
     }
 
@@ -220,7 +245,6 @@ final class AlertEngineTests: XCTestCase {
 
         XCTAssertEqual(snapshot.sessionRemainingPercent, 80)
         XCTAssertEqual(snapshot.remainingPercent, 80)
-        XCTAssertEqual(snapshot.effectiveRemainingPercent, 5)
         XCTAssertEqual(
             engine.severity(for: snapshot, thresholds: thresholds, now: now),
             .healthy
@@ -231,7 +255,7 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
-    func testWeeklyEmptyIsDormantForSeverity() {
+    func testAllModelsWeeklyEmptyLocksProvider() {
         let snapshot = makeSnapshot(
             identity: .claude,
             usedPercent: 20,
@@ -243,14 +267,13 @@ final class AlertEngineTests: XCTestCase {
 
         XCTAssertEqual(snapshot.sessionRemainingPercent, 80)
         XCTAssertEqual(snapshot.remainingPercent, 80)
-        XCTAssertEqual(snapshot.effectiveRemainingPercent, 0)
         XCTAssertEqual(
             engine.severity(for: snapshot, thresholds: thresholds, now: now),
-            .healthy
+            .empty
         )
     }
 
-    func testWeeklyResetTimingDoesNotTriggerUseSoon() {
+    func testWeeklyResetTimingTriggersUseSoon() {
         let snapshot = makeSnapshot(
             identity: .codex,
             usedPercent: 20,
@@ -260,7 +283,7 @@ final class AlertEngineTests: XCTestCase {
             confidence: .exact
         )
 
-        XCTAssertFalse(
+        XCTAssertTrue(
             engine.shouldUseSoon(
                 for: snapshot,
                 thresholds: thresholds,
@@ -269,7 +292,7 @@ final class AlertEngineTests: XCTestCase {
         )
         XCTAssertEqual(
             engine.severity(for: snapshot, thresholds: thresholds, now: now),
-            .healthy
+            .useSoon
         )
     }
 
@@ -305,7 +328,7 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(
             engine.aggregateSeverity(
                 in: [healthy, useSoon],
-                thresholds: thresholds,
+                thresholdsFor: { _, cadence in cadence == .fiveHour ? thresholds : .weeklyDefault },
                 now: now
             ),
             .useSoon
@@ -330,7 +353,7 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(
             engine.aggregateSeverity(
                 in: [healthy, unavailable],
-                thresholds: thresholds,
+                thresholdsFor: { _, cadence in cadence == .fiveHour ? thresholds : .weeklyDefault },
                 now: now
             ),
             .healthy
@@ -339,7 +362,7 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(
             engine.aggregateSeverity(
                 in: [unavailable],
-                thresholds: thresholds,
+                thresholdsFor: { _, cadence in cadence == .fiveHour ? thresholds : .weeklyDefault },
                 now: now
             ),
             .unavailable

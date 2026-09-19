@@ -80,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 )
             case "tooltip":
                 self.showDebugToolTipPreview()
+            case "interactive-panel":
+                self.panelController.show()
             default:
                 self.showDebugPanelPreview()
             }
@@ -88,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showDebugPanelPreview() {
         let height = PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count,
+            windowCounts: viewModel.visibleWindowCounts,
             showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
         )
         let window = NSWindow(
@@ -426,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let pending = viewModel.pendingUseSoonNotifications(now: notificationDate)
         guard !pending.isEmpty,
-              let merged = MergedUseSoonNotification(notices: pending) else {
+              let merged = MergedUseSoonNotification(notices: pending, now: notificationDate) else {
             return
         }
 

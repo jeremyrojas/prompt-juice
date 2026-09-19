@@ -27,6 +27,7 @@ private final class JuicebarPanel: NSPanel {
 enum PanelClickTarget: Equatable {
     case close
     case provider(UsageProvider)
+    case disclosure(UsageProvider)
     /// The "Turn on notifications" CTA in the just-in-time prime banner.
     case enableNotifications
     /// The "Not now" label in the just-in-time prime banner.
@@ -42,28 +43,32 @@ enum JuicebarPanelMode: Equatable {
 }
 
 enum PanelClickRouter {
-    private static let horizontalInset: CGFloat = 12
-    private static let manualRowsTopInset: CGFloat = 54
+    private static let horizontalInset = PromptJuicePanelMetrics.contentPadding
+    private static let rowsTopInset = PromptJuicePanelMetrics.contentPadding
+        + PromptJuicePanelMetrics.headerHeight
+        + PromptJuicePanelMetrics.cardSpacing
     private static let closeTopInset: CGFloat = 10
     private static let closeTrailingInset: CGFloat = 10
     private static let closeSize: CGFloat = 44
 
     static func rowRects(
         in bounds: NSRect,
-        providers: [UsageProvider]
+        providers: [UsageProvider],
+        windowCounts: [Int] = []
     ) -> [(provider: UsageProvider, rect: NSRect)] {
-        let rowSpacing = PromptJuicePanelMetrics.rowSpacing
-        let rowHeight = PromptJuicePanelMetrics.plainRowHeight
-        var rowY = manualRowsTopInset
+        var rowY = rowsTopInset
 
         return providers.indices.map { index in
+            let rowHeight = PromptJuicePanelMetrics.cardHeight(
+                windowCount: index < windowCounts.count ? windowCounts[index] : 0
+            )
             let rowRect = NSRect(
                 x: horizontalInset,
                 y: rowY,
                 width: bounds.width - horizontalInset * 2,
                 height: rowHeight
             )
-            rowY += rowHeight + rowSpacing
+            rowY += rowHeight + PromptJuicePanelMetrics.cardSpacing
             return (provider: providers[index], rect: rowRect)
         }
     }
@@ -72,12 +77,14 @@ enum PanelClickRouter {
     /// the SwiftUI banner lays out with so the tap targets track the pixels.
     static func notificationPrimeButtonRects(
         in bounds: NSRect,
-        rowCount: Int
+        windowCounts: [Int]
     ) -> (enable: NSRect, dismiss: NSRect) {
-        let rows = max(rowCount, 1)
-        let rowBlock = CGFloat(rows) * PromptJuicePanelMetrics.plainRowHeight
-            + CGFloat(max(rows - 1, 0)) * PromptJuicePanelMetrics.rowSpacing
-        let bannerTop = manualRowsTopInset + rowBlock + PromptJuicePanelMetrics.contentSpacing
+        let heights = windowCounts.isEmpty
+            ? [PromptJuicePanelMetrics.plainRowHeight]
+            : windowCounts.map { PromptJuicePanelMetrics.cardHeight(windowCount: $0) }
+        let rowBlock = heights.reduce(0, +)
+            + CGFloat(max(heights.count - 1, 0)) * PromptJuicePanelMetrics.cardSpacing
+        let bannerTop = rowsTopInset + rowBlock + PromptJuicePanelMetrics.contentSpacing
         let buttonsTop = bannerTop
             + PromptJuicePanelMetrics.primeBannerHeight
             - PromptJuicePanelMetrics.primeCardPadding
@@ -107,6 +114,8 @@ enum PanelClickRouter {
         at point: NSPoint,
         in bounds: NSRect,
         providers: [UsageProvider],
+        windowCounts: [Int] = [],
+        disclosureProviders: Set<UsageProvider> = [],
         showsNotificationPrime: Bool = false
     ) -> PanelClickTarget? {
         let width = bounds.width
@@ -122,7 +131,8 @@ enum PanelClickRouter {
         }
 
         if showsNotificationPrime {
-            let rects = notificationPrimeButtonRects(in: bounds, rowCount: providers.count)
+            let counts = windowCounts.isEmpty ? Array(repeating: 0, count: providers.count) : windowCounts
+            let rects = notificationPrimeButtonRects(in: bounds, windowCounts: counts)
             if contains(point, in: rects.enable.insetBy(dx: -4, dy: -8)) {
                 return .enableNotifications
             }
@@ -131,12 +141,25 @@ enum PanelClickRouter {
             }
         }
 
-        for (provider, rowRect) in rowRects(
+        for row in rowRects(
             in: bounds,
-            providers: providers
+            providers: providers,
+            windowCounts: windowCounts
         ) {
-            if contains(point, in: rowRect) {
-                return .provider(provider)
+            if contains(point, in: row.rect) {
+                let header = NSRect(
+                    x: row.rect.minX,
+                    y: row.rect.minY,
+                    width: row.rect.width,
+                    height: PromptJuicePanelMetrics.cardPadding
+                        + PromptJuicePanelMetrics.cardHeaderHeight
+                        + PromptJuicePanelMetrics.cardContentSpacing
+                )
+                if disclosureProviders.contains(row.provider),
+                   contains(point, in: header) {
+                    return .disclosure(row.provider)
+                }
+                return .provider(row.provider)
             }
         }
 
@@ -163,6 +186,8 @@ private protocol PanelContentRootView: PanelToolTipRefreshing {
 
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let providers: () -> [UsageProvider]
+    private let windowCounts: () -> [Int]
+    private let disclosureProviders: () -> Set<UsageProvider>
     private let showsNotificationPrime: () -> Bool
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
@@ -183,6 +208,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
 
     required init(rootView: Content) {
         self.providers = { [] }
+        self.windowCounts = { [] }
+        self.disclosureProviders = { [] }
         self.showsNotificationPrime = { false }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
@@ -197,6 +224,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     init(
         rootView: Content,
         providers: @escaping () -> [UsageProvider],
+        windowCounts: @escaping () -> [Int],
+        disclosureProviders: @escaping () -> Set<UsageProvider>,
         showsNotificationPrime: @escaping () -> Bool,
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
@@ -206,6 +235,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         onPanelDragged: @escaping (NSPoint) -> Void
     ) {
         self.providers = providers
+        self.windowCounts = windowCounts
+        self.disclosureProviders = disclosureProviders
         self.showsNotificationPrime = showsNotificationPrime
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
@@ -358,6 +389,8 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             at: point,
             in: bounds,
             providers: providers(),
+            windowCounts: windowCounts(),
+            disclosureProviders: disclosureProviders(),
             showsNotificationPrime: showsNotificationPrime()
         )
     }
@@ -386,7 +419,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         switch target {
         case .provider(let provider):
             return toolTipProvider(provider)
-        case .close, .background, .enableNotifications, .dismissNotificationPrime:
+        case .close, .background, .disclosure, .enableNotifications, .dismissNotificationPrime:
             return nil
         }
     }
@@ -654,7 +687,7 @@ final class JuicebarPanelController: NSObject {
         NSSize(
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: viewModel.visibleSnapshots.count,
+                windowCounts: viewModel.visibleWindowCounts,
                 showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
             )
         )
@@ -744,6 +777,13 @@ final class JuicebarPanelController: NSObject {
             .store(in: &cancellables)
 
         viewModel.$snapshots
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyPanelFrameIfVisible(force: false)
+            }
+            .store(in: &cancellables)
+
+        viewModel.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.applyPanelFrameIfVisible(force: false)
@@ -874,6 +914,12 @@ final class JuicebarPanelController: NSObject {
             providers: { [weak viewModel] in
                 viewModel?.visibleSnapshots.map(\.provider) ?? []
             },
+            windowCounts: { [weak viewModel] in
+                viewModel?.visibleWindowCounts ?? []
+            },
+            disclosureProviders: { [weak viewModel] in
+                viewModel?.disclosureProviders ?? []
+            },
             showsNotificationPrime: { [weak viewModel] in
                 viewModel?.shouldOfferUseSoonNotificationPrime ?? false
             },
@@ -933,6 +979,12 @@ final class JuicebarPanelController: NSObject {
                 onClaudeGuidanceRequested(journey)
                 return
             }
+        case .disclosure(let provider):
+            guard viewModel.disclosureProviders.contains(provider) else {
+                return
+            }
+            viewModel.toggleExpanded(provider)
+            applyPanelFrameIfVisible(force: true)
         case .enableNotifications:
             (panel?.contentView as? PanelToolTipRefreshing)?.hidePanelToolTip()
             viewModel.enableUseSoonNotificationsFromPrime()
@@ -1090,9 +1142,13 @@ final class JuicebarPanelController: NSObject {
         case .anchored:
             position(panel, size: size)
         case .pinned:
+            let topAnchoredOrigin = NSPoint(
+                x: panel.frame.minX,
+                y: panel.frame.maxY - size.height
+            )
             applyPinnedPanelFrame(
                 panel,
-                origin: panel.frame.origin,
+                origin: topAnchoredOrigin,
                 size: size,
                 force: force,
                 persist: true

@@ -25,7 +25,7 @@ final class CodexSnapshotCache: @unchecked Sendable {
             return
         }
 
-        storage.save(snapshot)
+        storage.save(snapshot, replacingWindows: true)
     }
 
     func snapshot(now: Date, failureDetail: String?) -> ProviderSnapshot? {

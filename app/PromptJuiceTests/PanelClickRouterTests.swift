@@ -43,9 +43,7 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertLessThan(rows[1].rect.maxY, bounds.height)
         XCTAssertEqual(
             bounds.height,
-            PromptJuicePanelMetrics.chromeHeight
-                + PromptJuicePanelMetrics.plainRowHeight * 2
-                + PromptJuicePanelMetrics.rowSpacing
+            PromptJuicePanelMetrics.height(windowCounts: [0, 0])
         )
         XCTAssertEqual(
             PanelClickRouter.target(
@@ -72,13 +70,13 @@ final class PanelClickRouterTests: XCTestCase {
             y: 0,
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: providers.count,
+                windowCounts: [0, 0],
                 showsNotificationPrime: true
             )
         )
         let rects = PanelClickRouter.notificationPrimeButtonRects(
             in: bounds,
-            rowCount: providers.count
+            windowCounts: [0, 0]
         )
 
         XCTAssertEqual(
@@ -119,6 +117,72 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertLessThan(rects.enable.maxX, bounds.width)
     }
 
+    func testDisclosureProviderHeaderRoutesAcrossItsFullWidth() {
+        let providers: [UsageProvider] = [.claude, .codex]
+        let counts = [3, 1]
+        let disclosureProviders: Set<UsageProvider> = [.claude]
+        let bounds = NSRect(
+            x: 0,
+            y: 0,
+            width: PromptJuicePanelMetrics.width,
+            height: PromptJuicePanelMetrics.height(windowCounts: counts)
+        )
+        let rows = PanelClickRouter.rowRects(
+            in: bounds,
+            providers: providers,
+            windowCounts: counts
+        )
+        XCTAssertEqual(rows.map(\.rect.height), [
+            PromptJuicePanelMetrics.cardHeight(windowCount: 3),
+            PromptJuicePanelMetrics.cardHeight(windowCount: 1)
+        ])
+        XCTAssertGreaterThan(rows[1].rect.minY, rows[0].rect.maxY)
+
+        for x in [rows[0].rect.minX + 8, rows[0].rect.midX, rows[0].rect.maxX - 8] {
+            XCTAssertEqual(
+                PanelClickRouter.target(
+                    at: NSPoint(x: x, y: rows[0].rect.minY + 20),
+                    in: bounds,
+                    providers: providers,
+                    windowCounts: counts,
+                    disclosureProviders: disclosureProviders
+                ),
+                .disclosure(.claude)
+            )
+        }
+
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: NSPoint(x: rows[0].rect.midX, y: rows[0].rect.maxY - 12),
+                in: bounds,
+                providers: providers,
+                windowCounts: counts,
+                disclosureProviders: disclosureProviders
+            ),
+            .provider(.claude)
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: NSPoint(x: rows[1].rect.maxX - 20, y: rows[1].rect.minY + 20),
+                in: bounds,
+                providers: providers,
+                windowCounts: counts,
+                disclosureProviders: disclosureProviders
+            ),
+            .provider(.codex)
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: NSPoint(x: rows[1].rect.minX + 8, y: rows[1].rect.minY + 20),
+                in: bounds,
+                providers: providers,
+                windowCounts: counts,
+                disclosureProviders: [.claude, .codex]
+            ),
+            .disclosure(.codex)
+        )
+    }
+
     private func assertSingleProvider(_ provider: UsageProvider) {
         let providers = [provider]
         let bounds = panelBounds(providerCount: providers.count)
@@ -156,7 +220,7 @@ final class PanelClickRouterTests: XCTestCase {
             y: 0,
             width: PromptJuicePanelMetrics.width,
             height: PromptJuicePanelMetrics.height(
-                rowCount: providerCount
+                windowCounts: Array(repeating: 0, count: providerCount)
             )
         )
     }

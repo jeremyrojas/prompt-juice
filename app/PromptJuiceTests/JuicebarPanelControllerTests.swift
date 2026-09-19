@@ -4,6 +4,97 @@ import XCTest
 
 @MainActor
 final class JuicebarPanelControllerTests: XCTestCase {
+    func testDisclosurePersistsForExpandableProviderAndKeepsPinnedTopEdgeFixed() async throws {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: MutableUsageProviderClient(snapshots: Self.weeklySnapshots),
+            now: { Self.fixedNow }
+        )
+        let controller = JuicebarPanelController(viewModel: viewModel)
+        controller.show()
+        defer { controller.hide() }
+
+        let collapsedHeight = PromptJuicePanelMetrics.height(windowCounts: [1, 1])
+        await waitUntil { controller.panelFrameForTesting?.height == collapsedHeight }
+        controller.pin()
+        let collapsedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+
+        controller.clickTargetForTesting(.disclosure(.claude))
+        let expandedHeight = PromptJuicePanelMetrics.height(windowCounts: [2, 1])
+        await waitUntil { controller.panelFrameForTesting?.height == expandedHeight }
+        let expandedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(expandedFrame.maxY, collapsedFrame.maxY, accuracy: 0.5)
+        XCTAssertLessThan(expandedFrame.minY, collapsedFrame.minY)
+        XCTAssertEqual(fixture.store.expandedProviders, [.claude])
+        XCTAssertEqual(viewModel.visibleWindowCounts, [2, 1])
+
+        let restored = PromptJuiceSettingsStore(defaults: fixture.defaults)
+        XCTAssertEqual(restored.expandedProviders, [.claude])
+        controller.clickTargetForTesting(.disclosure(.codex))
+        XCTAssertEqual(restored.expandedProviders, [.claude])
+        controller.clickTargetForTesting(.disclosure(.claude))
+        await waitUntil { controller.panelFrameForTesting?.height == collapsedHeight }
+        let recollapsedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(recollapsedFrame.maxY, collapsedFrame.maxY, accuracy: 0.5)
+        XCTAssertEqual(recollapsedFrame.minY, collapsedFrame.minY, accuracy: 0.5)
+        XCTAssertTrue(restored.expandedProviders.isEmpty)
+        XCTAssertEqual(viewModel.visibleWindowCounts, [1, 1])
+    }
+
+    func testCollapsedFableAppearsWhenItCrossesAmberWhilePanelIsOpen() async {
+        let fixture = makeFixture()
+        fixture.store.usageSourceMode = .fixture
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        var clock = Self.fixedNow
+        let claude = ProviderSnapshot(
+            identity: .claude,
+            windows: [
+                LimitWindow(
+                    kind: .fiveHour,
+                    rateWindow: .available(
+                        usedPercent: 17,
+                        resetAt: clock.addingTimeInterval(176 * 60),
+                        durationMinutes: 300
+                    ),
+                    updatedAt: clock
+                ),
+                LimitWindow(
+                    kind: .weeklyModel("Fable"),
+                    rateWindow: .available(
+                        usedPercent: 38,
+                        resetAt: clock.addingTimeInterval(1_441 * 60),
+                        durationMinutes: 10_080
+                    ),
+                    updatedAt: clock
+                )
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: clock
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: MutableUsageProviderClient(snapshots: [claude, Self.plainSnapshots[1]]),
+            now: { clock }
+        )
+        let controller = JuicebarPanelController(viewModel: viewModel)
+        controller.show()
+        defer { controller.hide() }
+
+        XCTAssertEqual(viewModel.visibleWindowCounts, [1, 1])
+        clock = clock.addingTimeInterval(2 * 60)
+        viewModel.tick()
+        await waitUntil { viewModel.visibleWindowCounts == [2, 1] }
+        await waitUntil {
+            controller.panelFrameForTesting?.height == PromptJuicePanelMetrics.height(windowCounts: [2, 1])
+        }
+        XCTAssertTrue(fixture.store.expandedProviders.isEmpty)
+    }
+
     func testOpenPanelKeepsFrameStableWhenSnapshotHasWeekly() async throws {
         let fixture = makeFixture()
         fixture.store.usageSourceMode = .fixture
@@ -17,7 +108,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         )
         let controller = JuicebarPanelController(viewModel: viewModel)
         let initialHeight = PromptJuicePanelMetrics.height(
-            rowCount: 2
+            windowCounts: viewModel.visibleWindowCounts
         )
 
         controller.show()
@@ -34,7 +125,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
         XCTAssertEqual(selectedFrame.height, initialFrame.height)
         XCTAssertEqual(
             viewModel.detail,
-            "Claude resets in 3h 0m"
+            "Claude · resets in 3h"
         )
         XCTAssertEqual(viewModel.headerRemainingPercent, 80)
 
@@ -42,19 +133,21 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let bounds = NSRect(origin: .zero, size: selectedFrame.size)
         let rows = PanelClickRouter.rowRects(
             in: bounds,
-            providers: providers
+            providers: providers,
+            windowCounts: viewModel.visibleWindowCounts
         )
 
         XCTAssertEqual(rows.map(\.provider), [.claude, .codex])
         XCTAssertEqual(rows.map(\.rect.height), [
-            PromptJuicePanelMetrics.plainRowHeight,
-            PromptJuicePanelMetrics.plainRowHeight
+            PromptJuicePanelMetrics.cardHeight(windowCount: viewModel.visibleWindowCounts[0]),
+            PromptJuicePanelMetrics.cardHeight(windowCount: viewModel.visibleWindowCounts[1])
         ])
         XCTAssertEqual(
             PanelClickRouter.target(
                 at: rows[0].rect.center,
                 in: bounds,
-                providers: providers
+                providers: providers,
+                windowCounts: viewModel.visibleWindowCounts
             ),
             .provider(.claude)
         )
@@ -62,7 +155,8 @@ final class JuicebarPanelControllerTests: XCTestCase {
             PanelClickRouter.target(
                 at: rows[1].rect.center,
                 in: bounds,
-                providers: providers
+                providers: providers,
+                windowCounts: viewModel.visibleWindowCounts
             ),
             .provider(.codex)
         )
@@ -161,7 +255,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
             onClaudeGuidanceRequested: { guidanceRequests.append($0) }
         )
         let expectedHeight = PromptJuicePanelMetrics.height(
-            rowCount: 2
+            windowCounts: viewModel.visibleWindowCounts
         )
 
         controller.show()
@@ -178,7 +272,7 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         XCTAssertNil(viewModel.selectedProvider)
         XCTAssertTrue(guidanceRequests.isEmpty)
-        XCTAssertEqual(viewModel.detail, "Claude resets in 3h 0m")
+        XCTAssertEqual(viewModel.detail, "Claude · resets in 3h")
         XCTAssertEqual(controller.panelFrameForTesting?.height, expectedHeight)
     }
 
@@ -424,14 +518,16 @@ final class JuicebarPanelControllerTests: XCTestCase {
         let bounds = NSRect(origin: .zero, size: frame.size)
         let rows = PanelClickRouter.rowRects(
             in: bounds,
-            providers: providers
+            providers: providers,
+            windowCounts: viewModel.visibleWindowCounts
         )
         let row = try XCTUnwrap(rows[safe: row], file: file, line: line)
         return try XCTUnwrap(
             PanelClickRouter.target(
                 at: row.rect.center,
                 in: bounds,
-                providers: providers
+                providers: providers,
+                windowCounts: viewModel.visibleWindowCounts
             ),
             file: file,
             line: line

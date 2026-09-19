@@ -3,11 +3,18 @@ import SwiftUI
 enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
     static let plainRowHeight: CGFloat = 48
-    static let rowSpacing: CGFloat = 7
     static let contentPadding: CGFloat = 14
     static let contentSpacing: CGFloat = 10
     static let panelCornerRadius: CGFloat = 22
-    static let chromeHeight: CGFloat = 68
+    static let headerHeight: CGFloat = 32
+    static let cardSpacing: CGFloat = 8
+    static let cardHeaderHeight: CGFloat = 16
+    static let cardPadding: CGFloat = 12
+    static let cardContentSpacing: CGFloat = 10
+    static let windowLineHeight: CGFloat = 16
+    static let windowBarSpacing: CGFloat = 5
+    static let mainBarHeight: CGFloat = 4
+    static let secondaryBarHeight: CGFloat = 3
 
     // Just-in-time notification prime banner. Shared by the view (layout) and
     // `PanelClickRouter` (hit-testing) so the orange CTA and its tap targets stay
@@ -19,14 +26,23 @@ enum PromptJuicePanelMetrics {
     static let primeEnableButtonWidth: CGFloat = 172
     static let primeDismissButtonWidth: CGFloat = 76
 
-    static func height(rowCount: Int, showsNotificationPrime: Bool = false) -> CGFloat {
-        let rows = max(rowCount, 1)
-        let rowBlockHeight = CGFloat(rows) * plainRowHeight
-            + CGFloat(max(rows - 1, 0)) * rowSpacing
-        let primeBlockHeight = showsNotificationPrime
-            ? contentSpacing + primeBannerHeight
-            : 0
-        return chromeHeight + rowBlockHeight + primeBlockHeight
+    static func cardHeight(windowCount: Int) -> CGFloat {
+        guard windowCount > 0 else { return plainRowHeight }
+        let rows = CGFloat(windowCount) * (windowLineHeight + windowBarSpacing)
+            + mainBarHeight + CGFloat(windowCount - 1) * secondaryBarHeight
+        return cardPadding * 2 + cardHeaderHeight
+            + CGFloat(windowCount) * cardContentSpacing + rows
+    }
+
+    static func height(windowCounts: [Int], showsNotificationPrime: Bool = false) -> CGFloat {
+        let cardHeights = windowCounts.isEmpty
+            ? [plainRowHeight]
+            : windowCounts.map { cardHeight(windowCount: $0) }
+        let cardsHeight = cardHeights.reduce(0, +)
+            + CGFloat(max(cardHeights.count - 1, 0)) * cardSpacing
+        let primeHeight = showsNotificationPrime ? contentSpacing + primeBannerHeight : 0
+        return contentPadding * 2 + headerHeight + cardSpacing
+            + cardsHeight + primeHeight
     }
 }
 
@@ -37,19 +53,21 @@ struct PromptJuicePanelView: View {
 
     private var panelHeight: CGFloat {
         PromptJuicePanelMetrics.height(
-            rowCount: viewModel.visibleSnapshots.count,
+            windowCounts: viewModel.visibleWindowCounts,
             showsNotificationPrime: viewModel.shouldOfferUseSoonNotificationPrime
         )
     }
     private let panelCornerRadius = PromptJuicePanelMetrics.panelCornerRadius
 
     var body: some View {
-        VStack(spacing: PromptJuicePanelMetrics.contentSpacing) {
+        VStack(spacing: 0) {
             header
             usageRows
+                .padding(.top, PromptJuicePanelMetrics.cardSpacing)
 
             if viewModel.shouldOfferUseSoonNotificationPrime {
                 NotificationPrimeBanner()
+                    .padding(.top, PromptJuicePanelMetrics.contentSpacing)
             }
         }
         .padding(PromptJuicePanelMetrics.contentPadding)
@@ -58,7 +76,7 @@ struct PromptJuicePanelView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 11) {
             ZStack {
                 Circle()
                     .fill(.ultraThinMaterial)
@@ -84,8 +102,7 @@ struct PromptJuicePanelView: View {
                     .foregroundStyle(.white.opacity(0.58))
                     .lineLimit(1)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onClose) {
                 Image(systemName: "xmark")
@@ -105,10 +122,12 @@ struct PromptJuicePanelView: View {
             .accessibilityLabel("Close Juicebar")
             .accessibilityHint("Dismisses this usage window.")
         }
+        .padding(.horizontal, 4)
+        .frame(height: PromptJuicePanelMetrics.headerHeight)
     }
 
     private var usageRows: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: PromptJuicePanelMetrics.cardSpacing) {
             ForEach(viewModel.visibleSnapshots) { snapshot in
                 ProviderUsageRow(
                     snapshot: snapshot,
@@ -222,6 +241,72 @@ private struct ProviderUsageRow: View {
     let onClaudeJourney: (ClaudeGuidanceJourney) -> Void
 
     var body: some View {
+        Group {
+            if measuredWindows.isEmpty {
+                fallbackRow
+            } else {
+                measuredCard
+            }
+        }
+    }
+
+    private var measuredWindows: [LimitWindow] {
+        viewModel.visibleWindows(for: snapshot)
+    }
+
+    private var hasDisclosure: Bool {
+        viewModel.disclosureProviders.contains(snapshot.provider)
+    }
+
+    private var measuredCard: some View {
+        VStack(alignment: .leading, spacing: PromptJuicePanelMetrics.cardContentSpacing) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(providerColor)
+                    .frame(width: 6, height: 6)
+                Text(snapshot.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                Spacer(minLength: 0)
+                if hasDisclosure {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .rotationEffect(.degrees(viewModel.expandedProviders.contains(snapshot.provider) ? 90 : 0))
+                        .frame(width: 16, height: 16)
+                        .accessibilityLabel(viewModel.expandedProviders.contains(snapshot.provider)
+                            ? "Collapse \(snapshot.displayName) limits"
+                            : "Expand \(snapshot.displayName) limits")
+                }
+            }
+            .frame(height: PromptJuicePanelMetrics.cardHeaderHeight)
+
+            ForEach(Array(measuredWindows.enumerated()), id: \.element.id) { index, window in
+                LimitWindowRow(
+                    window: window,
+                    isMain: index == 0,
+                    isEstimate: snapshot.confidence == .estimated,
+                    severity: viewModel.windowSeverity(window, in: snapshot),
+                    now: viewModel.currentDate
+                )
+            }
+        }
+        .padding(PromptJuicePanelMetrics.cardPadding)
+        .frame(height: PromptJuicePanelMetrics.cardHeight(windowCount: measuredWindows.count))
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.075), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(snapshot.displayName) juice")
+    }
+
+    private var fallbackRow: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
                 providerDot
@@ -340,7 +425,7 @@ private struct ProviderUsageRow: View {
     }
 
     private var providerColor: Color {
-        snapshot.provider == .claude ? .orange : .cyan
+        snapshot.provider == .claude ? JuicePalette.claude : JuicePalette.codex
     }
 
     private var isSelected: Bool {
@@ -434,6 +519,78 @@ private struct ProviderUsageRow: View {
         return snapshot.isAvailable
             ? "\(viewModel.sessionRemainingPercentText(for: snapshot)), \(viewModel.fullResetText(for: snapshot))"
             : unavailableLabel
+    }
+}
+
+private struct LimitWindowRow: View {
+    let window: LimitWindow
+    let isMain: Bool
+    let isEstimate: Bool
+    let severity: UsageSeverity
+    let now: Date
+
+    private var remaining: Double {
+        window.rateWindow.remainingPercent ?? 0
+    }
+
+    private var isMuted: Bool {
+        severity == .low || severity == .empty || severity == .unavailable
+    }
+
+    private var fillColor: Color {
+        if severity == .useSoon { return JuicePalette.orange.opacity(0.90) }
+        if isMuted { return JuicePalette.muted.opacity(0.72) }
+        return isMain ? JuicePalette.green.opacity(0.85) : Color.white.opacity(0.22)
+    }
+
+    var body: some View {
+        VStack(spacing: PromptJuicePanelMetrics.windowBarSpacing) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(window.kind.label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(isMuted ? JuicePalette.muted : .white.opacity(0.55))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text("\(isEstimate ? "~" : "")\(Int(remaining.rounded()))% left")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(isMuted ? JuicePalette.muted : .white.opacity(0.90))
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.30))
+                    Text(resetText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(
+                            severity == .useSoon ? JuicePalette.orange
+                                : isMuted ? JuicePalette.muted : Color.white.opacity(0.55)
+                        )
+                }
+                .monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .frame(height: PromptJuicePanelMetrics.windowLineHeight)
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.07))
+                    Capsule()
+                        .fill(fillColor)
+                        .frame(width: geometry.size.width * min(1, max(0, remaining / 100)))
+                }
+            }
+            .frame(height: isMain
+                ? PromptJuicePanelMetrics.mainBarHeight
+                : PromptJuicePanelMetrics.secondaryBarHeight)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var resetText: String {
+        guard let resetAt = window.rateWindow.resetAt else { return "resets in n/a" }
+        return ResetFormatter.text(until: resetAt, now: now)
     }
 }
 

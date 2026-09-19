@@ -47,17 +47,43 @@ struct CachedProviderWindow: Codable, Equatable {
     }
 }
 
-struct CachedProviderSnapshot: Codable, Equatable {
-    let session: CachedProviderWindow?
-    // retained for future weekly UI; not currently displayed
-    let weekly: CachedProviderWindow?
+struct CachedLimitWindow: Codable, Equatable {
+    let kind: LimitWindow.Kind
+    let window: CachedProviderWindow
 
-    init(session: CachedProviderWindow?, weekly: CachedProviderWindow?) {
-        self.session = session
-        self.weekly = weekly
+    init?(limitWindow: LimitWindow) {
+        guard let window = CachedProviderWindow(
+            window: limitWindow.rateWindow,
+            updatedAt: limitWindow.updatedAt
+        ) else {
+            return nil
+        }
+        self.kind = limitWindow.kind
+        self.window = window
+    }
+
+    init(kind: LimitWindow.Kind, window: CachedProviderWindow) {
+        self.kind = kind
+        self.window = window
+    }
+
+    func limitWindowIfUnexpired(now: Date) -> LimitWindow? {
+        guard let rateWindow = window.rateWindowIfUnexpired(now: now) else {
+            return nil
+        }
+        return LimitWindow(kind: kind, rateWindow: rateWindow, updatedAt: window.updatedAt)
+    }
+}
+
+struct CachedProviderSnapshot: Codable, Equatable {
+    let windows: [CachedLimitWindow]
+
+    init(windows: [CachedLimitWindow]) {
+        self.windows = windows
     }
 
     private enum CodingKeys: String, CodingKey {
+        case windows
         case session
         case weekly
         case usedPercent
@@ -69,9 +95,23 @@ struct CachedProviderSnapshot: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
+        if container.contains(.windows) {
+            windows = try container.decode([CachedLimitWindow].self, forKey: .windows)
+            return
+        }
+
         if container.contains(.session) || container.contains(.weekly) {
-            session = try container.decodeIfPresent(CachedProviderWindow.self, forKey: .session)
-            weekly = try container.decodeIfPresent(CachedProviderWindow.self, forKey: .weekly)
+            var restored: [CachedLimitWindow] = []
+            if let session = try container.decodeIfPresent(CachedProviderWindow.self, forKey: .session) {
+                restored.append(CachedLimitWindow(
+                    kind: .codexKind(durationMinutes: session.durationMinutes),
+                    window: session
+                ))
+            }
+            if let weekly = try container.decodeIfPresent(CachedProviderWindow.self, forKey: .weekly) {
+                restored.append(CachedLimitWindow(kind: .weekly, window: weekly))
+            }
+            windows = restored
             return
         }
 
@@ -80,24 +120,25 @@ struct CachedProviderSnapshot: Codable, Equatable {
             || container.contains(.durationMinutes)
             || container.contains(.updatedAt) {
             let legacy = try LegacyCachedProviderSnapshot(from: decoder)
-            session = CachedProviderWindow(
+            let window = CachedProviderWindow(
                 usedPercent: legacy.usedPercent,
                 resetAt: legacy.resetAt,
                 durationMinutes: legacy.durationMinutes,
                 updatedAt: legacy.updatedAt
             )
-            weekly = nil
+            windows = [CachedLimitWindow(
+                kind: .codexKind(durationMinutes: legacy.durationMinutes),
+                window: window
+            )]
             return
         }
 
-        session = nil
-        weekly = nil
+        windows = []
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(session, forKey: .session)
-        try container.encodeIfPresent(weekly, forKey: .weekly)
+        try container.encode(windows, forKey: .windows)
     }
 }
 
@@ -129,75 +170,73 @@ struct ProviderWindowSnapshotCache {
         self.allowsFreshWindowEvidence = allowsFreshWindowEvidence
     }
 
-    func save(_ snapshot: ProviderSnapshot) {
+    func save(_ snapshot: ProviderSnapshot, replacingWindows: Bool = false) {
         guard snapshot.identity == identity else {
             return
         }
 
-        let existing = cachedSnapshot()
-
-        var sessionWindow = existing?.session
-        if !snapshot.isFreshSessionWindow, snapshot.rateWindow.isAvailable {
-            sessionWindow = CachedProviderWindow(
-                window: snapshot.rateWindow,
-                updatedAt: snapshot.updatedAt
-            )
+        var byKind: [LimitWindow.Kind: CachedLimitWindow] = [:]
+        if !replacingWindows {
+            for cached in cachedSnapshot()?.windows ?? [] {
+                byKind[cached.kind] = cached
+            }
+        }
+        for limitWindow in snapshot.windows {
+            if let cached = CachedLimitWindow(limitWindow: limitWindow) {
+                byKind[limitWindow.kind] = cached
+            }
         }
 
-        var weeklyWindow = existing?.weekly
-        if !snapshot.isFreshWeeklyWindow,
-           let weekly = snapshot.weeklyWindow,
-           weekly.isAvailable {
-            weeklyWindow = CachedProviderWindow(
-                window: weekly,
-                updatedAt: snapshot.weeklyUpdatedAt ?? snapshot.updatedAt
-            )
-        }
-
-        guard sessionWindow != nil || weeklyWindow != nil else {
+        guard !byKind.isEmpty else {
             return
         }
 
-        let cached = CachedProviderSnapshot(
-            session: sessionWindow,
-            weekly: weeklyWindow
-        )
-
-        if let data = try? JSONEncoder().encode(cached) {
+        let windows = byKind.values.sorted { first, second in
+            first.kind.identifier < second.kind.identifier
+        }
+        if let data = try? JSONEncoder().encode(CachedProviderSnapshot(windows: windows)) {
             defaults.set(data, forKey: key)
         }
     }
 
     func snapshot(now: Date, failureDetail: String?) -> ProviderSnapshot? {
-        guard let cached = cachedSnapshot(),
-              cached.session != nil || cached.weekly != nil else {
+        guard let cached = cachedSnapshot(), !cached.windows.isEmpty else {
             return nil
         }
 
-        let validSession = cached.session?.rateWindowIfUnexpired(now: now)
-        let validWeekly = cached.weekly?.rateWindowIfUnexpired(now: now)
-        let newestUpdatedAt = [
-            cached.session?.updatedAt,
-            cached.weekly?.updatedAt
-        ].compactMap { $0 }.max() ?? now
-
-        guard validSession != nil || validWeekly != nil else {
+        var validWindows = cached.windows.compactMap { $0.limitWindowIfUnexpired(now: now) }
+        guard !validWindows.isEmpty else {
             return nil
         }
+
+        let hadFiveHour = cached.windows.contains { $0.kind == .fiveHour }
+        let hasValidFiveHour = validWindows.contains { $0.kind == .fiveHour }
+        let freshSession = allowsFreshWindowEvidence
+            && identity.provider == .codex
+            && hadFiveHour
+            && !hasValidFiveHour
+        if freshSession, let previous = cached.windows.first(where: { $0.kind == .fiveHour }) {
+            validWindows.append(LimitWindow(
+                kind: .fiveHour,
+                rateWindow: .unavailable,
+                updatedAt: previous.window.updatedAt
+            ))
+        }
+
+        let hadWeekly = cached.windows.contains { $0.kind == .weekly }
+        let hasValidWeekly = validWindows.contains { $0.kind == .weekly }
+        let newestUpdatedAt = cached.windows.map(\.window.updatedAt).max() ?? now
+        let sessionUpdatedAt = cached.windows.first(where: { $0.kind == .fiveHour })?.window.updatedAt
 
         return ProviderSnapshot(
             identity: identity,
-            rateWindow: validSession ?? .unavailable,
-            weeklyWindow: validWeekly,
+            windows: validWindows,
             source: cacheSource,
             confidence: .stale,
-            updatedAt: cached.session?.updatedAt ?? newestUpdatedAt,
-            weeklyUpdatedAt: cached.weekly?.updatedAt,
+            updatedAt: sessionUpdatedAt ?? newestUpdatedAt,
             statusDetail: failureDetail,
-            isFreshSessionWindow: allowsFreshWindowEvidence && validSession == nil,
-            isFreshWeeklyWindow: allowsFreshWindowEvidence
-                && validWeekly == nil
-                && cached.weekly != nil
+            isFreshSessionWindow: freshSession,
+            isFreshWeeklyWindow: allowsFreshWindowEvidence && hadWeekly && !hasValidWeekly
         )
     }
 
@@ -205,7 +244,6 @@ struct ProviderWindowSnapshotCache {
         guard let data = defaults.data(forKey: key) else {
             return nil
         }
-
         return try? JSONDecoder().decode(CachedProviderSnapshot.self, from: data)
     }
 }

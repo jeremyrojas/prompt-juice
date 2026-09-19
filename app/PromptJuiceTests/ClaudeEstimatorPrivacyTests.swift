@@ -142,12 +142,18 @@ final class ClaudeEstimatorPrivacyTests: XCTestCase {
         let root = try XCTUnwrap(
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
-        let session = try XCTUnwrap(root["session"] as? [String: Any])
+        let windows = try XCTUnwrap(root["windows"] as? [[String: Any]])
+        let limit = try XCTUnwrap(windows.first)
+        let kind = try XCTUnwrap(limit["kind"] as? [String: Any])
+        let window = try XCTUnwrap(limit["window"] as? [String: Any])
 
         XCTAssertFalse(persistedText.contains(canary))
-        XCTAssertEqual(Set(root.keys), ["session"])
+        XCTAssertEqual(Set(root.keys), ["windows"])
+        XCTAssertEqual(windows.count, 1)
+        XCTAssertEqual(Set(limit.keys), ["kind", "window"])
+        XCTAssertEqual(Set(kind.keys), ["fiveHour"])
         XCTAssertEqual(
-            Set(session.keys),
+            Set(window.keys),
             ["usedPercent", "resetAt", "durationMinutes", "updatedAt"]
         )
     }
