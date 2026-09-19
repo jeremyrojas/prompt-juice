@@ -46,7 +46,7 @@ enum PanelClickRouter {
     private static let horizontalInset = PromptJuicePanelMetrics.contentPadding
     private static let rowsTopInset = PromptJuicePanelMetrics.contentPadding
         + PromptJuicePanelMetrics.headerHeight
-        + PromptJuicePanelMetrics.cardsTopSpacing
+        + PromptJuicePanelMetrics.cardSpacing
     private static let closeTopInset: CGFloat = 10
     private static let closeTrailingInset: CGFloat = 10
     private static let closeSize: CGFloat = 44

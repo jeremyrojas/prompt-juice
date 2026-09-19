@@ -7,7 +7,6 @@ enum PromptJuicePanelMetrics {
     static let contentSpacing: CGFloat = 10
     static let panelCornerRadius: CGFloat = 22
     static let headerHeight: CGFloat = 32
-    static let cardsTopSpacing: CGFloat = 4
     static let cardSpacing: CGFloat = 8
     static let cardHeaderHeight: CGFloat = 16
     static let cardPadding: CGFloat = 12
@@ -42,7 +41,7 @@ enum PromptJuicePanelMetrics {
         let cardsHeight = cardHeights.reduce(0, +)
             + CGFloat(max(cardHeights.count - 1, 0)) * cardSpacing
         let primeHeight = showsNotificationPrime ? contentSpacing + primeBannerHeight : 0
-        return contentPadding * 2 + headerHeight + cardsTopSpacing
+        return contentPadding * 2 + headerHeight + cardSpacing
             + cardsHeight + primeHeight
     }
 }
@@ -64,7 +63,7 @@ struct PromptJuicePanelView: View {
         VStack(spacing: 0) {
             header
             usageRows
-                .padding(.top, PromptJuicePanelMetrics.cardsTopSpacing)
+                .padding(.top, PromptJuicePanelMetrics.cardSpacing)
 
             if viewModel.shouldOfferUseSoonNotificationPrime {
                 NotificationPrimeBanner()
