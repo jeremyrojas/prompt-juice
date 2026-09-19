@@ -273,9 +273,13 @@ final class PromptJuiceViewModel: ObservableObject {
         visibleSnapshots.map { visibleWindows(for: $0).count }
     }
 
-    var expandableProviders: Set<UsageProvider> {
+    var disclosureProviders: Set<UsageProvider> {
         Set(visibleSnapshots.compactMap { snapshot in
-            measuredWindows(for: snapshot).count > 1 ? snapshot.provider : nil
+            let windowCount = measuredWindows(for: snapshot).count
+            guard windowCount > 0 else { return nil }
+            return (snapshot.provider == .claude || windowCount > 1)
+                ? snapshot.provider
+                : nil
         })
     }
 

@@ -5,6 +5,21 @@ import XCTest
 
 @MainActor
 final class PromptJuiceViewModelTests: XCTestCase {
+    func testSingleWindowClaudeEstimateKeepsDisclosureWhileCodexDoesNot() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(
+                snapshots: Self.claudeEstimatedCodexHealthySnapshots
+            ),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.visibleWindowCounts, [1, 1])
+        XCTAssertEqual(viewModel.disclosureProviders, [.claude])
+    }
+
     func testCadenceSettingsChangeOnlyTheirWindows() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

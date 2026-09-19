@@ -115,7 +115,7 @@ enum PanelClickRouter {
         in bounds: NSRect,
         providers: [UsageProvider],
         windowCounts: [Int] = [],
-        expandableProviders: Set<UsageProvider> = [],
+        disclosureProviders: Set<UsageProvider> = [],
         showsNotificationPrime: Bool = false
     ) -> PanelClickTarget? {
         let width = bounds.width
@@ -155,7 +155,7 @@ enum PanelClickRouter {
                         + PromptJuicePanelMetrics.cardHeaderHeight
                         + PromptJuicePanelMetrics.cardContentSpacing
                 )
-                if expandableProviders.contains(row.provider),
+                if disclosureProviders.contains(row.provider),
                    contains(point, in: header) {
                     return .disclosure(row.provider)
                 }
@@ -187,7 +187,7 @@ private protocol PanelContentRootView: PanelToolTipRefreshing {
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let providers: () -> [UsageProvider]
     private let windowCounts: () -> [Int]
-    private let expandableProviders: () -> Set<UsageProvider>
+    private let disclosureProviders: () -> Set<UsageProvider>
     private let showsNotificationPrime: () -> Bool
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
@@ -209,7 +209,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     required init(rootView: Content) {
         self.providers = { [] }
         self.windowCounts = { [] }
-        self.expandableProviders = { [] }
+        self.disclosureProviders = { [] }
         self.showsNotificationPrime = { false }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
@@ -225,7 +225,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         rootView: Content,
         providers: @escaping () -> [UsageProvider],
         windowCounts: @escaping () -> [Int],
-        expandableProviders: @escaping () -> Set<UsageProvider>,
+        disclosureProviders: @escaping () -> Set<UsageProvider>,
         showsNotificationPrime: @escaping () -> Bool,
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
@@ -236,7 +236,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     ) {
         self.providers = providers
         self.windowCounts = windowCounts
-        self.expandableProviders = expandableProviders
+        self.disclosureProviders = disclosureProviders
         self.showsNotificationPrime = showsNotificationPrime
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
@@ -390,7 +390,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             in: bounds,
             providers: providers(),
             windowCounts: windowCounts(),
-            expandableProviders: expandableProviders(),
+            disclosureProviders: disclosureProviders(),
             showsNotificationPrime: showsNotificationPrime()
         )
     }
@@ -917,8 +917,8 @@ final class JuicebarPanelController: NSObject {
             windowCounts: { [weak viewModel] in
                 viewModel?.visibleWindowCounts ?? []
             },
-            expandableProviders: { [weak viewModel] in
-                viewModel?.expandableProviders ?? []
+            disclosureProviders: { [weak viewModel] in
+                viewModel?.disclosureProviders ?? []
             },
             showsNotificationPrime: { [weak viewModel] in
                 viewModel?.shouldOfferUseSoonNotificationPrime ?? false
@@ -980,7 +980,7 @@ final class JuicebarPanelController: NSObject {
                 return
             }
         case .disclosure(let provider):
-            guard viewModel.expandableProviders.contains(provider) else {
+            guard viewModel.disclosureProviders.contains(provider) else {
                 return
             }
             viewModel.toggleExpanded(provider)

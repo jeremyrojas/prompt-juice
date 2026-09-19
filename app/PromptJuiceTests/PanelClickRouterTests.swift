@@ -117,10 +117,10 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertLessThan(rects.enable.maxX, bounds.width)
     }
 
-    func testExpandableProviderHeaderRoutesToDisclosureAcrossItsFullWidth() {
+    func testDisclosureProviderHeaderRoutesAcrossItsFullWidth() {
         let providers: [UsageProvider] = [.claude, .codex]
         let counts = [3, 1]
-        let expandableProviders: Set<UsageProvider> = [.claude]
+        let disclosureProviders: Set<UsageProvider> = [.claude]
         let bounds = NSRect(
             x: 0,
             y: 0,
@@ -145,7 +145,7 @@ final class PanelClickRouterTests: XCTestCase {
                     in: bounds,
                     providers: providers,
                     windowCounts: counts,
-                    expandableProviders: expandableProviders
+                    disclosureProviders: disclosureProviders
                 ),
                 .disclosure(.claude)
             )
@@ -157,7 +157,7 @@ final class PanelClickRouterTests: XCTestCase {
                 in: bounds,
                 providers: providers,
                 windowCounts: counts,
-                expandableProviders: expandableProviders
+                disclosureProviders: disclosureProviders
             ),
             .provider(.claude)
         )
@@ -167,7 +167,7 @@ final class PanelClickRouterTests: XCTestCase {
                 in: bounds,
                 providers: providers,
                 windowCounts: counts,
-                expandableProviders: expandableProviders
+                disclosureProviders: disclosureProviders
             ),
             .provider(.codex)
         )
@@ -177,7 +177,7 @@ final class PanelClickRouterTests: XCTestCase {
                 in: bounds,
                 providers: providers,
                 windowCounts: counts,
-                expandableProviders: [.claude, .codex]
+                disclosureProviders: [.claude, .codex]
             ),
             .disclosure(.codex)
         )

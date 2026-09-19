@@ -255,7 +255,7 @@ private struct ProviderUsageRow: View {
     }
 
     private var hasDisclosure: Bool {
-        viewModel.measuredWindows(for: snapshot).count > 1
+        viewModel.disclosureProviders.contains(snapshot.provider)
     }
 
     private var measuredCard: some View {
