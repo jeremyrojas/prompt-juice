@@ -115,6 +115,7 @@ enum PanelClickRouter {
         in bounds: NSRect,
         providers: [UsageProvider],
         windowCounts: [Int] = [],
+        expandableProviders: Set<UsageProvider> = [],
         showsNotificationPrime: Bool = false
     ) -> PanelClickTarget? {
         let width = bounds.width
@@ -140,23 +141,23 @@ enum PanelClickRouter {
             }
         }
 
-        for (index, row) in rowRects(
+        for row in rowRects(
             in: bounds,
             providers: providers,
             windowCounts: windowCounts
-        ).enumerated() {
+        ) {
             if contains(point, in: row.rect) {
-                let measured = index < windowCounts.count && windowCounts[index] > 0
-                if measured {
-                    let chevron = NSRect(
-                        x: row.rect.maxX - PromptJuicePanelMetrics.cardPadding - 24,
-                        y: row.rect.minY + PromptJuicePanelMetrics.cardPadding - 6,
-                        width: 30,
-                        height: 30
-                    )
-                    if contains(point, in: chevron) {
-                        return .disclosure(row.provider)
-                    }
+                let header = NSRect(
+                    x: row.rect.minX,
+                    y: row.rect.minY,
+                    width: row.rect.width,
+                    height: PromptJuicePanelMetrics.cardPadding
+                        + PromptJuicePanelMetrics.cardHeaderHeight
+                        + PromptJuicePanelMetrics.cardContentSpacing
+                )
+                if expandableProviders.contains(row.provider),
+                   contains(point, in: header) {
+                    return .disclosure(row.provider)
                 }
                 return .provider(row.provider)
             }
@@ -186,6 +187,7 @@ private protocol PanelContentRootView: PanelToolTipRefreshing {
 private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>, PanelToolTipRefreshing {
     private let providers: () -> [UsageProvider]
     private let windowCounts: () -> [Int]
+    private let expandableProviders: () -> Set<UsageProvider>
     private let showsNotificationPrime: () -> Bool
     private let toolTipProvider: (UsageProvider) -> String?
     private let onPanelClick: (PanelClickTarget) -> Void
@@ -207,6 +209,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     required init(rootView: Content) {
         self.providers = { [] }
         self.windowCounts = { [] }
+        self.expandableProviders = { [] }
         self.showsNotificationPrime = { false }
         self.toolTipProvider = { _ in nil }
         self.onPanelClick = { _ in }
@@ -222,6 +225,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
         rootView: Content,
         providers: @escaping () -> [UsageProvider],
         windowCounts: @escaping () -> [Int],
+        expandableProviders: @escaping () -> Set<UsageProvider>,
         showsNotificationPrime: @escaping () -> Bool,
         toolTipProvider: @escaping (UsageProvider) -> String?,
         onPanelClick: @escaping (PanelClickTarget) -> Void,
@@ -232,6 +236,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
     ) {
         self.providers = providers
         self.windowCounts = windowCounts
+        self.expandableProviders = expandableProviders
         self.showsNotificationPrime = showsNotificationPrime
         self.toolTipProvider = toolTipProvider
         self.onPanelClick = onPanelClick
@@ -385,6 +390,7 @@ private final class ClickReadyHostingView<Content: View>: NSHostingView<Content>
             in: bounds,
             providers: providers(),
             windowCounts: windowCounts(),
+            expandableProviders: expandableProviders(),
             showsNotificationPrime: showsNotificationPrime()
         )
     }
@@ -911,6 +917,9 @@ final class JuicebarPanelController: NSObject {
             windowCounts: { [weak viewModel] in
                 viewModel?.visibleWindowCounts ?? []
             },
+            expandableProviders: { [weak viewModel] in
+                viewModel?.expandableProviders ?? []
+            },
             showsNotificationPrime: { [weak viewModel] in
                 viewModel?.shouldOfferUseSoonNotificationPrime ?? false
             },
@@ -971,6 +980,9 @@ final class JuicebarPanelController: NSObject {
                 return
             }
         case .disclosure(let provider):
+            guard viewModel.expandableProviders.contains(provider) else {
+                return
+            }
             viewModel.toggleExpanded(provider)
             applyPanelFrameIfVisible(force: true)
         case .enableNotifications:
@@ -1130,9 +1142,13 @@ final class JuicebarPanelController: NSObject {
         case .anchored:
             position(panel, size: size)
         case .pinned:
+            let topAnchoredOrigin = NSPoint(
+                x: panel.frame.minX,
+                y: panel.frame.maxY - size.height
+            )
             applyPinnedPanelFrame(
                 panel,
-                origin: panel.frame.origin,
+                origin: topAnchoredOrigin,
                 size: size,
                 force: force,
                 persist: true

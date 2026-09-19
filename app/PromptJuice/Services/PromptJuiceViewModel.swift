@@ -273,6 +273,12 @@ final class PromptJuiceViewModel: ObservableObject {
         visibleSnapshots.map { visibleWindows(for: $0).count }
     }
 
+    var expandableProviders: Set<UsageProvider> {
+        Set(visibleSnapshots.compactMap { snapshot in
+            measuredWindows(for: snapshot).count > 1 ? snapshot.provider : nil
+        })
+    }
+
     var currentDate: Date { now() }
 
     var claudePresentation: ClaudeUsagePresentation {

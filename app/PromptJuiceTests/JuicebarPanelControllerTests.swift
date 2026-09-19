@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class JuicebarPanelControllerTests: XCTestCase {
-    func testDisclosurePersistsPerProviderAndResizesPanel() async {
+    func testDisclosurePersistsForExpandableProviderAndKeepsPinnedTopEdgeFixed() async throws {
         let fixture = makeFixture()
         fixture.store.usageSourceMode = .fixture
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -20,19 +20,28 @@ final class JuicebarPanelControllerTests: XCTestCase {
 
         let collapsedHeight = PromptJuicePanelMetrics.height(windowCounts: [1, 1])
         await waitUntil { controller.panelFrameForTesting?.height == collapsedHeight }
+        controller.pin()
+        let collapsedFrame = try XCTUnwrap(controller.panelFrameForTesting)
 
         controller.clickTargetForTesting(.disclosure(.claude))
         let expandedHeight = PromptJuicePanelMetrics.height(windowCounts: [2, 1])
         await waitUntil { controller.panelFrameForTesting?.height == expandedHeight }
+        let expandedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(expandedFrame.maxY, collapsedFrame.maxY, accuracy: 0.5)
+        XCTAssertLessThan(expandedFrame.minY, collapsedFrame.minY)
         XCTAssertEqual(fixture.store.expandedProviders, [.claude])
         XCTAssertEqual(viewModel.visibleWindowCounts, [2, 1])
 
         let restored = PromptJuiceSettingsStore(defaults: fixture.defaults)
         XCTAssertEqual(restored.expandedProviders, [.claude])
         controller.clickTargetForTesting(.disclosure(.codex))
-        XCTAssertEqual(restored.expandedProviders, [.claude, .codex])
+        XCTAssertEqual(restored.expandedProviders, [.claude])
         controller.clickTargetForTesting(.disclosure(.claude))
-        XCTAssertEqual(restored.expandedProviders, [.codex])
+        await waitUntil { controller.panelFrameForTesting?.height == collapsedHeight }
+        let recollapsedFrame = try XCTUnwrap(controller.panelFrameForTesting)
+        XCTAssertEqual(recollapsedFrame.maxY, collapsedFrame.maxY, accuracy: 0.5)
+        XCTAssertEqual(recollapsedFrame.minY, collapsedFrame.minY, accuracy: 0.5)
+        XCTAssertTrue(restored.expandedProviders.isEmpty)
         XCTAssertEqual(viewModel.visibleWindowCounts, [1, 1])
     }
 

@@ -3,12 +3,10 @@ import SwiftUI
 enum PromptJuicePanelMetrics {
     static let width: CGFloat = 384
     static let plainRowHeight: CGFloat = 48
-    static let rowSpacing: CGFloat = 7
     static let contentPadding: CGFloat = 14
     static let contentSpacing: CGFloat = 10
     static let panelCornerRadius: CGFloat = 22
-    static let chromeHeight: CGFloat = 68
-    static let headerHeight: CGFloat = 68
+    static let headerHeight: CGFloat = 32
     static let cardsTopSpacing: CGFloat = 4
     static let cardSpacing: CGFloat = 8
     static let cardHeaderHeight: CGFloat = 16
@@ -28,16 +26,6 @@ enum PromptJuicePanelMetrics {
     static let primeButtonSpacing: CGFloat = 8
     static let primeEnableButtonWidth: CGFloat = 172
     static let primeDismissButtonWidth: CGFloat = 76
-
-    static func height(rowCount: Int, showsNotificationPrime: Bool = false) -> CGFloat {
-        let rows = max(rowCount, 1)
-        let rowBlockHeight = CGFloat(rows) * plainRowHeight
-            + CGFloat(max(rows - 1, 0)) * rowSpacing
-        let primeBlockHeight = showsNotificationPrime
-            ? contentSpacing + primeBannerHeight
-            : 0
-        return chromeHeight + rowBlockHeight + primeBlockHeight
-    }
 
     static func cardHeight(windowCount: Int) -> CGFloat {
         guard windowCount > 0 else { return plainRowHeight }
@@ -267,6 +255,10 @@ private struct ProviderUsageRow: View {
         viewModel.visibleWindows(for: snapshot)
     }
 
+    private var hasDisclosure: Bool {
+        viewModel.measuredWindows(for: snapshot).count > 1
+    }
+
     private var measuredCard: some View {
         VStack(alignment: .leading, spacing: PromptJuicePanelMetrics.cardContentSpacing) {
             HStack(spacing: 8) {
@@ -277,14 +269,16 @@ private struct ProviderUsageRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.92))
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.35))
-                    .rotationEffect(.degrees(viewModel.expandedProviders.contains(snapshot.provider) ? 90 : 0))
-                    .frame(width: 16, height: 16)
-                    .accessibilityLabel(viewModel.expandedProviders.contains(snapshot.provider)
-                        ? "Collapse \(snapshot.displayName) limits"
-                        : "Expand \(snapshot.displayName) limits")
+                if hasDisclosure {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .rotationEffect(.degrees(viewModel.expandedProviders.contains(snapshot.provider) ? 90 : 0))
+                        .frame(width: 16, height: 16)
+                        .accessibilityLabel(viewModel.expandedProviders.contains(snapshot.provider)
+                            ? "Collapse \(snapshot.displayName) limits"
+                            : "Expand \(snapshot.displayName) limits")
+                }
             }
             .frame(height: PromptJuicePanelMetrics.cardHeaderHeight)
 

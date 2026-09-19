@@ -117,9 +117,10 @@ final class PanelClickRouterTests: XCTestCase {
         XCTAssertLessThan(rects.enable.maxX, bounds.width)
     }
 
-    func testDisclosureHitRectsFollowExpandedCardHeights() {
+    func testExpandableProviderHeaderRoutesToDisclosureAcrossItsFullWidth() {
         let providers: [UsageProvider] = [.claude, .codex]
         let counts = [3, 1]
+        let expandableProviders: Set<UsageProvider> = [.claude]
         let bounds = NSRect(
             x: 0,
             y: 0,
@@ -137,18 +138,49 @@ final class PanelClickRouterTests: XCTestCase {
         ])
         XCTAssertGreaterThan(rows[1].rect.minY, rows[0].rect.maxY)
 
-        for row in rows {
-            let chevron = NSPoint(x: row.rect.maxX - 20, y: row.rect.minY + 20)
+        for x in [rows[0].rect.minX + 8, rows[0].rect.midX, rows[0].rect.maxX - 8] {
             XCTAssertEqual(
                 PanelClickRouter.target(
-                    at: chevron,
+                    at: NSPoint(x: x, y: rows[0].rect.minY + 20),
                     in: bounds,
                     providers: providers,
-                    windowCounts: counts
+                    windowCounts: counts,
+                    expandableProviders: expandableProviders
                 ),
-                .disclosure(row.provider)
+                .disclosure(.claude)
             )
         }
+
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: NSPoint(x: rows[0].rect.midX, y: rows[0].rect.maxY - 12),
+                in: bounds,
+                providers: providers,
+                windowCounts: counts,
+                expandableProviders: expandableProviders
+            ),
+            .provider(.claude)
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: NSPoint(x: rows[1].rect.maxX - 20, y: rows[1].rect.minY + 20),
+                in: bounds,
+                providers: providers,
+                windowCounts: counts,
+                expandableProviders: expandableProviders
+            ),
+            .provider(.codex)
+        )
+        XCTAssertEqual(
+            PanelClickRouter.target(
+                at: NSPoint(x: rows[1].rect.minX + 8, y: rows[1].rect.minY + 20),
+                in: bounds,
+                providers: providers,
+                windowCounts: counts,
+                expandableProviders: [.claude, .codex]
+            ),
+            .disclosure(.codex)
+        )
     }
 
     private func assertSingleProvider(_ provider: UsageProvider) {
