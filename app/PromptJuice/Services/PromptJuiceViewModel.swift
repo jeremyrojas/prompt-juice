@@ -753,7 +753,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func refreshUsage() {
-        setActionMessage("Refreshing usage.")
+        setActionMessage("Refreshing usage.", autoClears: false)
         refreshSnapshotsInBackground(
             claudeReason: .manual,
             completionMessage: "Usage refreshed."
@@ -1581,12 +1581,12 @@ final class PromptJuiceViewModel: ObservableObject {
         runPendingRefreshIfNeeded()
     }
 
-    private func setActionMessage(_ message: String?) {
+    private func setActionMessage(_ message: String?, autoClears: Bool = true) {
         actionMessageClearTask?.cancel()
         actionMessageClearTask = nil
         actionMessage = message
 
-        guard let message else {
+        guard let message, autoClears else {
             return
         }
 

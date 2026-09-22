@@ -1122,10 +1122,14 @@ final class PromptJuiceViewModelTests: XCTestCase {
         viewModel.refreshUsage()
 
         XCTAssertEqual(viewModel.headerDetail, "Refreshing usage.")
-        await waitUntil { viewModel.actionMessage == nil }
-        XCTAssertEqual(viewModel.headerDetail, normalDetail)
+        try? await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(viewModel.headerDetail, "Refreshing usage.")
 
         provider.releaseRefresh()
+        await waitUntil { viewModel.actionMessage == "Usage refreshed." }
+        XCTAssertEqual(viewModel.headerDetail, "Usage refreshed.")
+        await waitUntil { viewModel.actionMessage == nil }
+        XCTAssertEqual(viewModel.headerDetail, normalDetail)
     }
 
     func testDebouncedClaudeRefreshShowsUpToDateMessage() async {

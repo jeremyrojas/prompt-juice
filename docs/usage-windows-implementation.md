@@ -86,12 +86,15 @@ out for this reason).
 window fires only if it was actually used this cycle (≥ 5 % used), so an untouched limit never nags.
 
 **Header (one voice).** Rank amber windows by soonest reset (tie → more remaining). Title = the
-narrowest scope covering all of them: one window → name it (`Use your Fable juice`, subtitle drops
-the name: `62% left · resets in 23h`); several in one provider → `Use your Claude juice`; across
-providers → `Use your juice`. Subtitle lists soonest first, coalesces same-reset windows in row
-order (`Weekly & Fable reset in 23h`), every group keeps its verb. If more than two groups, or the
-line would not fit, use the count form: `5 limits reset soon · Claude 5-hour resets in 33m`. Never
-ellipsize. Low states get no header mention. Simultaneous ambers produce one notification.
+narrowest scope covering all of them. A lone model window is named in the title (`Use your Fable
+juice`) and the subtitle drops the name (`62% left · resets in 23h`). A lone 5-hour, Weekly or other
+cadence window puts the provider in the title and the window in the subtitle (`Use your Claude
+juice` / `Weekly · 43% left · resets in 3h`). Several windows in one provider use `Use your Claude
+juice`; across providers use `Use your juice`. Subtitle lists soonest first, coalesces same-reset
+windows in row order (`Weekly & Fable reset in 23h`), every group keeps its verb. If more than two
+groups, or the line would not fit, use the count form: `5 limits reset soon · Claude 5-hour resets
+in 33m`. Never ellipsize. Low states get no header mention. Simultaneous ambers produce one
+notification.
 
 **Settings.** `Use the juice` has two groups named by cadence — **5-hour limits** (60 minutes /
 40 %) and **Weekly limits** (1 day / 40 %). No per-window visibility toggles; disclosure owns that.
