@@ -97,7 +97,7 @@ struct PromptJuicePanelView: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
-                Text(viewModel.actionMessage ?? viewModel.detail)
+                Text(viewModel.headerDetail)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.58))
                     .lineLimit(1)

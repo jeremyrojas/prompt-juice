@@ -46,7 +46,13 @@ struct UseSoonNotice: Equatable {
     }
 
     var body: String {
-        "\(remainingPercent)% left · resets in \(resetText)"
+        let prefix: String = switch kind {
+        case .weeklyModel:
+            ""
+        default:
+            "\(alertingLimit.shortLabel) · "
+        }
+        return prefix + "\(remainingPercent)% left · resets in \(resetText)"
     }
 
     var notificationIdentifier: String {
@@ -142,9 +148,11 @@ final class PromptJuiceViewModel: ObservableObject {
     private let claudeGuidanceChecker: any ClaudeGuidanceChecking
     private let claudeExecutableLocator: @Sendable () -> ClaudeExecutableLocation?
     private let claudeTimerCheckInterval: TimeInterval
+    private let actionMessageDuration: Duration
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
     private var claudeTimerRefreshTask: Task<Void, Never>?
+    private var actionMessageClearTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
     private var hasPendingRefresh = false
     private var pendingRefreshCompletionMessage: String?
@@ -169,6 +177,7 @@ final class PromptJuiceViewModel: ObservableObject {
         initialClaudeRefreshState: ClaudeRefreshState? = nil,
         alertEngine: AlertEngine = AlertEngine(),
         claudeTimerCheckInterval: TimeInterval = 60,
+        actionMessageDuration: Duration = .seconds(3),
         now: @escaping () -> Date = Date.init
     ) {
         let initialSourceMode = settingsStore.usageSourceMode
@@ -182,6 +191,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.claudeGuidanceChecker = claudeGuidanceChecker
         self.claudeExecutableLocator = claudeExecutableLocator
         self.claudeTimerCheckInterval = claudeTimerCheckInterval
+        self.actionMessageDuration = actionMessageDuration
         self.claudeUsageCoordinator = if let claudeUsageCoordinator {
             claudeUsageCoordinator
         } else if liveClaudeProviderClient != nil {
@@ -562,6 +572,10 @@ final class PromptJuiceViewModel: ObservableObject {
         manualSubtitle
     }
 
+    var headerDetail: String {
+        aggregateSeverity == .useSoon ? detail : actionMessage ?? detail
+    }
+
     // MARK: - Selection
 
     /// Toggle dormant scoped-provider state. The panel does not currently call this.
@@ -624,12 +638,12 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func showManualCheck() {
-        actionMessage = nil
+        setActionMessage(nil)
         refreshSnapshotsInBackground(claudeReason: .manual)
     }
 
     func dismissCurrentWindow() {
-        actionMessage = nil
+        setActionMessage(nil)
         selectedProvider = nil
     }
 
@@ -739,7 +753,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func refreshUsage() {
-        actionMessage = "Refreshing usage."
+        setActionMessage("Refreshing usage.")
         refreshSnapshotsInBackground(
             claudeReason: .manual,
             completionMessage: "Usage refreshed."
@@ -1222,7 +1236,7 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     private func refreshModeForThresholds() {
-        actionMessage = nil
+        setActionMessage(nil)
         objectWillChange.send()
     }
 
@@ -1245,7 +1259,7 @@ final class PromptJuiceViewModel: ObservableObject {
         refreshSnapshotsInBackground(claudeReason: .manual)
 
         if announce {
-            actionMessage = "\(mode.title) selected."
+            setActionMessage("\(mode.title) selected.")
         }
     }
 
@@ -1560,11 +1574,31 @@ final class PromptJuiceViewModel: ObservableObject {
         PromptJuiceLog.usage.debug("Usage refresh finished")
 
         if let completionMessage {
-            actionMessage = completionMessage
+            setActionMessage(completionMessage)
         }
 
         completion?()
         runPendingRefreshIfNeeded()
+    }
+
+    private func setActionMessage(_ message: String?) {
+        actionMessageClearTask?.cancel()
+        actionMessageClearTask = nil
+        actionMessage = message
+
+        guard let message else {
+            return
+        }
+
+        let duration = actionMessageDuration
+        actionMessageClearTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled, self?.actionMessage == message else {
+                return
+            }
+            self?.actionMessage = nil
+            self?.actionMessageClearTask = nil
+        }
     }
 
     private func runPendingRefreshIfNeeded() {

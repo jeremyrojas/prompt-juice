@@ -148,8 +148,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(
             notices.map(\.body),
             [
-                "80% left · resets in 10m",
-                "78% left · resets in 12m"
+                "5-hour · 80% left · resets in 10m",
+                "5-hour · 78% left · resets in 12m"
             ]
         )
         XCTAssertEqual(
@@ -860,8 +860,8 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.headline, "Use your Codex 5-hour juice")
-        XCTAssertEqual(viewModel.detail, "58% left · resets in 38m")
+        XCTAssertEqual(viewModel.headline, "Use your Codex juice")
+        XCTAssertEqual(viewModel.detail, "5-hour · 58% left · resets in 38m")
     }
 
     func testManualVerdictIsCalmWhenHealthy() {
@@ -1073,6 +1073,59 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         XCTAssertEqual(provider.callCount, 2)
         XCTAssertEqual(viewModel.actionMessage, "Usage refreshed.")
+    }
+
+    func testUseSoonDetailWinsWhenManualCheckReportsUpToDate() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let coordinator = StaticClaudeUsageCoordinator(
+            state: ClaudeUsageCoordinatorState(
+                access: .subscription(plan: "Max"),
+                refresh: .idle,
+                snapshot: Self.alertSnapshots[0],
+                scheduleDecision: .skipDebounce
+            )
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: StaticUsageProviderClient(
+                snapshots: [Self.alertSnapshots[1]]
+            ),
+            claudeUsageCoordinator: coordinator,
+            initialSnapshots: Self.alertSnapshots,
+            initialClaudeAccessState: .subscription(plan: "Max"),
+            now: { Self.fixedNow }
+        )
+
+        viewModel.showManualCheck()
+
+        await waitUntil { viewModel.actionMessage == "Just checked · up to date" }
+        XCTAssertEqual(viewModel.headerDetail, viewModel.detail)
+        XCTAssertEqual(viewModel.headerDetail, "2 limits reset soon · Claude 5-hour resets in 10m")
+    }
+
+    func testRefreshMessageClearsAndRestoresNormalDetail() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let provider = BlockingUsageProviderClient(
+            initialSnapshots: Self.healthySnapshots,
+            refreshedSnapshots: Self.healthySnapshots
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: provider,
+            actionMessageDuration: .milliseconds(20),
+            now: { Self.fixedNow }
+        )
+        let normalDetail = viewModel.detail
+
+        viewModel.refreshUsage()
+
+        XCTAssertEqual(viewModel.headerDetail, "Refreshing usage.")
+        await waitUntil { viewModel.actionMessage == nil }
+        XCTAssertEqual(viewModel.headerDetail, normalDetail)
+
+        provider.releaseRefresh()
     }
 
     func testDebouncedClaudeRefreshShowsUpToDateMessage() async {

@@ -12,8 +12,8 @@ final class UseSoonHeaderTests: XCTestCase {
         let xw = alert(.codex, .weekly, 69, 1_380, order: 1)
 
         let cases: [(String, [AlertingLimit], String, String)] = [
-            ("single 5-hour", [c5], "Use your Claude 5-hour juice", "83% left · resets in 33m"),
-            ("single weekly", [xw], "Use your Codex Weekly juice", "69% left · resets in 23h"),
+            ("single 5-hour", [c5], "Use your Claude juice", "5-hour · 83% left · resets in 33m"),
+            ("single weekly", [xw], "Use your Codex juice", "Weekly · 69% left · resets in 23h"),
             ("single Fable", [fable], "Use your Fable juice", "62% left · resets in 23h"),
             ("Claude pair", [fable, cw], "Use your Claude juice", "Weekly & Fable reset in 23h"),
             ("Claude three", [fable, cw, c5], "Use your Claude juice",
@@ -58,6 +58,28 @@ final class UseSoonHeaderTests: XCTestCase {
 
     func testNoAmberHasNoHeader() {
         XCTAssertNil(UseSoonHeader.make(alerts: [], now: now))
+    }
+
+    func testSingleNoticeBodyNamesCadenceWindowsOnly() {
+        let cases: [(LimitWindow.Kind, String)] = [
+            (.fiveHour, "5-hour · 43% left · resets in 3h"),
+            (.weekly, "Weekly · 43% left · resets in 3h"),
+            (.other(1_440), "24-hour · 43% left · resets in 3h"),
+            (.weeklyModel("Fable"), "43% left · resets in 3h")
+        ]
+
+        for (kind, body) in cases {
+            let notice = UseSoonNotice(
+                provider: .claude,
+                providerDisplayName: "Claude",
+                remainingPercent: 43,
+                resetText: "3h",
+                resetAt: now.addingTimeInterval(3 * 60 * 60),
+                windowID: "window",
+                kind: kind
+            )
+            XCTAssertEqual(notice.body, body, "\(kind)")
+        }
     }
 
     func testSameBoundaryUsesRowOrderEvenWhenRankingBreaksTieByRemaining() {

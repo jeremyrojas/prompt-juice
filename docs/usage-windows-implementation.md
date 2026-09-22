@@ -4,8 +4,8 @@ Companion to [`usage-windows-ui-spec.html`](usage-windows-ui-spec.html) (the moc
 the single source for *what we are building and in what order*. It replaces the four separate mock
 pages that lived in `design/mocks/` and the scattered design notes.
 
-Status: **design approved, implementation not started.** Code facts below were re-verified against
-`main` (`fc7796f`) on 2026-09-18.
+Status: **shipped in PR #61, with a follow-up for use-soon refresh status and single-window copy.**
+Code facts below were re-verified against `main` (`e01b021`) on 2026-09-22.
 
 ## 1. Why
 
