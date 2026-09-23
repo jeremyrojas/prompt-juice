@@ -41,13 +41,21 @@ struct UseSoonHeader: Equatable {
         }
 
         if ranked.count == 1, let one = ranked.first {
-            let name: String = switch one.kind {
-            case .weeklyModel: one.shortLabel
-            default: "\(one.provider.rawValue) \(one.shortLabel)"
+            let titleName: String = switch one.kind {
+            case .weeklyModel:
+                one.shortLabel
+            default:
+                one.provider.rawValue
+            }
+            let subtitlePrefix: String = switch one.kind {
+            case .weeklyModel:
+                ""
+            default:
+                "\(one.shortLabel) · "
             }
             return UseSoonHeader(
-                title: "Use your \(name) juice",
-                subtitle: "\(one.remainingPercent)% left · "
+                title: "Use your \(titleName) juice",
+                subtitle: subtitlePrefix + "\(one.remainingPercent)% left · "
                     + ResetFormatter.text(until: one.resetAt, now: now)
             )
         }
