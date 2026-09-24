@@ -514,12 +514,12 @@ final class PromptJuiceViewModel: ObservableObject {
             return neutralClaudeHeader.detail
         }
 
-        if let lockoutSubtitle {
-            return lockoutSubtitle
-        }
-
         if let useSoonHeader {
             return useSoonHeader.subtitle
+        }
+
+        if let lockoutSubtitle {
+            return lockoutSubtitle
         }
 
         guard quotaBearingVisibleSnapshots.contains(where: \.isAvailable) else {
