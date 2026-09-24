@@ -8,11 +8,11 @@ Source: [`SeverityAppearance.swift`](../../app/PromptJuice/UI/SeverityAppearance
 
 | Token | Hex | Use |
 | --- | --- | --- |
-| `green` | `#5FD11F` | healthy main bar |
+| `green` | `#5FD11F` | healthy bars; bright for the main limit, subdued for extras |
 | `orange` | `#F0A32A` | use-soon reset text and bar |
 | `muted` | `#969CA6` | calm low, empty, or unavailable |
 
-Provider identity dots use `#FF9F0A` for Claude and `#32D4DE` for Codex. A healthy secondary bar is white at 22% opacity.
+Provider identity dots use `#FF9F0A` for Claude and `#32D4DE` for Codex. A healthy main bar uses green at 85% opacity; healthy extra-limit bars use green at 42% opacity.
 
 ## 2. Severity axis
 
@@ -23,14 +23,14 @@ Source: [`UsageSeverity.swift`](../../app/PromptJuice/Models/UsageSeverity.swift
 | `empty` | a window has 0% left | muted | — |
 | `useSoon` | reset is within its cadence threshold, enough remains, and at least 5% was used this cycle | orange | eligible |
 | `low` | a window has less than 15% left | muted | — |
-| `healthy` | other usable windows | green for the main bar, grey for secondary bars | — |
+| `healthy` | other usable windows | bright green for the main bar, subdued green for extra limits | — |
 | `unavailable` | no usable reading | muted | — |
 
 There are no status chips in measured cards. The percentage remains white on an amber row; its reset text and bar turn amber. Low stays calm.
 
 The 5-hour defaults are 60 minutes and 40% remaining, with 30/45/60/90 minute choices. Weekly defaults are 1 day and 40% remaining, with 12 hours / 1 day / 2 days / 3 days choices. Both percentage pickers offer 25/40/50/60%. Other Codex durations use the 5-hour pair below 1 day and the weekly pair from 1 day up.
 
-The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider and reads as empty; an exhausted model-specific weekly such as Fable mutes only its own row.
+The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider: every row on its card becomes muted, and the header subtitle names when Weekly resets. An exhausted model-specific weekly such as Fable mutes only its own row.
 
 ## 3. Confidence and source
 

@@ -261,9 +261,11 @@ final class PromptJuiceViewModel: ObservableObject {
     }
 
     func windowSeverity(_ window: LimitWindow, in snapshot: UsageSnapshot) -> UsageSeverity {
+        let refreshDate = now()
+        if alertEngine.isLockedOut(snapshot, now: refreshDate) { return .empty }
         guard let remaining = window.rateWindow.remainingPercent,
               let resetAt = window.rateWindow.resetAt,
-              resetAt > now() else { return .unavailable }
+              resetAt > refreshDate else { return .unavailable }
         if remaining <= 0 { return .empty }
         if isWindowUseSoon(window, in: snapshot) { return .useSoon }
         if remaining < Double(UsageSeverity.lowRemainingFloor) { return .low }
@@ -482,6 +484,26 @@ final class PromptJuiceViewModel: ObservableObject {
         quotaBearingVisibleSnapshots.filter { severity(for: $0) == .empty }
     }
 
+    private var lockoutSubtitle: String? {
+        let refreshDate = now()
+        let lockouts = quotaBearingVisibleSnapshots.compactMap { snapshot -> (ProviderSnapshot, Date)? in
+            guard alertEngine.isLockedOut(snapshot, now: refreshDate),
+                  let resetAt = snapshot.windows
+                    .first(where: { $0.kind == .weekly })?
+                    .rateWindow.resetAt else {
+                return nil
+            }
+            return (snapshot, resetAt)
+        }.sorted { $0.1 < $1.1 }
+
+        guard let (snapshot, resetAt) = lockouts.first else {
+            return nil
+        }
+
+        let label = lockouts.count == 1 ? "Weekly" : "\(snapshot.displayName) Weekly"
+        return "\(label) resets in \(ResetFormatter.duration(until: resetAt, now: refreshDate))"
+    }
+
     /// Manual-mode subtitle — the next visible reset, with provider context.
     private var manualSubtitle: String {
         if isCheckingUsage {
@@ -490,6 +512,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
         if let neutralClaudeHeader {
             return neutralClaudeHeader.detail
+        }
+
+        if let lockoutSubtitle {
+            return lockoutSubtitle
         }
 
         if let useSoonHeader {

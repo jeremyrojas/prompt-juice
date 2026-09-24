@@ -20,6 +20,38 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.disclosureProviders, [.claude])
     }
 
+    func testLockedOutProviderMutesEveryWindow() throws {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        fixture.store.expandedProviders = [.claude]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.lockedOutClaudeSnapshot]),
+            now: { Self.fixedNow }
+        )
+        let snapshot = try XCTUnwrap(viewModel.visibleSnapshots.first)
+        let severities = viewModel.visibleWindows(for: snapshot).map {
+            viewModel.windowSeverity($0, in: snapshot)
+        }
+
+        XCTAssertEqual(severities, [.empty, .empty, .empty])
+    }
+
+    func testLockedOutHeaderSubtitleUsesWeeklyReset() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.lockedOutClaudeSnapshot]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.headline, "Claude is out")
+        XCTAssertEqual(viewModel.detail, "Weekly resets in 3d")
+    }
+
     func testCadenceSettingsChangeOnlyTheirWindows() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -1874,6 +1906,42 @@ final class PromptJuiceViewModelTests: XCTestCase {
             updatedAt: fixedNow
         )
     ]
+
+    private static let lockedOutClaudeSnapshot = ProviderSnapshot(
+        identity: .claude,
+        windows: [
+            LimitWindow(
+                kind: .fiveHour,
+                rateWindow: .available(
+                    usedPercent: 20,
+                    resetAt: fixedNow.addingTimeInterval(2 * 60 * 60),
+                    durationMinutes: 300
+                ),
+                updatedAt: fixedNow
+            ),
+            LimitWindow(
+                kind: .weekly,
+                rateWindow: .available(
+                    usedPercent: 100,
+                    resetAt: fixedNow.addingTimeInterval(3 * 24 * 60 * 60),
+                    durationMinutes: 10_080
+                ),
+                updatedAt: fixedNow
+            ),
+            LimitWindow(
+                kind: .weeklyModel("Fable"),
+                rateWindow: .available(
+                    usedPercent: 10,
+                    resetAt: fixedNow.addingTimeInterval(4 * 24 * 60 * 60),
+                    durationMinutes: 10_080
+                ),
+                updatedAt: fixedNow
+            )
+        ],
+        source: .fixture,
+        confidence: .exact,
+        updatedAt: fixedNow
+    )
 
     private static let weeklySnapshots = [
         ProviderSnapshot(
