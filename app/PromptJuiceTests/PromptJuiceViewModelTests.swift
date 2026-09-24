@@ -20,6 +20,86 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.disclosureProviders, [.claude])
     }
 
+    func testLockedOutProviderMutesEveryWindow() throws {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        fixture.store.expandedProviders = [.claude]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.lockedOutClaudeSnapshot]),
+            now: { Self.fixedNow }
+        )
+        let snapshot = try XCTUnwrap(viewModel.visibleSnapshots.first)
+        let severities = viewModel.visibleWindows(for: snapshot).map {
+            viewModel.windowSeverity($0, in: snapshot)
+        }
+
+        XCTAssertEqual(severities, [.empty, .empty, .empty])
+    }
+
+    func testLockedOutHeaderSubtitleUsesWeeklyReset() {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [Self.lockedOutClaudeSnapshot]),
+            now: { Self.fixedNow }
+        )
+
+        XCTAssertEqual(viewModel.headline, "Claude is out")
+        XCTAssertEqual(viewModel.detail, "Weekly resets in 3d")
+    }
+
+    func testUseSoonHeaderWinsWhenAnotherProviderIsLockedOut() throws {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.expandedProviders = [.claude]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [
+                Self.lockedOutClaudeSnapshot,
+                Self.codexUseSoonSnapshot
+            ]),
+            now: { Self.fixedNow }
+        )
+        let claude = try XCTUnwrap(
+            viewModel.visibleSnapshots.first(where: { $0.provider == .claude })
+        )
+
+        XCTAssertEqual(viewModel.headline, "Use your Codex juice")
+        XCTAssertEqual(viewModel.detail, "5-hour · 58% left · resets in 38m")
+        XCTAssertEqual(
+            viewModel.visibleWindows(for: claude).map {
+                viewModel.windowSeverity($0, in: claude)
+            },
+            [.empty, .empty, .empty]
+        )
+    }
+
+    func testLockedOutProviderDoesNotAlertOrSurfaceCollapsedRows() throws {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(
+                snapshots: [Self.lockedOutClaudeSnapshot]
+            ),
+            now: { Self.fixedNow }
+        )
+        let snapshot = try XCTUnwrap(viewModel.visibleSnapshots.first)
+        let fable = try XCTUnwrap(
+            snapshot.windows.first(where: { $0.kind == .weeklyModel("Fable") })
+        )
+
+        XCTAssertFalse(viewModel.shouldUseSoon(for: snapshot))
+        XCTAssertFalse(viewModel.isWindowUseSoon(fable, in: snapshot))
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(viewModel.visibleWindows(for: snapshot).map(\.kind), [.fiveHour])
+    }
+
     func testCadenceSettingsChangeOnlyTheirWindows() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -1114,7 +1194,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
             providerClient: provider,
-            actionMessageDuration: .milliseconds(20),
+            actionMessageDuration: .milliseconds(300),
             now: { Self.fixedNow }
         )
         let normalDetail = viewModel.detail
@@ -1874,6 +1954,54 @@ final class PromptJuiceViewModelTests: XCTestCase {
             updatedAt: fixedNow
         )
     ]
+
+    private static let lockedOutClaudeSnapshot = ProviderSnapshot(
+        identity: .claude,
+        windows: [
+            LimitWindow(
+                kind: .fiveHour,
+                rateWindow: .available(
+                    usedPercent: 20,
+                    resetAt: fixedNow.addingTimeInterval(2 * 60 * 60),
+                    durationMinutes: 300
+                ),
+                updatedAt: fixedNow
+            ),
+            LimitWindow(
+                kind: .weekly,
+                rateWindow: .available(
+                    usedPercent: 100,
+                    resetAt: fixedNow.addingTimeInterval(3 * 24 * 60 * 60),
+                    durationMinutes: 10_080
+                ),
+                updatedAt: fixedNow
+            ),
+            LimitWindow(
+                kind: .weeklyModel("Fable"),
+                rateWindow: .available(
+                    usedPercent: 38,
+                    resetAt: fixedNow.addingTimeInterval(23 * 60 * 60),
+                    durationMinutes: 10_080
+                ),
+                updatedAt: fixedNow
+            )
+        ],
+        source: .fixture,
+        confidence: .exact,
+        updatedAt: fixedNow
+    )
+
+    private static let codexUseSoonSnapshot = ProviderSnapshot(
+        identity: .codex,
+        rateWindow: .available(
+            usedPercent: 42,
+            resetAt: fixedNow.addingTimeInterval(38 * 60),
+            durationMinutes: 300
+        ),
+        source: .fixture,
+        confidence: .exact,
+        updatedAt: fixedNow
+    )
 
     private static let weeklySnapshots = [
         ProviderSnapshot(
