@@ -1254,6 +1254,45 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertEqual(coordinator.callCount, 2)
     }
 
+    func testTickRefreshesCodexEveryFifteenMinutes() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        let clock = MutableTestClock(Self.fixedNow)
+        let codexProvider = CountingUsageProviderClient(
+            snapshots: [Self.healthySnapshots[1]]
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            liveCodexProviderClient: codexProvider,
+            claudeUsageCoordinator: StaticClaudeUsageCoordinator(
+                state: ClaudeUsageCoordinatorState(
+                    access: .subscription(plan: "Max"),
+                    refresh: .idle,
+                    snapshot: Self.healthySnapshots[0],
+                    scheduleDecision: .skipFresh
+                )
+            ),
+            initialSnapshots: Self.healthySnapshots,
+            initialClaudeAccessState: .subscription(plan: "Max"),
+            claudeTimerCheckInterval: 60 * 60,
+            codexTimerRefreshInterval: 15 * 60,
+            now: clock.now
+        )
+
+        viewModel.tick()
+        clock.advance(by: 15 * 60 - 1)
+        viewModel.tick()
+        XCTAssertEqual(codexProvider.callCount, 0)
+
+        clock.advance(by: 1)
+        viewModel.tick()
+        await waitUntil { codexProvider.callCount == 1 }
+
+        clock.advance(by: 15 * 60 - 1)
+        viewModel.tick()
+        XCTAssertEqual(codexProvider.callCount, 1)
+    }
+
     func testTickReplacesExpiredClaudeWindowWithLocalEstimate() async {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }

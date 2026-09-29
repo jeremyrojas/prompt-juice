@@ -148,6 +148,7 @@ final class PromptJuiceViewModel: ObservableObject {
     private let claudeGuidanceChecker: any ClaudeGuidanceChecking
     private let claudeExecutableLocator: @Sendable () -> ClaudeExecutableLocation?
     private let claudeTimerCheckInterval: TimeInterval
+    private let codexTimerRefreshInterval: TimeInterval
     private let actionMessageDuration: Duration
     private var providerClient: any UsageProviderClient
     private var refreshTask: Task<Void, Never>?
@@ -160,6 +161,7 @@ final class PromptJuiceViewModel: ObservableObject {
     private var pendingClaudeRefreshReason: ClaudeRefreshReason?
     private var expiredWindowRefreshKeys = Set<String>()
     private var lastClaudeTimerCheckAt: Date?
+    private var lastCodexRefreshAt: Date?
     private var isNetworkOnline = true
 
     init(
@@ -177,6 +179,7 @@ final class PromptJuiceViewModel: ObservableObject {
         initialClaudeRefreshState: ClaudeRefreshState? = nil,
         alertEngine: AlertEngine = AlertEngine(),
         claudeTimerCheckInterval: TimeInterval = 60,
+        codexTimerRefreshInterval: TimeInterval = 15 * 60,
         actionMessageDuration: Duration = .seconds(3),
         now: @escaping () -> Date = Date.init
     ) {
@@ -191,6 +194,7 @@ final class PromptJuiceViewModel: ObservableObject {
         self.claudeGuidanceChecker = claudeGuidanceChecker
         self.claudeExecutableLocator = claudeExecutableLocator
         self.claudeTimerCheckInterval = claudeTimerCheckInterval
+        self.codexTimerRefreshInterval = codexTimerRefreshInterval
         self.actionMessageDuration = actionMessageDuration
         self.claudeUsageCoordinator = if let claudeUsageCoordinator {
             claudeUsageCoordinator
@@ -223,6 +227,9 @@ final class PromptJuiceViewModel: ObservableObject {
                 now: now()
             )
         }
+        lastCodexRefreshAt = snapshots
+            .first { $0.provider == .codex && $0.isAvailable }?
+            .updatedAt
     }
 
     var visibleSnapshots: [UsageSnapshot] {
@@ -906,8 +913,24 @@ final class PromptJuiceViewModel: ObservableObject {
 
     func tick() {
         refreshExpiredSnapshotsIfNeeded()
+        refreshCodexOnTimerIfNeeded()
         refreshClaudeOnTimerIfNeeded()
         objectWillChange.send()
+    }
+
+    private func refreshCodexOnTimerIfNeeded() {
+        let checkDate = now()
+        guard activeRefreshID == nil,
+              shouldRefreshLiveProvidersIndependently,
+              enabledProviders.contains(.codex),
+              isNetworkOnline,
+              lastCodexRefreshAt.map({
+                  checkDate.timeIntervalSince($0) >= codexTimerRefreshInterval
+              }) ?? true else {
+            return
+        }
+
+        refreshSnapshotsInBackground(claudeReason: .timer)
     }
 
     private func refreshClaudeOnTimerIfNeeded() {
@@ -1371,6 +1394,10 @@ final class PromptJuiceViewModel: ObservableObject {
 
         let refreshID = UUID()
         activeRefreshID = refreshID
+        if shouldRefreshLiveProvidersIndependently,
+           enabledProviders.contains(.codex) {
+            lastCodexRefreshAt = now()
+        }
         if shouldRefreshLiveProvidersIndependently,
            claudeUsageCoordinator != nil,
            enabledProviders.contains(.claude) {
