@@ -273,6 +273,34 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testLockedOutProviderCannotTriggerUseSoon() {
+        let snapshot = makeSnapshot(
+            identity: .claude,
+            usedPercent: 20,
+            resetMinutesFromNow: 30,
+            weeklyUsedPercent: 100,
+            weeklyResetMinutesFromNow: 4 * 24 * 60,
+            confidence: .exact
+        )
+
+        XCTAssertTrue(engine.isLockedOut(snapshot, now: now))
+        XCTAssertFalse(
+            engine.shouldUseSoon(
+                for: snapshot,
+                thresholds: thresholds,
+                now: now
+            )
+        )
+        XCTAssertFalse(
+            engine.shouldUseSoon(
+                for: snapshot.windows[0],
+                in: snapshot,
+                thresholds: thresholds,
+                now: now
+            )
+        )
+    }
+
     func testWeeklyResetTimingTriggersUseSoon() {
         let snapshot = makeSnapshot(
             identity: .codex,

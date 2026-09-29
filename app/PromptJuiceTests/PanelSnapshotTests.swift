@@ -60,6 +60,14 @@ final class PanelSnapshotTests: XCTestCase {
             ClaudeOnlyNotMeasuredFixtureClient(),
             enabledProviders: [.claude]
         )
+        for scenario in LimitColorFixtureClient.Scenario.allCases {
+            try render(
+                "limit-colors-\(scenario.rawValue)",
+                LimitColorFixtureClient(scenario: scenario),
+                enabledProviders: [scenario.provider],
+                expandedProviders: [scenario.provider]
+            )
+        }
     }
 
     func testRenderNotificationPrimeSnapshot() throws {
@@ -297,6 +305,99 @@ private struct MultiWindowFixtureClient: UsageProviderClient {
     }
 
     private func window(
+        _ kind: LimitWindow.Kind,
+        remaining: Double,
+        resetMinutes: Int,
+        now: Date
+    ) -> LimitWindow {
+        LimitWindow(
+            kind: kind,
+            rateWindow: .available(
+                usedPercent: 100 - remaining,
+                resetAt: now.addingTimeInterval(TimeInterval(resetMinutes * 60)),
+                durationMinutes: kind.durationMinutes
+            ),
+            updatedAt: now
+        )
+    }
+}
+
+private struct LimitColorFixtureClient: UsageProviderClient {
+    enum Scenario: String, CaseIterable {
+        case claudeAllHealthy = "claude-all-healthy"
+        case claudeFableLow = "claude-fable-low"
+        case claudeFiveHourLow = "claude-five-hour-low"
+        case claudeWeeklyUseSoon = "claude-weekly-use-soon"
+        case claudeFableUseSoon = "claude-fable-use-soon"
+        case claudeWeeklyLockout = "claude-weekly-lockout"
+        case codexFiveHourPlan = "codex-five-hour-plan"
+
+        var provider: UsageProvider {
+            self == .codexFiveHourPlan ? .codex : .claude
+        }
+    }
+
+    let source: SnapshotSource = .fixture
+    let scenario: Scenario
+
+    func snapshots(now: Date = Date()) -> [ProviderSnapshot] {
+        return [ProviderSnapshot(
+            identity: scenario.provider == .claude ? .claude : .codex,
+            windows: windows(now: now),
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: now
+        )]
+    }
+
+    private func windows(now: Date) -> [LimitWindow] {
+        switch scenario {
+        case .claudeAllHealthy:
+            return claudeWindows(now: now)
+        case .claudeFableLow:
+            return claudeWindows(fableRemaining: 9, now: now)
+        case .claudeFiveHourLow:
+            return claudeWindows(fiveHourRemaining: 9, now: now)
+        case .claudeWeeklyUseSoon:
+            return claudeWindows(weeklyRemaining: 55, weeklyResetMinutes: 23 * 60, now: now)
+        case .claudeFableUseSoon:
+            return claudeWindows(fableRemaining: 62, fableResetMinutes: 23 * 60, now: now)
+        case .claudeWeeklyLockout:
+            return claudeWindows(
+                fiveHourResetMinutes: 2 * 60,
+                weeklyRemaining: 0,
+                weeklyResetMinutes: 3 * 24 * 60,
+                fableResetMinutes: 4 * 24 * 60,
+                now: now
+            )
+        case .codexFiveHourPlan:
+            return [
+                make(.fiveHour, remaining: 80, resetMinutes: 2 * 60, now: now),
+                make(.weekly, remaining: 60, resetMinutes: 5 * 24 * 60, now: now)
+            ]
+        }
+    }
+
+    private func claudeWindows(
+        fiveHourRemaining: Double = 83,
+        fiveHourResetMinutes: Int = 176,
+        weeklyRemaining: Double = 95,
+        weeklyResetMinutes: Int = 5 * 24 * 60,
+        fableRemaining: Double = 93,
+        fableResetMinutes: Int = 5 * 24 * 60,
+        now: Date
+    ) -> [LimitWindow] {
+        [
+            make(.fiveHour, remaining: fiveHourRemaining,
+                 resetMinutes: fiveHourResetMinutes, now: now),
+            make(.weekly, remaining: weeklyRemaining,
+                 resetMinutes: weeklyResetMinutes, now: now),
+            make(.weeklyModel("Fable"), remaining: fableRemaining,
+                 resetMinutes: fableResetMinutes, now: now)
+        ]
+    }
+
+    private func make(
         _ kind: LimitWindow.Kind,
         remaining: Double,
         resetMinutes: Int,

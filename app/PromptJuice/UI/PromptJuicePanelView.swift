@@ -540,7 +540,7 @@ private struct LimitWindowRow: View {
     private var fillColor: Color {
         if severity == .useSoon { return JuicePalette.orange.opacity(0.90) }
         if isMuted { return JuicePalette.muted.opacity(0.72) }
-        return isMain ? JuicePalette.green.opacity(0.85) : Color.white.opacity(0.22)
+        return isMain ? JuicePalette.green.opacity(0.85) : JuicePalette.green.opacity(0.42)
     }
 
     var body: some View {
