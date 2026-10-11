@@ -70,7 +70,11 @@ Zero remainders are omitted (`2h`, `2d`). One pure function shared by rows, head
 
 **Disclosure.** Collapsed by default: each provider shows its shortest-cadence window (Claude
 5-hour; Codex 5-hour where the plan has one, otherwise Weekly). Chevron expands/collapses; the
-choice is remembered per provider. An amber window surfaces through a collapsed card — also live,
+choice is remembered per provider. The chevron rotation eases over 0.2 seconds, with a snap
+when Reduce Motion is on. Rotation observes only that provider’s expanded flag, so the one-second
+tick leaves it alone. The panel height and rows update immediately; clicks use the final layout.
+Smooth height changes and row fades are deferred until they can be verified on both macOS 14
+and macOS 26. An amber window surfaces through a collapsed card — also live,
 while the panel is open — without expanding the rest or overwriting the saved choice. Low never
 surfaces. When the all-models Weekly reaches 0%, it also appears as a muted row in the collapsed
 card. An empty model-specific weekly stays tucked away. Claude deliberately keeps its chevron
