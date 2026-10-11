@@ -325,6 +325,7 @@ private struct MultiWindowFixtureClient: UsageProviderClient {
 private struct LimitColorFixtureClient: UsageProviderClient {
     enum Scenario: String, CaseIterable {
         case claudeAllHealthy = "claude-all-healthy"
+        case claudeFiveHourUseSoon = "claude-five-hour-use-soon"
         case claudeFableLow = "claude-fable-low"
         case claudeFiveHourLow = "claude-five-hour-low"
         case claudeWeeklyUseSoon = "claude-weekly-use-soon"
@@ -354,6 +355,8 @@ private struct LimitColorFixtureClient: UsageProviderClient {
         switch scenario {
         case .claudeAllHealthy:
             return claudeWindows(now: now)
+        case .claudeFiveHourUseSoon:
+            return claudeWindows(fiveHourResetMinutes: 45, now: now)
         case .claudeFableLow:
             return claudeWindows(fableRemaining: 9, now: now)
         case .claudeFiveHourLow:
