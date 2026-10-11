@@ -68,6 +68,17 @@ final class PanelSnapshotTests: XCTestCase {
                 expandedProviders: [scenario.provider]
             )
         }
+        try render(
+            "weekly-out-collapsed",
+            LimitColorFixtureClient(scenario: .claudeWeeklyLockout),
+            enabledProviders: [.claude]
+        )
+        try render(
+            "tiny-positive-limits",
+            LimitColorFixtureClient(scenario: .claudeTinyPositive),
+            enabledProviders: [.claude],
+            expandedProviders: [.claude]
+        )
     }
 
     func testRenderNotificationPrimeSnapshot() throws {
@@ -327,6 +338,7 @@ private struct LimitColorFixtureClient: UsageProviderClient {
         case claudeAllHealthy = "claude-all-healthy"
         case claudeFiveHourUseSoon = "claude-five-hour-use-soon"
         case claudeFableLow = "claude-fable-low"
+        case claudeTinyPositive = "claude-tiny-positive"
         case claudeFiveHourLow = "claude-five-hour-low"
         case claudeWeeklyUseSoon = "claude-weekly-use-soon"
         case claudeFableUseSoon = "claude-fable-use-soon"
@@ -359,6 +371,8 @@ private struct LimitColorFixtureClient: UsageProviderClient {
             return claudeWindows(fiveHourResetMinutes: 45, now: now)
         case .claudeFableLow:
             return claudeWindows(fableRemaining: 9, now: now)
+        case .claudeTinyPositive:
+            return claudeWindows(fiveHourRemaining: 1, fableRemaining: 0.1, now: now)
         case .claudeFiveHourLow:
             return claudeWindows(fiveHourRemaining: 9, now: now)
         case .claudeWeeklyUseSoon:

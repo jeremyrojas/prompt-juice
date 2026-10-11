@@ -55,8 +55,9 @@ Unchanged, so the plan still applies: `ProviderSnapshot` is still `rateWindow` +
 ## 3. The spec in brief (full detail and visuals in the HTML spec)
 
 **Rows.** Provider card = small header (dot + name + chevron) and one row per visible window: label
-left (`5-hour limit`, `Weekly`, `Fable`), values right (`83% left · resets in 2h`), thin flat bar
-below (4 px main, 3 px secondary). No chips. Layout is identical across states; only colour changes.
+left (`5-hour limit`, `Weekly`, `Fable`), values right (`83% left · resets in 2h`), bar below (6 pt main, 3 pt secondary). Main healthy and all use-soon bars have the
+gradients and soft glow described in the states-and-colors reference. Every positive fill is at
+least as wide as its bar height, so tiny amounts retain the capsule shape; 0% has no fill. No chips. Layout is identical across states; only colour changes.
 
 **Colour grammar.** Green = healthy bars: bright on the main limit, subdued on extra limits. Muted
 `#969CA6` = low (< 15 %), empty or unavailable, never an alert. Amber `#F0A32A` = use-soon only;
@@ -71,14 +72,16 @@ Zero remainders are omitted (`2h`, `2d`). One pure function shared by rows, head
 5-hour; Codex 5-hour where the plan has one, otherwise Weekly). Chevron expands/collapses; the
 choice is remembered per provider. An amber window surfaces through a collapsed card — also live,
 while the panel is open — without expanding the rest or overwriting the saved choice. Low never
-surfaces. Hidden windows are still measured: they can go amber, notify and surface.
+surfaces. When the all-models Weekly reaches 0%, it also appears as a muted row in the collapsed
+card. An empty model-specific weekly stays tucked away. Claude deliberately keeps its chevron
+even with one measured limit. Hidden windows are still measured: they can go amber, notify and surface.
 
 **Droplet and verdict.** Both follow each provider's *main* window, exactly as today
 (`headerRemainingPercent`, `headerSeverity`, `headline`). Amber from any window turns them amber.
-One exception, **lockout**: when a limit that blocks the whole provider is exhausted — the
+One exception, **provider is out**: when a limit that blocks the whole provider is exhausted — the
 all-models Weekly at 0 % — that provider reads as empty, because "Plenty of prompt juice left" while
-locked out would be false. Every row on the locked provider is muted, and the header subtitle names
-the lockout end (`Weekly resets in 3d`). A model-specific weekly (Fable) running out only mutes its
+the provider is out would be false. Every row on that provider is muted, and the header subtitle names
+the Weekly reset (`Weekly resets in 3d`). A model-specific weekly (Fable) running out only mutes its
 own row; other models still work. Do not take the minimum across windows: a nearly-spent Fable must
 not make the whole app look empty (PR #38 tried `effectiveRemainingPercent = min(session, weekly)`
 and backed it out for this reason).

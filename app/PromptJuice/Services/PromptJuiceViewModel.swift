@@ -253,8 +253,9 @@ final class PromptJuiceViewModel: ObservableObject {
         let measured = measuredWindows(for: snapshot)
         guard let main = measured.first else { return [] }
         guard !expandedProviders.contains(snapshot.provider) else { return measured }
+        let isOut = alertEngine.isLockedOut(snapshot, now: now())
         return [main] + measured.dropFirst().filter { window in
-            isWindowUseSoon(window, in: snapshot)
+            isWindowUseSoon(window, in: snapshot) || (isOut && window.kind == .weekly)
         }
     }
 
