@@ -40,7 +40,7 @@ There are no status chips in measured cards. The percentage remains white on an 
 
 The 5-hour defaults are 60 minutes and 40% remaining, with 30/45/60/90 minute choices. Weekly defaults are 1 day and 40% remaining, with 12 hours / 1 day / 2 days / 3 days choices. Both percentage pickers offer 25/40/50/60%. Other Codex durations use the 5-hour pair below 1 day and the weekly pair from 1 day up.
 
-The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider: every row on its card becomes muted, and the header subtitle names when Weekly resets. An exhausted model-specific weekly such as Fable mutes only its own row.
+The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider: every row on its card becomes muted, and the header subtitle names when Weekly resets. An exhausted model-specific weekly such as Fable mutes only its own row. Short-cadence limits also suppress their use-soon nudge while an active all-models Weekly has under 5% left. At 5% or above the short limit uses its normal thresholds. Weekly-cadence nudges keep their existing rules. This suppression adds no notification, header mention, or color for low limits.
 
 ## 3. Confidence and source
 

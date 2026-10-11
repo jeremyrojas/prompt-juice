@@ -89,6 +89,10 @@ and backed it out for this reason).
 **Alerts.** Use-soon is the only alert, evaluated per window with per-cadence thresholds:
 5-hour `reset ≤ 60 min AND ≥ 40 % left`; weekly `reset ≤ 1 day AND ≥ 40 % left`. In-use guard: a
 window fires only if it was actually used this cycle (≥ 5 % used), so an untouched limit never nags.
+The all-models Weekly at 0% suppresses every nudge for that provider. An active all-models
+Weekly under 5% also suppresses nudges on short cadences; at 5% or above their normal thresholds
+apply. Weekly-cadence nudges keep their existing rules. Low limits add no notification, header
+mention, or color.
 
 **Header (one voice).** Rank amber windows by soonest reset (tie → more remaining). Title = the
 narrowest scope covering all of them. A lone model window is named in the title (`Use your Fable

@@ -25,6 +25,16 @@ struct AlertEngine {
               let remaining = window.rateWindow.remainingPercent else {
             return false
         }
+        if !window.kind.cadenceIsWeekly,
+           snapshot.windows.contains(where: { weekly in
+               weekly.kind == .weekly
+                   && weekly.rateWindow.resetAt.map { $0 > now } == true
+                   && weekly.rateWindow.remainingPercent.map {
+                       $0 < Double(UsageSeverity.shortLimitWeeklyRemainingFloor)
+                   } == true
+           }) {
+            return false
+        }
         return used >= 5
             && minutes <= thresholds.remainingMinutes
             && remaining >= Double(thresholds.remainingPercent)
