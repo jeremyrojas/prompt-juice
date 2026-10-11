@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import PromptJuice
 
@@ -58,6 +59,22 @@ final class UseSoonHeaderTests: XCTestCase {
 
     func testNoAmberHasNoHeader() {
         XCTAssertNil(UseSoonHeader.make(alerts: [], now: now))
+    }
+
+    func testCompoundResetTimesUseCountFormWithinHeaderWidth() throws {
+        for minutes in [90, 36 * 60] {
+            let alerts = [
+                alert(.claude, .fiveHour, 83, minutes, order: 0),
+                alert(.codex, .weekly, 69, minutes + 60, order: 0)
+            ]
+            let header = try XCTUnwrap(UseSoonHeader.make(alerts: alerts, now: now))
+            let duration = minutes == 90 ? "1h 30m" : "1d 12h"
+            XCTAssertEqual(header.subtitle, "2 limits reset soon · next in \(duration)")
+            let width = (header.subtitle as NSString).size(withAttributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .medium)
+            ]).width
+            XCTAssertLessThanOrEqual(width, 272)
+        }
     }
 
     func testSingleNoticeBodyNamesCadenceWindowsOnly() {

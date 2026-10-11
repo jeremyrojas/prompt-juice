@@ -62,9 +62,10 @@ below (4 px main, 3 px secondary). No chips. Layout is identical across states; 
 `#969CA6` = low (< 15 %), empty or unavailable, never an alert. Amber `#F0A32A` = use-soon only;
 on an amber row the reset text and bar turn amber, the percent stays white.
 
-**Reset format.** Always `resets in <t>`, single largest unit, floored: under 1 h → minutes
-(`33m`), 1–24 h → hours (`23h`), 24 h and up → days (`5d`). No compound units, weekday names or
-dates. One pure function shared by rows, header, notifications and the Settings status line.
+**Reset format.** Always `resets in <t>`, floored: under 1 h → minutes (`33m`);
+1 to under 3 h → hours and remaining minutes (`1h 30m`); 3 to under 24 h → hours (`5h`);
+1 to under 3 days → days and remaining hours (`1d 12h`); 3 days up → days (`6d`).
+Zero remainders are omitted (`2h`, `2d`). One pure function shared by rows, header, notifications and the Settings status line.
 
 **Disclosure.** Collapsed by default: each provider shows its shortest-cadence window (Claude
 5-hour; Codex 5-hour where the plan has one, otherwise Weekly). Chevron expands/collapses; the
@@ -94,7 +95,8 @@ juice` / `Weekly · 43% left · resets in 3h`). Several windows in one provider 
 juice`; across providers use `Use your juice`. Subtitle lists soonest first, coalesces same-reset
 windows in row order (`Weekly & Fable reset in 23h`), every group keeps its verb. If more than two
 groups, or the line would not fit, use the count form: `5 limits reset soon · Claude 5-hour resets
-in 33m`. Never ellipsize. Low states get no header mention. Simultaneous ambers produce one
+in 33m`. The width limit is 272 points. If naming even the soonest window exceeds that width,
+use `2 limits reset soon · next in 1h 30m`. Never ellipsize. Low states get no header mention. Simultaneous ambers produce one
 notification.
 
 **Settings.** `Use the juice` has two groups named by cadence — **5-hour limits** (60 minutes /

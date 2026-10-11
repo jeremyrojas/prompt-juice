@@ -9,9 +9,13 @@ enum ResetFormatter {
             return "\(Int(seconds / 60))m"
         }
         if seconds < 24 * 60 * 60 {
-            return "\(Int(seconds / (60 * 60)))h"
+            let hours = Int(seconds / (60 * 60))
+            let minutes = Int(seconds / 60) % 60
+            return hours < 3 && minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
         }
-        return "\(Int(seconds / (24 * 60 * 60)))d"
+        let days = Int(seconds / (24 * 60 * 60))
+        let hours = Int(seconds / (60 * 60)) % 24
+        return days < 3 && hours > 0 ? "\(days)d \(hours)h" : "\(days)d"
     }
 
     static func text(until resetAt: Date, now: Date) -> String {

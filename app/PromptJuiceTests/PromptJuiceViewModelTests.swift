@@ -806,7 +806,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Codex · resets in 1h")
+        XCTAssertEqual(viewModel.detail, "Codex · resets in 1h 24m")
     }
 
     func testManualSubtitleGroupsProvidersWithSameResetBoundary() {
@@ -834,7 +834,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Claude and Codex reset in 1h")
+        XCTAssertEqual(viewModel.detail, "Claude and Codex reset in 1h 25m")
     }
 
     func testManualSubtitleUsesCodexResetWhenClaudeIsFresh() {
