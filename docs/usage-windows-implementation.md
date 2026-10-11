@@ -58,9 +58,9 @@ Unchanged, so the plan still applies: `ProviderSnapshot` is still `rateWindow` +
 left (`5-hour limit`, `Weekly`, `Fable`), values right (`83% left · resets in 2h`), thin flat bar
 below (4 px main, 3 px secondary). No chips. Layout is identical across states; only colour changes.
 
-**Colour grammar.** Green = healthy main bar. Grey = healthy secondary bar. Muted `#969CA6` = low
-(< 15 %), never an alert. Amber `#F0A32A` = use-soon only; on an amber row the reset text and bar
-turn amber, the percent stays white.
+**Colour grammar.** Green = healthy bars: bright on the main limit, subdued on extra limits. Muted
+`#969CA6` = low (< 15 %), empty or unavailable, never an alert. Amber `#F0A32A` = use-soon only;
+on an amber row the reset text and bar turn amber, the percent stays white.
 
 **Reset format.** Always `resets in <t>`, single largest unit, floored: under 1 h → minutes
 (`33m`), 1–24 h → hours (`23h`), 24 h and up → days (`5d`). No compound units, weekday names or
@@ -76,10 +76,11 @@ surfaces. Hidden windows are still measured: they can go amber, notify and surfa
 (`headerRemainingPercent`, `headerSeverity`, `headline`). Amber from any window turns them amber.
 One exception, **lockout**: when a limit that blocks the whole provider is exhausted — the
 all-models Weekly at 0 % — that provider reads as empty, because "Plenty of prompt juice left" while
-locked out would be false. A model-specific weekly (Fable) running out only mutes its own row; other
-models still work. Do not take the minimum across windows: a nearly-spent Fable must not make the
-whole app look empty (PR #38 tried `effectiveRemainingPercent = min(session, weekly)` and backed it
-out for this reason).
+locked out would be false. Every row on the locked provider is muted, and the header subtitle names
+the lockout end (`Weekly resets in 3d`). A model-specific weekly (Fable) running out only mutes its
+own row; other models still work. Do not take the minimum across windows: a nearly-spent Fable must
+not make the whole app look empty (PR #38 tried `effectiveRemainingPercent = min(session, weekly)`
+and backed it out for this reason).
 
 **Alerts.** Use-soon is the only alert, evaluated per window with per-cadence thresholds:
 5-hour `reset ≤ 60 min AND ≥ 40 % left`; weekly `reset ≤ 1 day AND ≥ 40 % left`. In-use guard: a

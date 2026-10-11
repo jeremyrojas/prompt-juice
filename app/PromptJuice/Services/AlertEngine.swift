@@ -15,7 +15,8 @@ struct AlertEngine {
         thresholds: AlertThresholds,
         now: Date = Date()
     ) -> Bool {
-        guard snapshot.confidence.canTriggerAlert,
+        guard !isLockedOut(snapshot, now: now),
+              snapshot.confidence.canTriggerAlert,
               window.rateWindow.isAvailable,
               let resetAt = window.rateWindow.resetAt,
               resetAt > now,

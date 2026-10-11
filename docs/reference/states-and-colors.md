@@ -8,11 +8,21 @@ Source: [`SeverityAppearance.swift`](../../app/PromptJuice/UI/SeverityAppearance
 
 | Token | Hex | Use |
 | --- | --- | --- |
-| `green` | `#5FD11F` | healthy main bar |
+| `green` | `#5FD11F` | healthy bars; bright for the main limit, subdued for extras |
 | `orange` | `#F0A32A` | use-soon reset text and bar |
 | `muted` | `#969CA6` | calm low, empty, or unavailable |
 
-Provider identity dots use `#FF9F0A` for Claude and `#32D4DE` for Codex. A healthy secondary bar is white at 22% opacity.
+Provider identity dots use `#FF9F0A` for Claude and `#32D4DE` for Codex. Healthy main bars brighten from leading to trailing: `#3FA512` at 0%, `#5FD11F` at 62%, and `#8BE24E` at 100%. Their soft glow uses `#5FD11F` at 38% opacity with a 5-point radius and zero offset. Healthy extra-limit bars stay flat green at 42% opacity with no glow.
+
+Every use-soon bar brightens from `#D9880F` at 0%, through `#F0A32A` at 58%, to `#FFC15E` at 100%. Its glow uses `#F0A32A` at 42% opacity with zero offset: a 6-point radius on the main row and 3 points on extra limits. The healthy main glow stays weaker than the amber main glow; amber remains the only nudge. Low, empty, unavailable, and provider-lockout rows stay flat muted at 72% opacity with no glow. These treatments have no animation.
+
+Computer-tested panel captures with Claude expanded and local fixture readings:
+
+| State | Before | After |
+| --- | --- | --- |
+| Healthy | ![Healthy before](images/limit-bars/healthy-before.png) | ![Healthy after](images/limit-bars/healthy-after.png) |
+| Use soon | ![Use soon before](images/limit-bars/use-soon-before.png) | ![Use soon after](images/limit-bars/use-soon-after.png) |
+| Weekly lockout | ![Lockout before](images/limit-bars/lockout-before.png) | ![Lockout after](images/limit-bars/lockout-after.png) |
 
 ## 2. Severity axis
 
@@ -23,14 +33,14 @@ Source: [`UsageSeverity.swift`](../../app/PromptJuice/Models/UsageSeverity.swift
 | `empty` | a window has 0% left | muted | — |
 | `useSoon` | reset is within its cadence threshold, enough remains, and at least 5% was used this cycle | orange | eligible |
 | `low` | a window has less than 15% left | muted | — |
-| `healthy` | other usable windows | green for the main bar, grey for secondary bars | — |
+| `healthy` | other usable windows | bright green for the main bar, subdued green for extra limits | — |
 | `unavailable` | no usable reading | muted | — |
 
 There are no status chips in measured cards. The percentage remains white on an amber row; its reset text and bar turn amber. Low stays calm.
 
 The 5-hour defaults are 60 minutes and 40% remaining, with 30/45/60/90 minute choices. Weekly defaults are 1 day and 40% remaining, with 12 hours / 1 day / 2 days / 3 days choices. Both percentage pickers offer 25/40/50/60%. Other Codex durations use the 5-hour pair below 1 day and the weekly pair from 1 day up.
 
-The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider and reads as empty; an exhausted model-specific weekly such as Fable mutes only its own row.
+The provider verdict and droplet fill follow the main (shortest-cadence) window. Any amber window turns the verdict and droplet amber. An exhausted all-models Weekly locks the provider: every row on its card becomes muted, and the header subtitle names when Weekly resets. An exhausted model-specific weekly such as Fable mutes only its own row.
 
 ## 3. Confidence and source
 
@@ -72,7 +82,7 @@ Freshness text has five tiers: just now, minutes ago, clock time today, yesterda
 
 ## 5. Rows and interaction
 
-Each measured provider card has a header and one row per visible limit. The rows show a label, remaining percentage, reset countdown, and flat 4-point main or 3-point secondary bar. Cards grow with their visible rows. The chevron expands or collapses each provider independently, and the choice survives relaunch. A hidden amber window appears while the card stays collapsed; a low window stays tucked away. Hidden windows still participate in alerts and notifications.
+Each measured provider card has a header and one row per visible limit. The rows show a label, remaining percentage, reset countdown, and 6-point main or 3-point secondary bar. The glow spills past the bar within the card padding; neither the bar frame nor the card shape clips it. Card height, panel height, and click routing share the same bar-height constants. Cards grow with their visible rows. The chevron expands or collapses each provider independently, and the choice survives relaunch. A hidden amber window appears while the card stays collapsed; a low window stays tucked away. Hidden windows still participate in alerts and notifications.
 
 Countdowns use the largest single unit, floored from the reset timestamp: minutes below 1 hour, hours below 24 hours, days thereafter. Claude prerequisite states can show a compact journey button. Measured provider rows stay display-only. The Settings row includes an information popover describing direct `/usage` reads, the local estimate, and the current state.
 

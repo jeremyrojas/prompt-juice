@@ -13,7 +13,7 @@ enum PromptJuicePanelMetrics {
     static let cardContentSpacing: CGFloat = 10
     static let windowLineHeight: CGFloat = 16
     static let windowBarSpacing: CGFloat = 5
-    static let mainBarHeight: CGFloat = 4
+    static let mainBarHeight: CGFloat = 6
     static let secondaryBarHeight: CGFloat = 3
 
     // Just-in-time notification prime banner. Shared by the view (layout) and
@@ -537,10 +537,34 @@ private struct LimitWindowRow: View {
         severity == .low || severity == .empty || severity == .unavailable
     }
 
-    private var fillColor: Color {
-        if severity == .useSoon { return JuicePalette.orange.opacity(0.90) }
-        if isMuted { return JuicePalette.muted.opacity(0.72) }
-        return isMain ? JuicePalette.green.opacity(0.85) : Color.white.opacity(0.22)
+    private var fillStyle: AnyShapeStyle {
+        if severity == .useSoon {
+            return AnyShapeStyle(LinearGradient(stops: [
+                .init(color: Color(red: 217 / 255, green: 136 / 255, blue: 15 / 255), location: 0),
+                .init(color: JuicePalette.orange, location: 0.58),
+                .init(color: Color(red: 1, green: 193 / 255, blue: 94 / 255), location: 1)
+            ], startPoint: .leading, endPoint: .trailing))
+        }
+        if isMuted { return AnyShapeStyle(JuicePalette.muted.opacity(0.72)) }
+        if isMain {
+            return AnyShapeStyle(LinearGradient(stops: [
+                .init(color: Color(red: 63 / 255, green: 165 / 255, blue: 18 / 255), location: 0),
+                .init(color: JuicePalette.green, location: 0.62),
+                .init(color: Color(red: 139 / 255, green: 226 / 255, blue: 78 / 255), location: 1)
+            ], startPoint: .leading, endPoint: .trailing))
+        }
+        return AnyShapeStyle(JuicePalette.green.opacity(0.42))
+    }
+
+    private var glowColor: Color {
+        if severity == .useSoon { return JuicePalette.orange.opacity(0.42) }
+        if isMain && severity == .healthy { return JuicePalette.green.opacity(0.38) }
+        return .clear
+    }
+
+    private var glowRadius: CGFloat {
+        if severity == .useSoon { return isMain ? 6 : 3 }
+        return isMain && severity == .healthy ? 5 : 0
     }
 
     var body: some View {
@@ -576,8 +600,10 @@ private struct LimitWindowRow: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.07))
                     Capsule()
-                        .fill(fillColor)
+                        .fill(fillStyle)
                         .frame(width: geometry.size.width * min(1, max(0, remaining / 100)))
+                        // Card padding leaves room for light outside the capsule.
+                        .shadow(color: glowColor, radius: glowRadius, x: 0, y: 0)
                 }
             }
             .frame(height: isMain
