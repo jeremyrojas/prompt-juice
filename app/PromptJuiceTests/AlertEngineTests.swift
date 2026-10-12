@@ -301,6 +301,72 @@ final class AlertEngineTests: XCTestCase {
         )
     }
 
+    func testShortLimitNudgeRequiresFivePercentWeeklyRemaining() {
+        for (weeklyRemaining, expected) in [(4.99, false), (5.0, true), (5.01, true)] {
+            let snapshot = makeSnapshot(
+                usedPercent: 20,
+                resetMinutesFromNow: 30,
+                weeklyUsedPercent: 100 - weeklyRemaining,
+                weeklyResetMinutesFromNow: 4 * 24 * 60,
+                confidence: .exact
+            )
+            XCTAssertEqual(engine.shouldUseSoon(
+                for: snapshot.windows[0], in: snapshot, thresholds: thresholds, now: now
+            ), expected, "Weekly remaining: \(weeklyRemaining)")
+        }
+    }
+
+    func testWeeklyFloorAppliesOnlyToShortCadences() {
+        let weekly = LimitWindow(
+            kind: .weekly,
+            rateWindow: .available(
+                usedPercent: 95.01,
+                resetAt: now.addingTimeInterval(30 * 60),
+                durationMinutes: 10_080
+            ),
+            updatedAt: now
+        )
+        for kind in [LimitWindow.Kind.other(180), .weekly, .weeklyModel("Fable")] {
+            let window = LimitWindow(
+                kind: kind,
+                rateWindow: .available(
+                    usedPercent: 20,
+                    resetAt: now.addingTimeInterval(30 * 60),
+                    durationMinutes: kind.durationMinutes
+                ),
+                updatedAt: now
+            )
+            let snapshot = ProviderSnapshot(
+                identity: .claude, windows: [window, weekly], source: .fixture,
+                confidence: .exact, updatedAt: now
+            )
+            XCTAssertEqual(engine.shouldUseSoon(
+                for: window, in: snapshot, thresholds: thresholds, now: now
+            ), kind.cadenceIsWeekly)
+        }
+        let snapshot = ProviderSnapshot(
+            identity: .claude, windows: [weekly], source: .fixture,
+            confidence: .exact, updatedAt: now
+        )
+        XCTAssertTrue(engine.shouldUseSoon(
+            for: weekly, in: snapshot,
+            thresholds: AlertThresholds(remainingMinutes: 60, remainingPercent: 1), now: now
+        ))
+    }
+
+    func testExpiredWeeklyDoesNotSuppressShortLimitNudge() {
+        let snapshot = makeSnapshot(
+            usedPercent: 20,
+            resetMinutesFromNow: 30,
+            weeklyUsedPercent: 95.01,
+            weeklyResetMinutesFromNow: 0,
+            confidence: .exact
+        )
+        XCTAssertTrue(engine.shouldUseSoon(
+            for: snapshot.windows[0], in: snapshot, thresholds: thresholds, now: now
+        ))
+    }
+
     func testWeeklyResetTimingTriggersUseSoon() {
         let snapshot = makeSnapshot(
             identity: .codex,

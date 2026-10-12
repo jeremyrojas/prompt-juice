@@ -236,6 +236,7 @@ private struct NotificationPrimeBanner: View {
 }
 
 private struct ProviderUsageRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let snapshot: UsageSnapshot
     @ObservedObject var viewModel: PromptJuiceViewModel
     let onClaudeJourney: (ClaudeGuidanceJourney) -> Void
@@ -273,6 +274,10 @@ private struct ProviderUsageRow: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.35))
                         .rotationEffect(.degrees(viewModel.expandedProviders.contains(snapshot.provider) ? 90 : 0))
+                        .animation(
+                            reduceMotion ? nil : .easeInOut(duration: 0.2),
+                            value: viewModel.expandedProviders.contains(snapshot.provider)
+                        )
                         .frame(width: 16, height: 16)
                         .accessibilityLabel(viewModel.expandedProviders.contains(snapshot.provider)
                             ? "Collapse \(snapshot.displayName) limits"
@@ -601,7 +606,9 @@ private struct LimitWindowRow: View {
                     Capsule().fill(Color.white.opacity(0.07))
                     Capsule()
                         .fill(fillStyle)
-                        .frame(width: geometry.size.width * min(1, max(0, remaining / 100)))
+                        .frame(width: remaining > 0
+                            ? max(geometry.size.height, geometry.size.width * min(1, remaining / 100))
+                            : 0)
                         // Card padding leaves room for light outside the capsule.
                         .shadow(color: glowColor, radius: glowRadius, x: 0, y: 0)
                 }

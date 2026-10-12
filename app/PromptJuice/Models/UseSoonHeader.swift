@@ -101,6 +101,10 @@ struct UseSoonHeader: Equatable {
             subtitle = "\(ranked.count) limits reset soon · "
                 + groupText([ranked[0]], forceProvider: true)
         }
+        if (subtitle as NSString).size(withAttributes: [.font: font]).width > maxSubtitleWidth {
+            subtitle = "\(ranked.count) limits reset soon · next in "
+                + ResetFormatter.duration(until: ranked[0].resetAt, now: now)
+        }
         return UseSoonHeader(title: title, subtitle: subtitle)
     }
 }

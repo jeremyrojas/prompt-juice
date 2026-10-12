@@ -21,6 +21,9 @@ enum UsageSeverity: Equatable {
     /// Matches the existing "Low" boundary used by `statusText`.
     static let lowRemainingFloor = 15
 
+    /// Short limits only nudge while the all-models Weekly has this much left.
+    static let shortLimitWeeklyRemainingFloor = 5
+
     /// Short chip label. `nil` means no chip is shown — the healthy state stays
     /// silent so the alerting states stand out.
     /// One-alert model: only `useSoon` (the orange "use it before it resets" nudge)

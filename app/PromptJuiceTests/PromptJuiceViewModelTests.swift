@@ -78,7 +78,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         )
     }
 
-    func testLockedOutProviderDoesNotAlertOrSurfaceCollapsedRows() throws {
+    func testOutProviderShowsWeeklyWhenCollapsedWithoutAlerting() throws {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         fixture.store.enabledProviders = [.claude]
@@ -97,7 +97,43 @@ final class PromptJuiceViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.shouldUseSoon(for: snapshot))
         XCTAssertFalse(viewModel.isWindowUseSoon(fable, in: snapshot))
         XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(viewModel.visibleWindows(for: snapshot).map(\.kind), [.fiveHour, .weekly])
+        XCTAssertEqual(viewModel.visibleWindowCounts, [2])
+        XCTAssertEqual(viewModel.visibleWindows(for: snapshot).map {
+            viewModel.windowSeverity($0, in: snapshot)
+        }, [.empty, .empty])
+    }
+
+    func testEmptyModelWeeklyStaysHiddenWhenCollapsed() throws {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.store.enabledProviders = [.claude]
+        let snapshot = ProviderSnapshot(
+            identity: .claude,
+            windows: [
+                Self.lockedOutClaudeSnapshot.windows[0],
+                LimitWindow(
+                    kind: .weeklyModel("Fable"),
+                    rateWindow: .available(
+                        usedPercent: 100,
+                        resetAt: Self.fixedNow.addingTimeInterval(3 * 24 * 60 * 60),
+                        durationMinutes: 10_080
+                    ),
+                    updatedAt: Self.fixedNow
+                )
+            ],
+            source: .fixture,
+            confidence: .exact,
+            updatedAt: Self.fixedNow
+        )
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store,
+            providerClient: StaticUsageProviderClient(snapshots: [snapshot]),
+            now: { Self.fixedNow }
+        )
         XCTAssertEqual(viewModel.visibleWindows(for: snapshot).map(\.kind), [.fiveHour])
+        XCTAssertTrue(viewModel.pendingUseSoonNotifications(now: Self.fixedNow).isEmpty)
+        XCTAssertEqual(viewModel.headline, "Plenty of prompt juice left")
     }
 
     func testCadenceSettingsChangeOnlyTheirWindows() {
@@ -806,7 +842,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Codex · resets in 1h")
+        XCTAssertEqual(viewModel.detail, "Codex · resets in 1h 24m")
     }
 
     func testManualSubtitleGroupsProvidersWithSameResetBoundary() {
@@ -834,7 +870,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
         viewModel.showManualCheck()
 
-        XCTAssertEqual(viewModel.detail, "Claude and Codex reset in 1h")
+        XCTAssertEqual(viewModel.detail, "Claude and Codex reset in 1h 25m")
     }
 
     func testManualSubtitleUsesCodexResetWhenClaudeIsFresh() {
