@@ -199,7 +199,6 @@ scripts/               Build, run, icon, and Claude capture helpers
 
 - [Product overview](docs/prompt-juice.md)
 - [Provider integrations](docs/provider-integrations.md)
-- [Claude `/usage` UI implementation](docs/claude-usage-ui-implementation.md)
 - [Usage state board](design/prompt-juice-states.html)
 
 ## License
