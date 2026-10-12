@@ -55,29 +55,33 @@ Unchanged, so the plan still applies: `ProviderSnapshot` is still `rateWindow` +
 ## 3. The spec in brief (full detail and visuals in the HTML spec)
 
 **Rows.** Provider card = small header (dot + name + chevron) and one row per visible window: label
-left (`5-hour limit`, `Weekly`, `Fable`), values right (`83% left · resets in 2h`), thin flat bar
-below (4 px main, 3 px secondary). No chips. Layout is identical across states; only colour changes.
+left (`5-hour limit`, `Weekly`, `Fable`), values right (`83% left · resets in 2h`), bar below (6 pt main, 3 pt secondary). Main healthy and all use-soon bars have the
+gradients and soft glow described in the states-and-colors reference. Every positive fill is at
+least as wide as its bar height, so tiny amounts retain the capsule shape; 0% has no fill. No chips. Layout is identical across states; only colour changes.
 
 **Colour grammar.** Green = healthy bars: bright on the main limit, subdued on extra limits. Muted
 `#969CA6` = low (< 15 %), empty or unavailable, never an alert. Amber `#F0A32A` = use-soon only;
 on an amber row the reset text and bar turn amber, the percent stays white.
 
-**Reset format.** Always `resets in <t>`, single largest unit, floored: under 1 h → minutes
-(`33m`), 1–24 h → hours (`23h`), 24 h and up → days (`5d`). No compound units, weekday names or
-dates. One pure function shared by rows, header, notifications and the Settings status line.
+**Reset format.** Always `resets in <t>`, floored: under 1 h → minutes (`33m`);
+1 to under 3 h → hours and remaining minutes (`1h 30m`); 3 to under 24 h → hours (`5h`);
+1 to under 3 days → days and remaining hours (`1d 12h`); 3 days up → days (`6d`).
+Zero remainders are omitted (`2h`, `2d`). One pure function shared by rows, header, notifications and the Settings status line.
 
 **Disclosure.** Collapsed by default: each provider shows its shortest-cadence window (Claude
 5-hour; Codex 5-hour where the plan has one, otherwise Weekly). Chevron expands/collapses; the
 choice is remembered per provider. An amber window surfaces through a collapsed card — also live,
 while the panel is open — without expanding the rest or overwriting the saved choice. Low never
-surfaces. Hidden windows are still measured: they can go amber, notify and surface.
+surfaces. When the all-models Weekly reaches 0%, it also appears as a muted row in the collapsed
+card. An empty model-specific weekly stays tucked away. Claude deliberately keeps its chevron
+even with one measured limit. Hidden windows are still measured: they can go amber, notify and surface.
 
 **Droplet and verdict.** Both follow each provider's *main* window, exactly as today
 (`headerRemainingPercent`, `headerSeverity`, `headline`). Amber from any window turns them amber.
-One exception, **lockout**: when a limit that blocks the whole provider is exhausted — the
+One exception, **provider is out**: when a limit that blocks the whole provider is exhausted — the
 all-models Weekly at 0 % — that provider reads as empty, because "Plenty of prompt juice left" while
-locked out would be false. Every row on the locked provider is muted, and the header subtitle names
-the lockout end (`Weekly resets in 3d`). A model-specific weekly (Fable) running out only mutes its
+the provider is out would be false. Every row on that provider is muted, and the header subtitle names
+the Weekly reset (`Weekly resets in 3d`). A model-specific weekly (Fable) running out only mutes its
 own row; other models still work. Do not take the minimum across windows: a nearly-spent Fable must
 not make the whole app look empty (PR #38 tried `effectiveRemainingPercent = min(session, weekly)`
 and backed it out for this reason).
@@ -85,6 +89,10 @@ and backed it out for this reason).
 **Alerts.** Use-soon is the only alert, evaluated per window with per-cadence thresholds:
 5-hour `reset ≤ 60 min AND ≥ 40 % left`; weekly `reset ≤ 1 day AND ≥ 40 % left`. In-use guard: a
 window fires only if it was actually used this cycle (≥ 5 % used), so an untouched limit never nags.
+The all-models Weekly at 0% suppresses every nudge for that provider. An active all-models
+Weekly under 5% also suppresses nudges on short cadences; at 5% or above their normal thresholds
+apply. Weekly-cadence nudges keep their existing rules. Low limits add no notification, header
+mention, or color.
 
 **Header (one voice).** Rank amber windows by soonest reset (tie → more remaining). Title = the
 narrowest scope covering all of them. A lone model window is named in the title (`Use your Fable
@@ -94,7 +102,8 @@ juice` / `Weekly · 43% left · resets in 3h`). Several windows in one provider 
 juice`; across providers use `Use your juice`. Subtitle lists soonest first, coalesces same-reset
 windows in row order (`Weekly & Fable reset in 23h`), every group keeps its verb. If more than two
 groups, or the line would not fit, use the count form: `5 limits reset soon · Claude 5-hour resets
-in 33m`. Never ellipsize. Low states get no header mention. Simultaneous ambers produce one
+in 33m`. The width limit is 272 points. If naming even the soonest window exceeds that width,
+use `2 limits reset soon · next in 1h 30m`. Never ellipsize. Low states get no header mention. Simultaneous ambers produce one
 notification.
 
 **Settings.** `Use the juice` has two groups named by cadence — **5-hour limits** (60 minutes /

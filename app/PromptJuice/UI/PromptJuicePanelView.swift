@@ -601,7 +601,9 @@ private struct LimitWindowRow: View {
                     Capsule().fill(Color.white.opacity(0.07))
                     Capsule()
                         .fill(fillStyle)
-                        .frame(width: geometry.size.width * min(1, max(0, remaining / 100)))
+                        .frame(width: remaining > 0
+                            ? max(geometry.size.height, geometry.size.width * min(1, remaining / 100))
+                            : 0)
                         // Card padding leaves room for light outside the capsule.
                         .shadow(color: glowColor, radius: glowRadius, x: 0, y: 0)
                 }
