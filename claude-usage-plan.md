@@ -10,7 +10,7 @@
 > in that specification.
 
 Status: required phases 0–8 completed on 2026-07-21; retained as the migration record
-Worktree: `/Users/jeremyrojas/worktrees/prompt-juice/claude-usage`  
+Worktree: `~/worktrees/prompt-juice/claude-usage`  
 Branch: `codex/claude-usage`  
 Base: `origin/main` at `4d349d1`  
 Last reviewed: 2026-07-19
@@ -600,7 +600,7 @@ Copy and send the prompt below to Claude. This is a read-only design/copy assign
 You are revising the PromptJuice macOS UI and product copy for a planned Claude usage-source migration.
 
 Repository/worktree:
-/Users/jeremyrojas/worktrees/prompt-juice/claude-usage
+~/worktrees/prompt-juice/claude-usage
 
 Product:
 PromptJuice is a native Swift macOS menu-bar app. Its Juice Bar shows Claude and Codex quota windows, reset timing, confidence/source information, and optional “use your juice” notifications.

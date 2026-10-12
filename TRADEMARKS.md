@@ -1,7 +1,7 @@
 # PromptJuice Trademarks
 
 The PromptJuice name, logo, app icon, and other brand identifiers are the
-trademarks of Jeremy Rojas.
+trademarks of Jeremy Devz.
 
 You may use these marks to identify unmodified copies of the official
 PromptJuice software. Modified versions and derivative products should use a

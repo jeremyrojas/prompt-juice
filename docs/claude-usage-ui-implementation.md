@@ -16,7 +16,7 @@ section 9. Phase 4 is the next implementation slice. B5 no longer gates public r
 superseded decisions (minimum 2.1.181, classic-TUI fallback, Advanced pickers, updateRecommended,
 bridge needsReview, the old state models) as replaced by this document.
 
-Paths relative to worktree root `/Users/jeremyrojas/worktrees/prompt-juice/claude-usage`
+Paths relative to worktree root `~/worktrees/prompt-juice/claude-usage`
 (base `4d349d1`). Line numbers are anchors, not guarantees.
 
 ## Goal-level execution policies (binding overrides)
