@@ -4,7 +4,7 @@ PromptJuice is a native macOS menu-bar utility for keeping Claude and Codex
 usage windows visible at the moment they matter.
 
 The menu-bar droplet shows remaining session capacity. Opening it reveals the
-Juice Bar with provider percentages, reset countdowns, and reading confidence.
+Juicebar with provider percentages, reset countdowns, and reading confidence.
 The panel opens near the top of the current display and can be pinned, dragged,
 and restored to its saved position.
 
@@ -116,10 +116,10 @@ All PromptJuice processing and caches live on the user's Mac:
 ## Current Preview Behavior
 
 - Runs as a macOS accessory app with a menu-bar droplet.
-- Shows Claude and Codex session rows in the Juice Bar.
+- Shows Claude and Codex session rows in the Juicebar.
 - Uses live providers in the app and fixture providers in tests and previews.
 - Displays source confidence through row details and tooltips.
-- Opens the Juice Bar from the menu-bar droplet or a notification tap.
+- Opens the Juicebar from the menu-bar droplet or a notification tap.
 - Supports anchored, pinned, and draggable panel behavior.
 - Uses native notifications for the orange use-soon window.
 
