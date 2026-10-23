@@ -5,6 +5,7 @@ import os
 import stat
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -223,7 +224,12 @@ class SanitizerTests(unittest.TestCase):
                     b'prefix "credentials":[123456789]',
                     b'prefix "to\\u006ben":123456789',
                     b'prefix "token":true',
-                    b'prefix "token":null'):
+                    b'prefix "token":null',
+                    b'  "token":123456789',
+                    b'\t"password":24681357',
+                    b'prefix: "token":123456789',
+                    b'  "to\\u006ben":123456789',
+                    b'  "credentials":[123456789]'):
             with self.subTest(raw=raw):
                 with self.assertRaises(sanitize_capture.SanitizationError):
                     sanitize_capture.sanitize_bytes(raw, usernames=())
@@ -234,6 +240,14 @@ class SanitizerTests(unittest.TestCase):
                     path.write_bytes(raw)
                     with self.assertRaises(sanitize_capture.SanitizationError):
                         sanitize_capture.check_file(path)
+
+    def test_long_escaped_quote_json_is_processed_without_rescanning(self):
+        value = {"note": 'a"' * 10_000}
+        raw = json.dumps(value).encode()
+        started = time.monotonic()
+        safe, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(json.loads(safe), value)
 
     def test_json_region_markers_cannot_collide_with_capture_content(self):
         raw = '\ufdd00\ufdd1 public ["safe"]\nWelcome back ["Private Person"]!'.encode()

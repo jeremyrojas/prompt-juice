@@ -225,14 +225,14 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
         next_marker = 0
         # Quoted scalars are JSON-shaped at the start of a line or after an
         # assignment delimiter. Ordinary prose quotes stay with plaintext rules.
-        candidates = re.finditer(
-            r'(?P<member>"(?:[^"\\\r\n]|\\[^\r\n])*"\s*:)|'
-            r'[\{\[]|(?m:^[ \t]*")|(?<=[=:])[ \t]*"', source
+        candidates = re.compile(
+            r'(?P<member_end>"\s*:)|'
+            r'[\{\[]|(?m:^[ \t]*")|(?<=[=:])[ \t]*"'
         )
-        for match in candidates:
-            if match.start() < cursor:
-                continue
-            if match.group("member") is not None:
+        search_at = 0
+        while (match := candidates.search(source, search_at)) is not None:
+            search_at = match.end()
+            if match.group("member_end") is not None:
                 raise SanitizationError("capture contains a JSON member without an object")
             start = match.end() - 1
             if source[start] == "[":
@@ -249,6 +249,8 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
             except ValueError as error:
                 raise SanitizationError("capture contains malformed JSON") from error
             end = start + length
+            if isinstance(node, str) and source[end:].lstrip().startswith(":"):
+                raise SanitizationError("capture contains a JSON member without an object")
             parts.append(prefix)
             marker = f"\ufdd0{next_marker}\ufdd1"
             while marker in reserved_markers:
@@ -264,6 +266,7 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
                 raise SanitizationError("capture JSON nesting exceeds sanitizer limit") from error
             parts.append(marker)
             cursor = end
+            search_at = end
         parts.append(source[cursor:])
         # Keep every existing plaintext rule's surrounding context intact. A
         # redacted region loses its marker and must never be restored afterward.
