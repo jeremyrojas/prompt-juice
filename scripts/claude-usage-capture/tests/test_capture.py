@@ -114,6 +114,10 @@ class SanitizerTests(unittest.TestCase):
     def test_plaintext_sensitive_assignments_redact_entire_json_values(self):
         samples = (
             b'token=["short-secret"]',
+            b'token=prefix["short-secret"]',
+            b'Account:[INFO]["short-secret"]',
+            b'Authorization: Bearer ["short-secret"]',
+            b'credentials=prefix {"value":"short-secret"}',
             b'Account:["short-secret"]',
             b'Account: ["short-secret"]',
             b'Authorization:["short-secret"]',
@@ -141,6 +145,14 @@ class SanitizerTests(unittest.TestCase):
                     sanitize_capture.check_file(path)
                     if b"Session 42% used" in raw:
                         self.assertIn(b"Session 42% used", safe)
+
+    def test_completed_assignment_does_not_claim_next_line_json(self):
+        for raw in (b'token=short-secret\n["public-usage"]',
+                    b'Account: short-secret\n{"usage":"public-usage"}'):
+            safe, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+            self.assertNotIn(b"short-secret", safe)
+            self.assertIn(b"public-usage", safe)
+            self.assertFalse(sanitize_capture.sensitive_findings(safe.decode(), usernames=()))
 
     def test_malformed_arrays_and_quoted_scalars_fail_closed(self):
         samples = (

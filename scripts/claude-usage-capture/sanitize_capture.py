@@ -52,7 +52,7 @@ SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"(?P<value>(?!\s*\[REDACTED_[A-Z_]+\]\s*$)[^\r\n]+)"
 )
 SENSITIVE_ASSIGNMENT_PREFIX_RE = re.compile(
-    rf"(?i)\b[a-z0-9_.-]*{SENSITIVE_KEY_FRAGMENT}[a-z0-9_.-]*\s*[:=]\s*$"
+    rf"(?i)\b[a-z0-9_.-]*{SENSITIVE_KEY_FRAGMENT}[a-z0-9_.-]*\s*[:=](?:[^\r\n]*|\s*)\Z"
 )
 SENSITIVE_LABEL_RE = re.compile(
     rf"(?im)(?P<prefix>^\s*{SENSITIVE_KEY_FRAGMENT}\s*:\s*)(?P<value>(?!\s*\[REDACTED_)[^\r\n]+)$"
