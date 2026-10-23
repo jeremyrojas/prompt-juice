@@ -111,6 +111,71 @@ class SanitizerTests(unittest.TestCase):
         self.assertNotIn(b"private", sanitized)
         self.assertNotIn(b"suffix", sanitized)
 
+    def test_plaintext_sensitive_assignments_redact_entire_json_values(self):
+        samples = (
+            b'token=["short-secret"]',
+            b'Account:["short-secret"]',
+            b'Account: ["short-secret"]',
+            b'Authorization:["short-secret"]',
+            b'Account:\n ["short-secret"]',
+            b'credentials={"value":"short-secret"}',
+            b'token = [\n  "short-secret"\n] trailing-private-suffix\nSession 42% used\n',
+            b'credentials: {\n  "value": ["short-secret"]\n} trailing-private-suffix',
+            b'Authorization: "short-secret" trailing-private-suffix',
+            b'to\x1b[31mken=["short-secret"]',
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture"
+            for raw in samples:
+                with self.subTest(raw=raw):
+                    self.assertTrue(sanitize_capture.sensitive_findings(raw.decode(), usernames=()))
+                    path.write_bytes(raw)
+                    with self.assertRaises(sanitize_capture.SanitizationError):
+                        sanitize_capture.check_file(path)
+                    safe, report = sanitize_capture.sanitize_bytes(raw, usernames=())
+                    self.assertNotIn(b"short-secret", safe)
+                    self.assertNotIn(b"trailing-private-suffix", safe)
+                    self.assertGreater(sum(report.replacements.values()), 0)
+                    self.assertFalse(sanitize_capture.sensitive_findings(safe.decode(), usernames=()))
+                    path.write_bytes(safe)
+                    sanitize_capture.check_file(path)
+                    if b"Session 42% used" in raw:
+                        self.assertIn(b"Session 42% used", safe)
+
+    def test_malformed_arrays_and_quoted_scalars_fail_closed(self):
+        samples = (
+            b'["person\\u0040example.test"',
+            b'"person\\u0040example.test',
+            b'terminal output\n["person\\u0040example.test"',
+            b'terminal output\n"person\\u0040example.test',
+            b'message="person\\u0040example.test',
+            b'token=["short-secret"',
+            b'credentials={"value":"short-secret"',
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture"
+            for raw in samples:
+                with self.subTest(raw=raw):
+                    with self.assertRaises(sanitize_capture.SanitizationError):
+                        sanitize_capture.sanitize_bytes(raw, usernames=())
+                    with self.assertRaises(sanitize_capture.SanitizationError):
+                        sanitize_capture.sensitive_findings(raw.decode(), usernames=())
+                    path.write_bytes(raw)
+                    with self.assertRaises(sanitize_capture.SanitizationError):
+                        sanitize_capture.check_file(path)
+        for raw in (b'["person\\u0040example.test"]',
+                    b'"person\\u0040example.test"',
+                    b'message="person\\u0040example.test"'):
+            safe, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+            self.assertNotIn(b"person", safe)
+            self.assertFalse(sanitize_capture.sensitive_findings(safe.decode(), usernames=()))
+
+    def test_plaintext_terminal_labels_and_prose_quotes_are_preserved(self):
+        raw = b'[Screen Reader Mode: on via flag]\n[INFO] Usage available\nSession 42% used\nIt says "Usage ready" now.\n/usage\n'
+        safe, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+        self.assertEqual(safe, raw)
+        self.assertFalse(sanitize_capture.sensitive_findings(raw.decode(), usernames=()))
+
     def test_sanitize_file_rejects_symlink_and_writes_mode_0600(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

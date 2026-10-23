@@ -51,6 +51,9 @@ SENSITIVE_ASSIGNMENT_RE = re.compile(
     rf"(?im)(?P<prefix>\b[a-z0-9_.-]*{SENSITIVE_KEY_FRAGMENT}[a-z0-9_.-]*\s*[:=]\s*)"
     r"(?P<value>(?!\s*\[REDACTED_[A-Z_]+\]\s*$)[^\r\n]+)"
 )
+SENSITIVE_ASSIGNMENT_PREFIX_RE = re.compile(
+    rf"(?i)\b[a-z0-9_.-]*{SENSITIVE_KEY_FRAGMENT}[a-z0-9_.-]*\s*[:=]\s*$"
+)
 SENSITIVE_LABEL_RE = re.compile(
     rf"(?im)(?P<prefix>^\s*{SENSITIVE_KEY_FRAGMENT}\s*:\s*)(?P<value>(?!\s*\[REDACTED_)[^\r\n]+)$"
 )
@@ -216,34 +219,46 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
         return node
 
     def process(source: str) -> str:
-        if source.lstrip().startswith('"'):
-            try:
-                decoded = json.loads(source)
-            except (ValueError, RecursionError):
-                decoded = None
-            if isinstance(decoded, str):
-                return json.dumps(visit(decoded), ensure_ascii=True)
         parts = []
         cursor = 0
         decoder = json.JSONDecoder()
-        for match in re.finditer(r"[\{\[]", source):
-            start = match.start()
+        # Quoted scalars are JSON-shaped at the start of a line or after an
+        # assignment delimiter. Ordinary prose quotes stay with plaintext rules.
+        candidates = re.finditer(r'[\{\[]|(?m:^[ \t]*")|(?<=[=:])[ \t]*"', source)
+        for match in candidates:
+            start = match.end() - 1
             if start < cursor:
                 continue
+            if source[start] == "[":
+                # Terminal color sequences and word labels are not JSON arrays.
+                if start > 0 and ANSI_RE.match(source, start - 1):
+                    continue
+                if re.match(r'\[[^\[\]"{}\\\r\n]*\]', source[start:]):
+                    continue
+            prefix = source[cursor:start]
             try:
                 node, length = decoder.raw_decode(source[start:])
             except RecursionError as error:
                 raise SanitizationError("capture JSON nesting exceeds sanitizer limit") from error
             except ValueError as error:
-                if source[start] == "{":
-                    raise SanitizationError("capture contains malformed JSON") from error
+                raise SanitizationError("capture contains malformed JSON") from error
+            end = start + length
+            if SENSITIVE_ASSIGNMENT_PREFIX_RE.search(prefix):
+                # The key and structured value form one sensitive field. Keep
+                # them together, including multiline values and quoted suffixes.
+                line_end = source.find("\n", end)
+                if line_end == -1:
+                    line_end = len(source)
+                counts["sensitive-field"] += 1
+                parts.append(plain(prefix + "[REDACTED_FIELD]"))
+                cursor = line_end
                 continue
-            parts.append(plain(source[cursor:start]))
+            parts.append(plain(prefix))
             try:
                 parts.append(json.dumps(visit(node), ensure_ascii=True, separators=(",", ":")))
             except RecursionError as error:
                 raise SanitizationError("capture JSON nesting exceeds sanitizer limit") from error
-            cursor = start + length
+            cursor = end
         parts.append(plain(source[cursor:]))
         return "".join(parts)
 
