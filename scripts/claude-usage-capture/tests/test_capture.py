@@ -71,12 +71,45 @@ class SanitizerTests(unittest.TestCase):
         with self.assertRaises(sanitize_capture.SanitizationError):
             sanitize_capture.sanitize_bytes(b"x" * (sanitize_capture.MAX_CAPTURE_BYTES + 1))
 
-    def test_rejects_unexpected_sensitive_json_container(self):
-        raw = b'{"loggedIn":true,"credentials":{"futureShape":"opaque"}}\n'
-        with self.assertRaisesRegex(
-            sanitize_capture.SanitizationError, "unexpected sensitive structure"
-        ):
-            sanitize_capture.sanitize_bytes(raw, usernames=("sample-user",))
+    def test_decodes_sensitive_json_keys_values_and_containers(self):
+        raw = b'{"to\\u006ben":"short\\\"suffix","nested":[{"credentials":{"future":"private"}}],"email":"person\\u0040example.test"}'
+        sanitized, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+        decoded = json.loads(sanitized)
+        self.assertEqual(decoded["token"], "[REDACTED_FIELD]")
+        self.assertEqual(decoded["nested"][0]["credentials"], "[REDACTED_FIELD]")
+        self.assertNotIn(b"suffix", sanitized)
+        self.assertNotIn(b"private", sanitized)
+        self.assertTrue(sanitize_capture.sensitive_findings(raw.decode(), usernames=()))
+        self.assertFalse(sanitize_capture.sensitive_findings(sanitized.decode(), usernames=()))
+
+    def test_redacts_quoted_plaintext_suffixes_and_ansi_split_keys(self):
+        for raw in (b'token="short\\"private suffix"\n',
+                    b'to\x1b[31mken=short-secret\n',
+                    b'{"to\x1b[31mken":"private"}',
+                    b'email=person@exam\x1b[0mple.test\n'):
+            with self.subTest(raw=raw):
+                sanitized, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+                self.assertNotIn(b"private", sanitized)
+                self.assertNotIn(b"short-secret", sanitized)
+                self.assertNotIn(b"person", sanitized)
+                self.assertFalse(sanitize_capture.sensitive_findings(sanitized.decode(), usernames=()))
+
+    def test_check_uses_decoded_json_validation_and_rejects_malformed_json(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture"
+            for raw in (b'{"to\\u006ben":"short"}', b'{"to\\u006ben":"short",'):
+                path.write_bytes(raw)
+                with self.assertRaises(sanitize_capture.SanitizationError):
+                    sanitize_capture.check_file(path)
+            safe, _ = sanitize_capture.sanitize_bytes(b'{"to\\u006ben":"short"}')
+            path.write_bytes(safe)
+            sanitize_capture.check_file(path)
+
+    def test_escaped_terminal_codes_and_json_inside_values_are_redacted(self):
+        raw = json.dumps({"to\x1b[31mken": "private", "data": json.dumps({"token": "suffix"})}).encode()
+        sanitized, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+        self.assertNotIn(b"private", sanitized)
+        self.assertNotIn(b"suffix", sanitized)
 
     def test_sanitize_file_rejects_symlink_and_writes_mode_0600(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -279,6 +312,10 @@ class FixtureInventoryTests(unittest.TestCase):
                 continue
             path = FIXTURE_ROOT / entry["path"]
             text = path.read_bytes().decode("utf-8", errors="surrogateescape")
+            if entry["path"] == "Auth/malformed.json":
+                with self.assertRaises(sanitize_capture.SanitizationError):
+                    sanitize_capture.sensitive_findings(text, usernames=("fixture-user",))
+                continue
             self.assertEqual(
                 sanitize_capture.sensitive_findings(text, usernames=("fixture-user",)),
                 [],

@@ -788,6 +788,7 @@ final class PromptJuiceViewModel: ObservableObject {
         settingsStore.enabledProviders = enabledProviders
         self.enabledProviders = settingsStore.enabledProviders
         refreshModeForThresholds()
+        refreshUsageQuietly(reason: .launch)
     }
 
     func refreshUsage() {
@@ -966,7 +967,8 @@ final class PromptJuiceViewModel: ObservableObject {
 
     private func refreshClaudeOnTimerIfNeeded() {
         let checkDate = now()
-        guard activeRefreshID == nil,
+        guard !isFirstRun,
+              activeRefreshID == nil,
               claudeTimerRefreshTask == nil,
               shouldRefreshLiveProvidersIndependently,
               let claudeUsageCoordinator,
@@ -1407,6 +1409,7 @@ final class PromptJuiceViewModel: ObservableObject {
         completionMessage: String?,
         completion: RefreshCompletion?
     ) -> (id: UUID, date: Date)? {
+        guard !isFirstRun else { return nil }
         if activeRefreshID != nil {
             hasPendingRefresh = true
             pendingClaudeRefreshReason = Self.preferredRefreshReason(
@@ -1472,12 +1475,13 @@ final class PromptJuiceViewModel: ObservableObject {
         let codexProviderClient = liveCodexProviderClient
         let claudeUsageCoordinator = claudeUsageCoordinator
         let claudeProviderEnabled = enabledProviders.contains(.claude)
+        let codexProviderEnabled = enabledProviders.contains(.codex)
         let networkOnline = isNetworkOnline
 
         refreshTask = Task.detached(priority: .userInitiated) { [weak self] in
             var claudeScheduleDecision: ClaudeUsageScheduleDecision?
             await withTaskGroup(of: LiveProviderRefreshResult.self) { group in
-                if let claudeUsageCoordinator {
+                if claudeProviderEnabled, let claudeUsageCoordinator {
                     group.addTask {
                         PromptJuiceLog.usage.debug("Claude usage coordinator refresh started")
                         let state = await claudeUsageCoordinator.snapshot(
@@ -1489,7 +1493,7 @@ final class PromptJuiceViewModel: ObservableObject {
                         )
                         return .claudeCoordinator(state)
                     }
-                } else if let claudeProviderClient {
+                } else if claudeProviderEnabled, let claudeProviderClient {
                     group.addTask {
                         PromptJuiceLog.usage.debug("Live Claude refresh task started")
                         return .claudeSnapshot(
@@ -1498,12 +1502,14 @@ final class PromptJuiceViewModel: ObservableObject {
                         )
                     }
                 }
-                group.addTask {
-                    PromptJuiceLog.usage.debug("Live Codex refresh task started")
-                    return .codexSnapshot(
-                        codexProviderClient.snapshots(now: refreshDate)
-                            .first { $0.provider == .codex }
-                    )
+                if codexProviderEnabled {
+                    group.addTask {
+                        PromptJuiceLog.usage.debug("Live Codex refresh task started")
+                        return .codexSnapshot(
+                            codexProviderClient.snapshots(now: refreshDate)
+                                .first { $0.provider == .codex }
+                        )
+                    }
                 }
 
                 for await result in group {

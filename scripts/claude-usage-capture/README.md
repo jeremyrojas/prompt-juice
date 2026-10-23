@@ -13,8 +13,13 @@ directly to private files. The terminal process receives one allowlisted byte se
 
 The sanitizer redacts and checks credentials, tokens, emails, account and organization IDs,
 UUIDs, usernames, home and absolute paths, sensitive labeled fields, and long opaque values.
-It preserves ANSI/control bytes, timestamps, timezone spelling, labels, whitespace, and other
-terminal structure. A residual sensitive shape rejects the capture.
+JSON objects and arrays (including embedded terminal JSON) are decoded before recursive
+redaction, and sensitive fields are replaced in full regardless of their value type. JSON
+is serialized safely; ANSI formatting that conceals sensitive text is removed. Ordinary
+terminal formatting and usage timestamps are retained where possible. Both `sanitize` and
+`check` use the same decoded analysis; malformed JSON and residual sensitive shapes reject
+the capture. This is conservative shape-based redaction, not a guarantee that arbitrary
+free text contains no private data. Review sanitized artifacts before sharing them.
 
 Run the synthetic tests first:
 
