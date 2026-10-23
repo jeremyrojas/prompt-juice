@@ -188,6 +188,57 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(safe, raw)
         self.assertFalse(sanitize_capture.sensitive_findings(raw.decode(), usernames=()))
 
+    def test_plaintext_context_rules_cover_embedded_json_regions(self):
+        samples = (
+            b'Welcome back ["Private Person"]!',
+            b'Welcome back {"name":"Private Person"}!',
+            b'MCP servers % of usage\n["Private Tool"] 16%\n',
+            b'MCP servers % of usage\n{"name":"Private Tool"} 16%\n',
+            b'16% came from MCP server "["Private Tool"]"\n',
+            b'Bearer ["short-secret"]',
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture"
+            for raw in samples:
+                with self.subTest(raw=raw):
+                    self.assertTrue(sanitize_capture.sensitive_findings(raw.decode(), usernames=()))
+                    path.write_bytes(raw)
+                    with self.assertRaises(sanitize_capture.SanitizationError):
+                        sanitize_capture.check_file(path)
+                    safe, report = sanitize_capture.sanitize_bytes(raw, usernames=())
+                    for private in (b"Private Person", b"Private Tool", b"short-secret"):
+                        self.assertNotIn(private, safe)
+                    self.assertGreater(sum(report.replacements.values()), 0)
+                    self.assertFalse(sanitize_capture.sensitive_findings(safe.decode(), usernames=()))
+                    path.write_bytes(safe)
+                    sanitize_capture.check_file(path)
+
+    def test_quoted_json_member_fragments_fail_closed(self):
+        for raw in (b'"token":"short-secret"',
+                    b'"to\\u006ben":"short-secret"',
+                    b'prefix "token":"short-secret"',
+                    b'"credentials":{"value":"short-secret"}'):
+            with self.subTest(raw=raw):
+                with self.assertRaises(sanitize_capture.SanitizationError):
+                    sanitize_capture.sanitize_bytes(raw, usernames=())
+                with self.assertRaises(sanitize_capture.SanitizationError):
+                    sanitize_capture.sensitive_findings(raw.decode(), usernames=())
+                with tempfile.TemporaryDirectory() as temporary:
+                    path = Path(temporary) / "capture"
+                    path.write_bytes(raw)
+                    with self.assertRaises(sanitize_capture.SanitizationError):
+                        sanitize_capture.check_file(path)
+
+    def test_json_region_markers_cannot_collide_with_capture_content(self):
+        raw = '\ufdd00\ufdd1 public ["safe"]\nWelcome back ["Private Person"]!'.encode()
+        safe, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+        self.assertIn('\ufdd00\ufdd1 public ["safe"]'.encode(), safe)
+        self.assertNotIn(b"Private Person", safe)
+        self.assertFalse(sanitize_capture.sensitive_findings(safe.decode(), usernames=()))
+        raw = json.dumps({"note": "\ufdd00\ufdd1", "array": ["safe"]}).encode()
+        safe, _ = sanitize_capture.sanitize_bytes(raw, usernames=())
+        self.assertEqual(json.loads(safe), json.loads(raw))
+
     def test_sanitize_file_rejects_symlink_and_writes_mode_0600(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
