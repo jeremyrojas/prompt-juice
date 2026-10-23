@@ -217,7 +217,13 @@ class SanitizerTests(unittest.TestCase):
         for raw in (b'"token":"short-secret"',
                     b'"to\\u006ben":"short-secret"',
                     b'prefix "token":"short-secret"',
-                    b'"credentials":{"value":"short-secret"}'):
+                    b'"credentials":{"value":"short-secret"}',
+                    b'prefix "password":24681357',
+                    b'prefix "token":123456789',
+                    b'prefix "credentials":[123456789]',
+                    b'prefix "to\\u006ben":123456789',
+                    b'prefix "token":true',
+                    b'prefix "token":null'):
             with self.subTest(raw=raw):
                 with self.assertRaises(sanitize_capture.SanitizationError):
                     sanitize_capture.sanitize_bytes(raw, usernames=())

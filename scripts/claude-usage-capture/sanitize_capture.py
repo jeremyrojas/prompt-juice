@@ -225,11 +225,16 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
         next_marker = 0
         # Quoted scalars are JSON-shaped at the start of a line or after an
         # assignment delimiter. Ordinary prose quotes stay with plaintext rules.
-        candidates = re.finditer(r'[\{\[]|(?m:^[ \t]*")|(?<=[=:])[ \t]*"', source)
+        candidates = re.finditer(
+            r'(?P<member>"(?:[^"\\\r\n]|\\[^\r\n])*"\s*:)|'
+            r'[\{\[]|(?m:^[ \t]*")|(?<=[=:])[ \t]*"', source
+        )
         for match in candidates:
-            start = match.end() - 1
-            if start < cursor:
+            if match.start() < cursor:
                 continue
+            if match.group("member") is not None:
+                raise SanitizationError("capture contains a JSON member without an object")
+            start = match.end() - 1
             if source[start] == "[":
                 # Terminal color sequences and word labels are not JSON arrays.
                 if start > 0 and ANSI_RE.match(source, start - 1):
@@ -237,8 +242,6 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
                 if re.match(r'\[[^\[\]"{}\\\r\n]*\]', source[start:]):
                     continue
             prefix = source[cursor:start]
-            if re.search(r'"\s*:\s*\Z', prefix):
-                raise SanitizationError("capture contains a JSON member without an object")
             try:
                 node, length = decoder.raw_decode(source[start:])
             except RecursionError as error:
@@ -246,8 +249,6 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
             except ValueError as error:
                 raise SanitizationError("capture contains malformed JSON") from error
             end = start + length
-            if isinstance(node, str) and source[end:].lstrip().startswith(":"):
-                raise SanitizationError("capture contains a JSON member without an object")
             parts.append(prefix)
             marker = f"\ufdd0{next_marker}\ufdd1"
             while marker in reserved_markers:
