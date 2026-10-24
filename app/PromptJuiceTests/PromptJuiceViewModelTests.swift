@@ -5,6 +5,48 @@ import XCTest
 
 @MainActor
 final class PromptJuiceViewModelTests: XCTestCase {
+    func testLiveRefreshReadsOnlyConsentedProviders() async {
+        for enabled: Set<UsageProvider> in [[.claude], [.codex]] {
+            let fixture = makeFixture()
+            defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+            fixture.store.enabledProviders = enabled
+            let claude = CountingUsageProviderClient(snapshots: [Self.healthySnapshots[0]])
+            let codex = CountingUsageProviderClient(snapshots: [Self.healthySnapshots[1]])
+            let viewModel = PromptJuiceViewModel(
+                settingsStore: fixture.store, liveClaudeProviderClient: claude,
+                liveCodexProviderClient: codex, now: { Self.fixedNow }
+            )
+            viewModel.refreshUsageQuietly(reason: .launch)
+            await waitUntil { claude.callCount + codex.callCount == 1 }
+            try? await Task.sleep(for: .milliseconds(50))
+            XCTAssertEqual(claude.callCount, enabled.contains(.claude) ? 1 : 0)
+            XCTAssertEqual(codex.callCount, enabled.contains(.codex) ? 1 : 0)
+        }
+    }
+
+    func testFirstRunSuppressesLaunchManualTimerAndNetworkReadsUntilSelection() async {
+        let fixture = makeFixture()
+        defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
+        fixture.defaults.removeObject(forKey: "enabledProviders")
+        let claude = CountingUsageProviderClient(snapshots: [Self.healthySnapshots[0]])
+        let codex = CountingUsageProviderClient(snapshots: [Self.healthySnapshots[1]])
+        let viewModel = PromptJuiceViewModel(
+            settingsStore: fixture.store, liveClaudeProviderClient: claude,
+            liveCodexProviderClient: codex, now: { Self.fixedNow }
+        )
+        viewModel.refreshUsageQuietly(reason: .launch)
+        viewModel.refreshUsage()
+        viewModel.tick()
+        viewModel.setNetworkOnline(false)
+        viewModel.setNetworkOnline(true)
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(claude.callCount, 0)
+        XCTAssertEqual(codex.callCount, 0)
+        viewModel.completeFirstRun(enabledProviders: [.claude])
+        await waitUntil { claude.callCount == 1 }
+        XCTAssertEqual(codex.callCount, 0)
+    }
+
     func testSingleWindowClaudeEstimateKeepsDisclosureWhileCodexDoesNot() {
         let fixture = makeFixture()
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
@@ -1051,6 +1093,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
     func testEnabledProvidersDefaultToAllWhenKeyIsAbsent() {
         let fixture = makeFixture()
+        fixture.defaults.removeObject(forKey: "enabledProviders")
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
 
         XCTAssertTrue(fixture.store.isFirstRun)
@@ -1104,6 +1147,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
 
     func testCompleteFirstRunPersistsEnabledProviders() {
         let fixture = makeFixture()
+        fixture.defaults.removeObject(forKey: "enabledProviders")
         defer { fixture.defaults.removePersistentDomain(forName: fixture.suiteName) }
         let viewModel = PromptJuiceViewModel(
             settingsStore: fixture.store,
@@ -1940,6 +1984,7 @@ final class PromptJuiceViewModelTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let store = PromptJuiceSettingsStore(defaults: defaults)
+        store.enabledProviders = Set(UsageProvider.allCases)
 
         if let notificationsEnabled {
             store.useSoonNotificationsEnabled = notificationsEnabled

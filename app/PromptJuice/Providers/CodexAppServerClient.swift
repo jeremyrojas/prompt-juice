@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 protocol CodexRateLimitReading: Sendable {
     func readRateLimits() throws -> CodexRateLimitReadResult
@@ -24,7 +25,10 @@ struct CodexAppServerClient: CodexRateLimitReading {
             throw CodexAppServerClientError.executableUnavailable
         }
 
+        try Task.checkCancellation()
         let process = Process()
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         process.executableURL = executableURL
         process.arguments = ["app-server"]
         process.environment = Self.childEnvironment(
@@ -69,15 +73,21 @@ struct CodexAppServerClient: CodexRateLimitReading {
             try process.run()
             try sendInitialize(to: stdin.fileHandleForWriting)
         } catch {
-            cleanup(process: process, stdin: stdin, stdout: stdout, stderr: stderr)
+            cleanup(process: process, exited: exited, stdin: stdin, stdout: stdout, stderr: stderr)
             throw CodexAppServerClientError.launchFailed(error.localizedDescription)
         }
 
-        let waitResult = state.finished.wait(timeout: .now() + timeout)
+        let deadline = DispatchTime.now() + max(0, timeout)
+        var waitResult: DispatchTimeoutResult = .timedOut
+        while DispatchTime.now() < deadline, !Task.isCancelled {
+            waitResult = state.finished.wait(timeout: min(deadline, .now() + .milliseconds(25)))
+            if waitResult == .success { break }
+        }
         let result = state.result
         let stderrText = state.stderrText
-        cleanup(process: process, stdin: stdin, stdout: stdout, stderr: stderr)
+        cleanup(process: process, exited: exited, stdin: stdin, stdout: stdout, stderr: stderr)
 
+        try Task.checkCancellation()
         if waitResult == .timedOut {
             throw CodexAppServerClientError.timeout(stderrText)
         }
@@ -206,12 +216,12 @@ private func handleStdoutLine(
 
 private func send(_ message: [String: Any], to input: FileHandle) throws {
     let data = try JSONSerialization.data(withJSONObject: message)
-    input.write(data)
-    input.write(Data([0x0A]))
+    try input.write(contentsOf: data + Data([0x0A]))
 }
 
 private func cleanup(
     process: Process,
+    exited: DispatchSemaphore,
     stdin: Pipe,
     stdout: Pipe,
     stderr: Pipe
@@ -222,8 +232,15 @@ private func cleanup(
 
     if process.isRunning {
         process.terminate()
-        process.waitUntilExit()
+        if exited.wait(timeout: .now() + .milliseconds(200)) == .timedOut,
+           process.isRunning {
+            // Signal only this Process child; never enumerate or kill other CLI instances.
+            kill(process.processIdentifier, SIGKILL)
+            _ = exited.wait(timeout: .now() + .milliseconds(500))
+        }
     }
+    try? stdout.fileHandleForReading.close()
+    try? stderr.fileHandleForReading.close()
 }
 
 private struct CodexAppServerRateLimitResponse: Decodable {
@@ -241,7 +258,11 @@ private final class CodexAppServerReadState: @unchecked Sendable {
     let finished = DispatchSemaphore(value: 0)
 
     private let lock = NSLock()
-    private var stdoutBuffer = ""
+    private var stdoutBuffer = Data()
+    private var stdoutBytes = 0
+    private var stderrBytes = 0
+    private static let stdoutLimit = 1_048_576
+    private static let stderrLimit = 65_536
     private var stderrBuffer = ""
     private var didSendReadRequest = false
     private var storedResult: Result<CodexRateLimitReadResult, Error>?
@@ -260,21 +281,19 @@ private final class CodexAppServerReadState: @unchecked Sendable {
 
     func appendStdout(_ data: Data) -> [String] {
         lock.withLock {
-            guard let text = String(data: data, encoding: .utf8) else {
+            guard storedResult == nil else { return [] }
+            guard data.count <= Self.stdoutLimit - stdoutBytes else {
+                failOutputLimit()
                 return []
             }
-
-            stdoutBuffer += text
+            stdoutBytes += data.count
+            stdoutBuffer.append(data)
             var lines: [String] = []
-
-            while let newlineIndex = stdoutBuffer.firstIndex(of: "\n") {
-                let line = String(stdoutBuffer[..<newlineIndex])
+            while let newlineIndex = stdoutBuffer.firstIndex(of: 0x0A) {
+                let line = String(decoding: stdoutBuffer[..<newlineIndex], as: UTF8.self)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 stdoutBuffer.removeSubrange(...newlineIndex)
-
-                if !line.isEmpty {
-                    lines.append(line)
-                }
+                if !line.isEmpty { lines.append(line) }
             }
 
             return lines
@@ -283,10 +302,20 @@ private final class CodexAppServerReadState: @unchecked Sendable {
 
     func appendStderr(_ data: Data) {
         lock.withLock {
-            if let text = String(data: data, encoding: .utf8) {
-                stderrBuffer += text
+            guard storedResult == nil else { return }
+            guard data.count <= Self.stderrLimit - stderrBytes else {
+                failOutputLimit()
+                return
             }
+            stderrBytes += data.count
+            stderrBuffer += String(decoding: data, as: UTF8.self)
         }
+    }
+
+    // Called only with lock held.
+    private func failOutputLimit() {
+        storedResult = .failure(CodexAppServerClientError.outputTooLarge)
+        finished.signal()
     }
 
     func markReadRequestSent() -> Bool {
@@ -322,6 +351,7 @@ enum CodexAppServerClientError: Error, LocalizedError, Equatable {
     case initializationFailed(String)
     case writeFailed(String)
     case serverError(String)
+    case outputTooLarge
     case malformedResponse
     case timeout(String)
     case emptyResponse(String)
@@ -338,6 +368,8 @@ enum CodexAppServerClientError: Error, LocalizedError, Equatable {
             return "Codex app-server write failed: \(message)"
         case .serverError(let message):
             return "Codex app-server returned an error: \(message)"
+        case .outputTooLarge:
+            return "Codex app-server output exceeded the safety limit"
         case .malformedResponse:
             return "Codex app-server returned an unreadable rate-limit response"
         case .timeout(let stderr):

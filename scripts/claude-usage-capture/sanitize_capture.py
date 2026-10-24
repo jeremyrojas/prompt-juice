@@ -37,7 +37,7 @@ SECRET_PREFIX_RE = re.compile(
 JWT_RE = re.compile(
     r"\beyJ[a-zA-Z0-9_-]{8,}\.[a-zA-Z0-9_-]{8,}\.[a-zA-Z0-9_-]{8,}\b"
 )
-BEARER_RE = re.compile(r"(?i)(\bbearer\s+)(?!\[REDACTED_)[^\s\"',;}]+")
+BEARER_RE = re.compile(r"(?i)(\bbearer\s+)(?!\s*\[REDACTED_)[^\s\"',;}]+")
 OPAQUE_RE = re.compile(
     r"\b(?=[a-zA-Z0-9_+=.-]{32,}\b)(?=[a-zA-Z0-9_+=.-]*[a-zA-Z])(?=[a-zA-Z0-9_+=.-]*[0-9])[a-zA-Z0-9_+=.-]{32,}\b"
 )
@@ -47,16 +47,12 @@ SENSITIVE_KEY_FRAGMENT = (
     r"(?:account|organization|org|user|workspace|team)[_-]?(?:id|uuid|name)?|"
     r"email|e-mail|username|user[_-]?name|display[_-]?name)"
 )
-SENSITIVE_JSON_STRING_RE = re.compile(
-    rf"(?i)(?P<prefix>\"[^\"]*{SENSITIVE_KEY_FRAGMENT}[^\"]*\"\s*:\s*\")"
-    r"(?P<value>[^\"]*)(?P<suffix>\")"
-)
 SENSITIVE_ASSIGNMENT_RE = re.compile(
-    rf"(?i)(?P<prefix>\b[a-z0-9_.-]*{SENSITIVE_KEY_FRAGMENT}[a-z0-9_.-]*\s*[:=]\s*[\"']?)"
-    r"(?P<value>(?!\[REDACTED_)[^\s\"',;}\]]+)(?P<suffix>[\"']?)"
+    rf"(?im)(?P<prefix>\b[a-z0-9_.-]*{SENSITIVE_KEY_FRAGMENT}[a-z0-9_.-]*\s*[:=]\s*)"
+    r"(?P<value>(?!\s*\[REDACTED_[A-Z_]+\]\s*$)[^\r\n]+)"
 )
 SENSITIVE_LABEL_RE = re.compile(
-    rf"(?im)(?P<prefix>^\s*{SENSITIVE_KEY_FRAGMENT}\s*:\s*)(?P<value>(?!\[REDACTED_)[^\r\n]+)$"
+    rf"(?im)(?P<prefix>^\s*{SENSITIVE_KEY_FRAGMENT}\s*:\s*)(?P<value>(?!\s*\[REDACTED_)[^\r\n]+)$"
 )
 SENSITIVE_KEY_NAME_RE = re.compile(rf"(?i){SENSITIVE_KEY_FRAGMENT}")
 WELCOME_NAME_RE = re.compile(
@@ -103,10 +99,10 @@ def _replace(
     counts: Counter[str],
 ) -> str:
     def counted(match: re.Match[str]) -> str:
-        counts[category] += 1
-        if callable(replacement):
-            return replacement(match)
-        return replacement
+        result = replacement(match) if callable(replacement) else replacement
+        if result != match.group(0):
+            counts[category] += 1
+        return result
 
     return pattern.sub(counted, text)
 
@@ -119,18 +115,11 @@ def _replace_grouped_value(placeholder: str):
     return replacement
 
 
-def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[str, Counter[str]]:
+def _sanitize_plaintext(text: str, usernames: Iterable[str] | None = None) -> tuple[str, Counter[str]]:
     """Redact shaped sensitive values while retaining terminal structure and control bytes."""
     counts: Counter[str] = Counter()
     sanitized = text
 
-    sanitized = _replace(
-        SENSITIVE_JSON_STRING_RE,
-        sanitized,
-        _replace_grouped_value("[REDACTED_FIELD]"),
-        "sensitive-field",
-        counts,
-    )
     sanitized = _replace(
         WELCOME_NAME_RE,
         sanitized,
@@ -146,8 +135,9 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
         counts,
     )
     def redact_mcp_table(match: re.Match[str]) -> str:
-        def redact_name(_: re.Match[str]) -> str:
-            counts["mcp-name"] += 1
+        def redact_name(match: re.Match[str]) -> str:
+            if match.group(0) != "[REDACTED_MCP_NAME]":
+                counts["mcp-name"] += 1
             return "[REDACTED_MCP_NAME]"
 
         return match.group("prefix") + MCP_TABLE_NAME_RE.sub(redact_name, match.group("rows"))
@@ -190,83 +180,132 @@ def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[st
     return sanitized, counts
 
 
-def _unexpected_structured_sensitive_fields(text: str) -> list[str]:
-    """Reject sensitive JSON containers whose unknown contents cannot be safely preserved."""
-    try:
-        value = json.loads(text)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return []
+# Strip terminal formatting before analysis: controls can split keys or credentials.
+ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+JSON_REGION_MARKER_RE = re.compile("\ufdd0[0-9]+\ufdd1")
+PLACEHOLDERS = {"[REDACTED_FIELD]", "[REDACTED_CREDENTIAL]", "[REDACTED_EMAIL]",
+                "[REDACTED_UUID]", "[REDACTED_ACCOUNT_ID]", "[REDACTED_PATH]",
+                "[REDACTED_USERNAME]", "[REDACTED_OPAQUE]", "[REDACTED_MCP_NAME]"}
 
-    findings: list[str] = []
 
-    def visit(node: object) -> None:
+def sanitize_text(text: str, usernames: Iterable[str] | None = None) -> tuple[str, Counter[str]]:
+    """Decode JSON before redaction, including JSON embedded in terminal output."""
+    usernames = tuple(usernames) if usernames is not None else _local_usernames()
+    counts: Counter[str] = Counter()
+
+    def plain(value: str) -> str:
+        result, changes = _sanitize_plaintext(value, usernames)
+        counts.update(changes)
+        return result
+
+    def visit(node: object) -> object:
         if isinstance(node, dict):
+            result = {}
             for key, child in node.items():
-                if SENSITIVE_KEY_NAME_RE.search(str(key)) and isinstance(child, (dict, list)):
-                    findings.append("structured-sensitive-field")
-                visit(child)
-        elif isinstance(node, list):
-            for child in node:
-                visit(child)
+                safe_key = plain(ANSI_RE.sub("", key))
+                if SENSITIVE_KEY_NAME_RE.search(ANSI_RE.sub("", key)):
+                    if not isinstance(child, str) or child not in PLACEHOLDERS:
+                        counts["sensitive-field"] += 1
+                    result[safe_key] = "[REDACTED_FIELD]"
+                else:
+                    result[safe_key] = visit(child)
+            return result
+        if isinstance(node, list):
+            return [visit(child) for child in node]
+        if isinstance(node, str):
+            return process(ANSI_RE.sub("", node))
+        return node
 
-    visit(value)
-    return sorted(set(findings))
+    def process(source: str) -> str:
+        parts = []
+        cursor = 0
+        decoder = json.JSONDecoder()
+        reserved_markers = set(JSON_REGION_MARKER_RE.findall(source))
+        json_regions: dict[str, str] = {}
+        next_marker = 0
+        # Quoted scalars are JSON-shaped at the start of a line or after an
+        # assignment delimiter. Ordinary prose quotes stay with plaintext rules.
+        candidates = re.compile(
+            r'(?P<member_end>"\s*:)|'
+            r'[\{\[]|(?m:^[ \t]*")|(?<=[=:])[ \t]*"'
+        )
+        search_at = 0
+        while (match := candidates.search(source, search_at)) is not None:
+            search_at = match.end()
+            if match.group("member_end") is not None:
+                raise SanitizationError("capture contains a JSON member without an object")
+            start = match.end() - 1
+            if source[start] == "[":
+                # Terminal color sequences and word labels are not JSON arrays.
+                if start > 0 and ANSI_RE.match(source, start - 1):
+                    continue
+                if re.match(r'\[[^\[\]"{}\\\r\n]*\]', source[start:]):
+                    continue
+            prefix = source[cursor:start]
+            try:
+                node, length = decoder.raw_decode(source[start:])
+            except RecursionError as error:
+                raise SanitizationError("capture JSON nesting exceeds sanitizer limit") from error
+            except ValueError as error:
+                raise SanitizationError("capture contains malformed JSON") from error
+            end = start + length
+            if isinstance(node, str) and source[end:].lstrip().startswith(":"):
+                raise SanitizationError("capture contains a JSON member without an object")
+            parts.append(prefix)
+            marker = f"\ufdd0{next_marker}\ufdd1"
+            while marker in reserved_markers:
+                next_marker += 1
+                marker = f"\ufdd0{next_marker}\ufdd1"
+            next_marker += 1
+            try:
+                # ASCII serialization cannot inject literal region markers.
+                json_regions[marker] = json.dumps(
+                    visit(node), ensure_ascii=True, separators=(",", ":")
+                )
+            except RecursionError as error:
+                raise SanitizationError("capture JSON nesting exceeds sanitizer limit") from error
+            parts.append(marker)
+            cursor = end
+            search_at = end
+        parts.append(source[cursor:])
+        # Keep every existing plaintext rule's surrounding context intact. A
+        # redacted region loses its marker and must never be restored afterward.
+        masked = plain("".join(parts))
+        return JSON_REGION_MARKER_RE.sub(
+            lambda match: json_regions.get(match.group(0), match.group(0)), masked
+        )
+
+    normalized = ANSI_RE.sub("", text)
+    # Preserve formatting only when it cannot conceal a sensitive shape. JSON is
+    # always decoded even when wrapped in ordinary terminal color sequences.
+    normalized_safe = process(normalized)
+    normalized_counts = counts.copy()
+    if normalized == text:
+        return normalized_safe, normalized_counts
+    counts.clear()
+    try:
+        sanitized = process(text)
+    except SanitizationError:
+        if normalized == text:
+            raise
+        sanitized = normalized_safe
+        counts = normalized_counts
+    if ANSI_RE.sub("", sanitized) != normalized_safe:
+        sanitized = normalized_safe
+        counts = normalized_counts
+    return sanitized, counts
 
 
 def sensitive_findings(text: str, usernames: Iterable[str] | None = None) -> list[str]:
-    """Return residual sensitive-shape categories without returning matched values."""
-    findings: list[str] = []
-    checks = (
-        ("email", EMAIL_RE),
-        ("uuid", UUID_RE),
-        ("account-id", ACCOUNT_ID_RE),
-        ("credential-prefix", SECRET_PREFIX_RE),
-        ("jwt", JWT_RE),
-        ("bearer-credential", BEARER_RE),
-        ("absolute-path", ABSOLUTE_PATH_RE),
-        ("home-path", HOME_PATH_RE),
-        ("opaque-value", OPAQUE_RE),
-    )
-    for category, pattern in checks:
-        if pattern.search(text):
-            findings.append(category)
-
-    for match in SENSITIVE_JSON_STRING_RE.finditer(text):
-        if not match.group("value").strip().startswith("[REDACTED_"):
-            findings.append("sensitive-json-field")
-            break
-    for match in SENSITIVE_ASSIGNMENT_RE.finditer(text):
-        if not match.group("value").strip().startswith("[REDACTED_"):
-            findings.append("sensitive-assignment")
-            break
-    for match in SENSITIVE_LABEL_RE.finditer(text):
-        if not match.group("value").strip().startswith("[REDACTED_"):
-            findings.append("sensitive-label")
-            break
-    for match in WELCOME_NAME_RE.finditer(text):
-        if not match.group("value").strip().startswith("[REDACTED_"):
-            findings.append("welcome-username")
-            break
-    for match in MCP_QUOTED_NAME_RE.finditer(text):
-        if not match.group("value").strip().startswith("[REDACTED_"):
-            findings.append("mcp-name")
-            break
-
-    for username in usernames if usernames is not None else _local_usernames():
-        if re.search(rf"(?i)(?<![a-z0-9_.-]){re.escape(username)}(?![a-z0-9_.-])", text):
-            findings.append("username")
-            break
-
-    return sorted(set(findings))
+    """Check with the same decoded/normalized representation used by sanitization."""
+    _, counts = sanitize_text(text, usernames)
+    return ["unsanitized-content"] if sum(counts.values()) else []
 
 
 def sanitize_bytes(data: bytes, usernames: Iterable[str] | None = None) -> tuple[bytes, SanitizationReport]:
     if len(data) > MAX_CAPTURE_BYTES:
         raise SanitizationError("capture exceeds the sanitizer size limit")
     text = data.decode("utf-8", errors="surrogateescape")
-    unexpected = _unexpected_structured_sensitive_fields(text)
-    if unexpected:
-        raise SanitizationError("unexpected sensitive structure: " + ", ".join(unexpected))
     sanitized, counts = sanitize_text(text, usernames=usernames)
     residual = sensitive_findings(sanitized, usernames=usernames)
     if residual:
