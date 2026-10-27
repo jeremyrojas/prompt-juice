@@ -3,7 +3,7 @@
 import { clamp, lerp, ease, seg, spring, wobble, keys, rng } from "./anim.js";
 import { createPanel, gaugeSVG, poseBar } from "./panel.js";
 
-export const DURATION = 24.4;
+export const DURATION = 24.9;
 const W = 1920;
 const H = 1080;
 const GREEN = [95, 209, 31];
@@ -381,8 +381,8 @@ const valueEPct = valueE.querySelector(".pct");
 const valueEReset = valueE.querySelector(".reset");
 const TASKS = [
   { what: "Plan the big refactor", chip: "Strongest model" },
+  { what: "Fix the memory leak", chip: "Higher effort" },
   { what: "Write the test suite", chip: "New task" },
-  { what: "Fix the flaky CI job", chip: "New task" },
 ];
 const taskEls = TASKS.map((tk, i) => {
   const c = el("div", "task", sceneE, `<div class="who"><i></i>Claude</div><div class="what">${tk.what}</div><div class="chip">${tk.chip}</div><div class="prog"><b></b></div>`);
@@ -395,7 +395,8 @@ const taskEls = TASKS.map((tk, i) => {
   return { el: c, prog: c.querySelector(".prog b"), chip: c.querySelector(".chip"), path, x: 260 + i * 480 };
 });
 const titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], ["model.", "amber"]], { size: 100 });
-const titleE2 = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 });
+const titleE2 = createTitle(sceneE, [["Use"], ["higher", "amber"], ["effort.", "amber"]], { size: 100 });
+const titleE2b = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 });
 const titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 });
 
 // F: end card.
@@ -415,8 +416,8 @@ export const BEATS = {
   jumpPrep: 6.25, jump: 6.4, glyphLand: 7.05, menuCaption: 7.12, click: 7.85, panelOpen: 7.95,
   zipClaude: 8.2, zipCodex: 8.34, swing1: 9.3, glint: 10.3, toCard: 11.0, chevronClick: 11.75, expand: 11.79,
   swing2: 12.75, legClaude: 13.2, legCodex: 13.5, toBar: 14.4, handoff: 15.3,
-  strongest: 15.55, card1: 15.9, another: 17.15, card2: 17.38, card3: 17.78, reset: 18.85, nothingWasted: 19.02,
-  finale: 20.4, mascotLand: 21.1, wordmarkIn: 21.3, endHop: 22.4,
+  strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.7, nothingWasted: 19.87,
+  finale: 21.1, mascotLand: 21.8, wordmarkIn: 22.0, endHop: 23.1,
 };
 const B = BEATS;
 
@@ -700,7 +701,7 @@ export function render(t) {
       m.opacity = appear;
       const moving = clamp(v * 2);
       m.lift = 26 * (1 - appear) + 7 * Math.abs(Math.sin(t * 9)) * moving;
-      m.expr = (t > 16.6 && t < 16.68) || (t > 18.3 && t < 18.38) ? "blink" : "happy";
+      m.expr = (t > 16.6 && t < 16.68) || (t > 18.9 && t < 18.98) ? "blink" : "happy";
       if (reset) {
         m.to = "green";
         m.k = seg(t, B.reset + 0.1, B.reset + 0.9, ease.inOut3);
@@ -708,9 +709,10 @@ export function render(t) {
         m.lift = 40 * bump(t, B.reset + 0.1, 0.7) + 6 * moving;
       }
     }
-    animateTitle(titleE1, t, { t0: B.strongest, t1: 16.95, kind: "blur", y: 120 });
-    animateTitle(titleE2, t, { t0: B.another, t1: 18.75, kind: "blur", stagger: 0.09, y: 120 });
-    animateTitle(titleE3, t, { t0: B.nothingWasted, t1: 20.25, kind: "blur", stagger: 0.1, y: 120 });
+    animateTitle(titleE1, t, { t0: B.strongest, t1: B.effort - 0.2, kind: "blur", y: 120 });
+    animateTitle(titleE2, t, { t0: B.effort, t1: B.another - 0.2, kind: "blur", stagger: 0.09, y: 120 });
+    animateTitle(titleE2b, t, { t0: B.another, t1: B.reset - 0.15, kind: "blur", stagger: 0.09, y: 120 });
+    animateTitle(titleE3, t, { t0: B.nothingWasted, t1: B.finale - 0.15, kind: "blur", stagger: 0.1, y: 120 });
   }
 
   // ------------------------------------------------ F: end card (20.4 – 24.4)
@@ -730,7 +732,7 @@ export function render(t) {
     m.rot = -8 * bump(t, B.finale + 0.1, B.mascotLand - B.finale - 0.1);
     const sq = wobble(t, B.mascotLand, { amp: 0.06, freq: 2.4, decay: 5 }) + wobble(t, B.endHop + 0.5, { amp: 0.04, freq: 2.6, decay: 6 });
     m.sx = 1 + sq * 0.6; m.sy = 1 - sq;
-    m.expr = t < 21.8 ? "joy" : (t > 23.3 && t < 23.38) ? "blink" : "happy";
+    m.expr = t < B.mascotLand + 0.7 ? "joy" : (t > 23.9 && t < 23.98) ? "blink" : "happy";
 
     const wipe = seg(t, B.wordmarkIn, B.wordmarkIn + 0.8, ease.inOut3);
     const wmX = left + mW + gap;
@@ -759,7 +761,13 @@ const capture = params.has("capture");
 const ready = (async () => {
   await document.fonts.ready;
   await Promise.all([...document.images].map((i) => (i.complete ? null : new Promise((r) => { i.onload = i.onerror = r; }))));
-  [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE3].forEach((T) => T.measure());
+  [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure());
+  // Task titles stay on one line: shrink any that would overflow the card.
+  taskEls.forEach(({ el }) => {
+    const what = el.querySelector(".what");
+    let size = 42;
+    while (what.scrollWidth > what.clientWidth && size > 30) what.style.fontSize = `${--size}px`;
+  });
   render(+(params.get("t") || 0));
 })();
 window.__film = { render, ready, duration: DURATION, beats: BEATS };

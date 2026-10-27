@@ -166,7 +166,7 @@
   }
 
   // src/main.js
-  var DURATION = 24.4, W = 1920, H = 1080, GREEN = [95, 209, 31], AMBER = [240, 163, 42], MASCOT_ASPECT = 776 / 1115, film = document.getElementById("film");
+  var DURATION = 24.9, W = 1920, H = 1080, GREEN = [95, 209, 31], AMBER = [240, 163, 42], MASCOT_ASPECT = 776 / 1115, film = document.getElementById("film");
   function el2(tag, cls, parent, html) {
     let e = document.createElement(tag);
     return cls && (e.className = cls), html != null && (e.innerHTML = html), (parent || film).appendChild(e), e;
@@ -362,14 +362,14 @@
   valueE.style.textShadow = "0 0 14px #07080b, 0 0 6px #07080b";
   var valueEPct = valueE.querySelector(".pct"), valueEReset = valueE.querySelector(".reset"), TASKS = [
     { what: "Plan the big refactor", chip: "Strongest model" },
-    { what: "Write the test suite", chip: "New task" },
-    { what: "Fix the flaky CI job", chip: "New task" }
+    { what: "Fix the memory leak", chip: "Higher effort" },
+    { what: "Write the test suite", chip: "New task" }
   ], taskEls = TASKS.map((tk, i) => {
     let c = el2("div", "task", sceneE, `<div class="who"><i></i>Claude</div><div class="what">${tk.what}</div><div class="chip">${tk.chip}</div><div class="prog"><b></b></div>`);
     c.style.left = `${260 + i * 480}px`, c.style.top = "680px";
     let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     return path.setAttribute("fill", "none"), path.setAttribute("stroke-linecap", "round"), streamSvg.appendChild(path), { el: c, prog: c.querySelector(".prog b"), chip: c.querySelector(".chip"), path, x: 260 + i * 480 };
-  }), titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], ["model.", "amber"]], { size: 100 }), titleE2 = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 }), titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 }), wordmark = el2("div", "wordmark", sceneF, 'Prompt<span style="color:var(--green)">Juice</span>'), url = el2("div", "url", sceneF, "promptjuice.app"), mascot = createMascot(mascotLayer), cursor = el2("div", "", world, '<svg width="46" height="68" viewBox="0 0 23 34"><path d="M1.5 1.5 L1.5 26.5 L7.6 20.8 L11.6 30.6 L15.6 29 L11.7 19.4 L20 19.4 Z" fill="#000" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>');
+  }), titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], ["model.", "amber"]], { size: 100 }), titleE2 = createTitle(sceneE, [["Use"], ["higher", "amber"], ["effort.", "amber"]], { size: 100 }), titleE2b = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 }), titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 }), wordmark = el2("div", "wordmark", sceneF, 'Prompt<span style="color:var(--green)">Juice</span>'), url = el2("div", "url", sceneF, "promptjuice.app"), mascot = createMascot(mascotLayer), cursor = el2("div", "", world, '<svg width="46" height="68" viewBox="0 0 23 34"><path d="M1.5 1.5 L1.5 26.5 L7.6 20.8 L11.6 30.6 L15.6 29 L11.7 19.4 L20 19.4 Z" fill="#000" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>');
   cursor.id = "cursor";
   var BEATS = {
     popIn: 0,
@@ -399,16 +399,17 @@
     toBar: 14.4,
     handoff: 15.3,
     strongest: 15.55,
-    card1: 15.9,
-    another: 17.15,
-    card2: 17.38,
-    card3: 17.78,
-    reset: 18.85,
-    nothingWasted: 19.02,
-    finale: 20.4,
-    mascotLand: 21.1,
-    wordmarkIn: 21.3,
-    endHop: 22.4
+    card1: 15.85,
+    effort: 16.95,
+    card2: 17.18,
+    another: 18.3,
+    card3: 18.53,
+    reset: 19.7,
+    nothingWasted: 19.87,
+    finale: 21.1,
+    mascotLand: 21.8,
+    wordmarkIn: 22,
+    endHop: 23.1
   }, B = BEATS, P_OPEN = [960, 76, 192, 0, 2.6, 0, 0], P_PUNCH = [960, 560, 192, 104, 4.3, 6, -12], P_PUNCH2 = [960, 560, 192, 104, 4.4, 5, -8], P_CARD = [960, 150, 192, 54, 3.4, 0, 0], P_ANGLE = [640, 560, 192, 152, 2.45, 5, 20], P_ANGLE2 = [620, 560, 192, 152, 2.5, 4, 17], P_BAR = [960, 523, 192, 116, 1400 / 332, 0, 0];
   function zipZ(t, t0) {
     return spring(t, t0, { zeta: 0.82, freq: 1 });
@@ -534,16 +535,16 @@
         let hx = barE.headX(z), appear = seg(t, B.handoff + 0.25, B.handoff + 0.8, ease.out3);
         m.x = clamp(hx - 40, 380, 1600), m.ground = 500, m.h = 180, m.from = "amber", m.to = "amber", m.k = 1, m.rot = 0, m.opacity = appear;
         let moving = clamp(v * 2);
-        m.lift = 26 * (1 - appear) + 7 * Math.abs(Math.sin(t * 9)) * moving, m.expr = t > 16.6 && t < 16.68 || t > 18.3 && t < 18.38 ? "blink" : "happy", reset && (m.to = "green", m.k = seg(t, B.reset + 0.1, B.reset + 0.9, ease.inOut3), m.expr = "joy", m.lift = 40 * bump(t, B.reset + 0.1, 0.7) + 6 * moving);
+        m.lift = 26 * (1 - appear) + 7 * Math.abs(Math.sin(t * 9)) * moving, m.expr = t > 16.6 && t < 16.68 || t > 18.9 && t < 18.98 ? "blink" : "happy", reset && (m.to = "green", m.k = seg(t, B.reset + 0.1, B.reset + 0.9, ease.inOut3), m.expr = "joy", m.lift = 40 * bump(t, B.reset + 0.1, 0.7) + 6 * moving);
       }
-      animateTitle(titleE1, t, { t0: B.strongest, t1: 16.95, kind: "blur", y: 120 }), animateTitle(titleE2, t, { t0: B.another, t1: 18.75, kind: "blur", stagger: 0.09, y: 120 }), animateTitle(titleE3, t, { t0: B.nothingWasted, t1: 20.25, kind: "blur", stagger: 0.1, y: 120 });
+      animateTitle(titleE1, t, { t0: B.strongest, t1: B.effort - 0.2, kind: "blur", y: 120 }), animateTitle(titleE2, t, { t0: B.effort, t1: B.another - 0.2, kind: "blur", stagger: 0.09, y: 120 }), animateTitle(titleE2b, t, { t0: B.another, t1: B.reset - 0.15, kind: "blur", stagger: 0.09, y: 120 }), animateTitle(titleE3, t, { t0: B.nothingWasted, t1: B.finale - 0.15, kind: "blur", stagger: 0.1, y: 120 });
     }
     let inF = t >= B.finale;
     if (show(sceneF, inF), inF) {
       let wmW = wordmark.offsetWidth, mH = 380, mW = mH * MASCOT_ASPECT, gap = 56, left = W / 2 - (mW + gap + wmW) / 2, target = [left + mW / 2, 740, mH], start = [clamp(barE.headX(1) - 40, 380, 1600), 500, 180], f = seg(t, B.finale + 0.1, B.mascotLand, ease.inOut2);
       m.from = "green", m.to = "green", m.k = 0, m.x = lerp(start[0], target[0], f), m.ground = lerp(start[1], target[1], f), m.h = lerp(start[2], target[2], ease.out2(f)), m.lift = 150 * Math.sin(Math.PI * f) + 40 * hop(t, B.endHop, 0.5), m.rot = -8 * bump(t, B.finale + 0.1, B.mascotLand - B.finale - 0.1);
       let sq = wobble(t, B.mascotLand, { amp: 0.06, freq: 2.4, decay: 5 }) + wobble(t, B.endHop + 0.5, { amp: 0.04, freq: 2.6, decay: 6 });
-      m.sx = 1 + sq * 0.6, m.sy = 1 - sq, m.expr = t < 21.8 ? "joy" : t > 23.3 && t < 23.38 ? "blink" : "happy";
+      m.sx = 1 + sq * 0.6, m.sy = 1 - sq, m.expr = t < B.mascotLand + 0.7 ? "joy" : t > 23.9 && t < 23.98 ? "blink" : "happy";
       let wipe = seg(t, B.wordmarkIn, B.wordmarkIn + 0.8, ease.inOut3), wmX = left + mW + gap;
       wordmark.style.transform = `translate(${wmX - (1 - wipe) * 40}px, 440px)`, wordmark.style.clipPath = `inset(-20% ${(1 - wipe) * 100}% -20% 0)`, wordmark.style.opacity = wipe > 0 ? 1 : 0;
       let u = seg(t, B.wordmarkIn + 0.45, B.wordmarkIn + 1, ease.out3);
@@ -557,7 +558,10 @@
   var params = new URLSearchParams(location.search), capture = params.has("capture"), ready = (async () => {
     await document.fonts.ready, await Promise.all([...document.images].map((i) => i.complete ? null : new Promise((r) => {
       i.onload = i.onerror = r;
-    }))), [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE3].forEach((T) => T.measure()), render(+(params.get("t") || 0));
+    }))), [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure()), taskEls.forEach(({ el: el3 }) => {
+      let what = el3.querySelector(".what"), size = 42;
+      for (; what.scrollWidth > what.clientWidth && size > 30; ) what.style.fontSize = `${--size}px`;
+    }), render(+(params.get("t") || 0));
   })();
   window.__film = { render, ready, duration: DURATION, beats: BEATS };
   if (!capture) {

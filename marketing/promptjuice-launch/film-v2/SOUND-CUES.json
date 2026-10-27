@@ -1,6 +1,6 @@
 {
  "fps": 30,
- "duration": 24.4,
+ "duration": 24.9,
  "note": "Times are film seconds. align=peak (default) lands each sample's loudest point one frame after the picture. Swap 'file' for the approved palette and run tools/mix_sound.py.",
  "cues": [
   {
@@ -124,63 +124,63 @@
   },
   {
    "what": "task 1",
-   "time": 16.1,
+   "time": 16.05,
    "file": "assets/sfx/pop.mp3",
    "gain": 0.26,
    "align": "peak"
   },
   {
    "what": "task 2",
-   "time": 17.58,
+   "time": 17.38,
    "file": "assets/sfx/pop.mp3",
    "gain": 0.24,
    "align": "peak"
   },
   {
    "what": "task 3",
-   "time": 17.98,
+   "time": 18.73,
    "file": "assets/sfx/pop.mp3",
    "gain": 0.24,
    "align": "peak"
   },
   {
    "what": "reset refills green",
-   "time": 19.25,
+   "time": 20.1,
    "file": "assets/sfx/whoosh-short.mp3",
    "gain": 0.3,
    "align": "peak"
   },
   {
    "what": "Nothing wasted",
-   "time": 19.22,
+   "time": 20.07,
    "file": "assets/sfx/chime.mp3",
    "gain": 0.26,
    "align": "peak"
   },
   {
    "what": "mascot glides to end card",
-   "time": 20.8,
+   "time": 21.5,
    "file": "assets/sfx/whoosh-short.mp3",
    "gain": 0.26,
    "align": "peak"
   },
   {
    "what": "mascot lands",
-   "time": 21.1,
+   "time": 21.8,
    "file": "assets/sfx/pop.mp3",
    "gain": 0.3,
    "align": "peak"
   },
   {
    "what": "wordmark",
-   "time": 21.8,
+   "time": 22.5,
    "file": "assets/sfx/chime.mp3",
    "gain": 0.28,
    "align": "peak"
   },
   {
    "what": "end hop",
-   "time": 22.9,
+   "time": 23.6,
    "file": "assets/sfx/pop.mp3",
    "gain": 0.2,
    "align": "peak"
