@@ -541,10 +541,8 @@
     world.style.transform = t < 6.3 ? `scale(${dolly})` : "", world.style.transformOrigin = "960px 560px";
     let m = { visible: !0, x: 960, ground: 672, h: 390, from: "green", to: "amber", k: 0, expr: "happy", t }, inA = t < 3.95;
     if (show(sceneA, t < 7.9), show(rowA, inA), t < 7.9) {
-      let intro = seg(t, 0, 0.9, ease.out3);
-      m.opacity = 0.35 + 0.65 * seg(t, 0, 0.5), m.lift = 26 * (1 - intro);
-      let settle = wobble(t, 0.62, { amp: 0.035, freq: 2.2, decay: 4 });
-      if (m.sx = 1 + settle * 0.6, m.sy = 1 - settle, m.expr = t > 0.95 && t < 1.04 || t > 1.62 && t < 1.7 ? "blink" : "happy", t >= B.turn && (m.expr = t < B.turn + 1 ? "alert" : t > 3.45 && t < 3.53 ? "blink" : "happy", m.lift = 18 * bump(t, B.turn + 0.05, 0.7), m.rot = wobble(t, B.turn + 0.1, { amp: -3, freq: 1.4, decay: 3 }), m.k = seg(t, B.turn + 0.05, B.turn + 0.95, ease.inOut3)), inA) {
+      let pop = spring(t, B.popIn + 0.25, { zeta: 0.6, freq: 2.5 }), d = t > B.popIn + 0.43 ? (pop - 1) * 0.8 : 0;
+      if (m.opacity = seg(t, B.popIn + 0.25, B.popIn + 0.31), m.lift = 0, m.sx = pop * (1 - 0.5 * d), m.sy = pop * (1 + d), m.expr = t > 0.95 && t < 1.04 || t > 1.62 && t < 1.7 ? "blink" : "happy", t >= B.turn && (m.expr = t < B.turn + 1 ? "alert" : t > 3.45 && t < 3.53 ? "blink" : "happy", m.lift = 18 * bump(t, B.turn + 0.05, 0.7), m.rot = wobble(t, B.turn + 0.1, { amp: -3, freq: 1.4, decay: 3 }), m.k = seg(t, B.turn + 0.05, B.turn + 0.95, ease.inOut3)), inA) {
         let z = (tt) => 0.83 * zipZ(tt, B.barZip), sweepF = (tt) => seg(tt, B.turn + 0.1, B.turn + 0.95, ease.inOut3), sw = sweepF(t), v = CALM * (t < B.turn ? speed(z, t) / 1.2 : speed(sweepF, t) / 2.2), out = seg(t, 3.7, 4, ease.in2), headX = barA.pose({ z: z(t), color: "green", v, glint: (t - (B.barLand - 0.1)) / 0.7, sweepK: sw, sweepColor: "amber", opacity: 1 - out, ty: out * 30 });
         sparkle(fctx, headX, 844, 34 * bump(t, B.barLand - 0.05, 0.8), 0.9, t * 0.8);
         let rowIn = seg(t, 1, 1.5, ease.out3), ry = 750 + (1 - rowIn) * 16 + out * 30;

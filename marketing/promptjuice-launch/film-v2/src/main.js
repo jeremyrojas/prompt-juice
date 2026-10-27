@@ -487,11 +487,14 @@ export function render(t) {
   show(sceneA, t < 7.9);
   show(rowA, inA);
   if (t < 7.9) {
-    const intro = seg(t, 0, 0.9, ease.out3);
-    m.opacity = 0.35 + 0.65 * seg(t, 0, 0.5);
-    m.lift = 26 * (1 - intro);
-    const settle = wobble(t, 0.62, { amp: 0.035, freq: 2.2, decay: 4 });
-    m.sx = 1 + settle * 0.6; m.sy = 1 - settle;
+    // Pops in from its feet, landing on the pop sound (0.4 s): stretches tall
+    // on the overshoot, squashes a touch on the rebound.
+    // The spring first reaches full size 0.18 s after it starts.
+    const pop = spring(t, B.popIn + 0.25, { zeta: 0.6, freq: 2.5 });
+    const d = t > B.popIn + 0.43 ? (pop - 1) * 0.8 : 0;
+    m.opacity = seg(t, B.popIn + 0.25, B.popIn + 0.31);
+    m.lift = 0;
+    m.sx = pop * (1 - 0.5 * d); m.sy = pop * (1 + d);
     m.expr = (t > 0.95 && t < 1.04) || (t > 1.62 && t < 1.7) ? "blink" : "happy";
     // The turn: eyes widen, a small lift, amber rises through the body.
     if (t >= B.turn) {
