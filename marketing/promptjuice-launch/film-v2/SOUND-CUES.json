@@ -29,7 +29,8 @@
    "time": 2.97,
    "file": "assets/sfx/whoosh-swell.mp3",
    "gain": 0.3,
-   "align": "peak"
+   "align": "peak",
+   "fade_in": 1.4
   },
   {
    "what": "jump to menu bar",
@@ -281,6 +282,7 @@
     "db": -14,
     "note": "song's bright stab before the drop"
    }
-  ]
+  ],
+  "end_at": 25.55
  }
 }

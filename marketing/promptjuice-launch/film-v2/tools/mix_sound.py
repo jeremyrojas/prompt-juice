@@ -62,6 +62,12 @@ def music_bed(src, music, n):
         ramp = int(0.04 * SR)
         g = np.convolve(g, np.ones(ramp) / ramp, mode="same").astype(np.float32)
         bed *= g[:, None]
+    if music.get("end_at"):
+        # Stop the track at a natural gap, with a 20 ms ramp so it can't click.
+        e = int(music["end_at"] * SR)
+        r = int(0.02 * SR)
+        bed[e:] = 0
+        bed[max(0, e - r):e] *= np.linspace(1, 0, min(r, e))[:, None]
     fi = int(music.get("fade_in", 0.0) * SR)
     if fi:
         bed[:fi] *= np.linspace(0, 1, fi)[:, None] ** 2
@@ -95,6 +101,11 @@ def main():
         uses[f] = n + 1
         variation = [1.0, 1.045, 0.962, 1.02, 0.98][n % 5]
         x = repitch(cache[f], variation) * cue.get("gain", 1.0)
+        if cue.get("fade_in"):
+            # Ease the sample in (e.g. a long swell whose start arrives too early).
+            fi = min(len(x), int(cue["fade_in"] * SR))
+            x = x.copy()
+            x[:fi] *= (np.linspace(0, 1, fi) ** 2)[:, None]
         at = cue["time"] + 1 / fps
         if cue.get("align", "peak") == "peak":
             at -= peak_index(x) / SR
