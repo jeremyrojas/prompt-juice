@@ -235,10 +235,10 @@
    "align": "peak"
   },
   {
-   "what": "droplet lands as the i's dot (chime)",
-   "time": 22.72,
-   "file": "assets/sfx/chime.mp3",
-   "gain": 0.24,
+   "what": "droplet lands as the i's dot (Epidemic water drip, first drip)",
+   "time": 22.7,
+   "file": "licensed/es-water-drip-01.wav",
+   "gain": 1.6,
    "align": "peak"
   }
  ],
