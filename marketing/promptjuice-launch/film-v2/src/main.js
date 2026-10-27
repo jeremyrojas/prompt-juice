@@ -195,6 +195,9 @@ function animateTitle(T, t, { t0, t1, kind = "blur", stagger = 0.07, cx = W / 2,
   const on = t >= t0 - 0.01 && t < t1 + 0.4;
   show(T.root, on);
   if (!on) return;
+  // Measure while visible: a page that loaded hidden, or before its webfont
+  // arrived, would otherwise centre every title on a width of 0.
+  T.measure();
   placeTitle(T, cx, y);
   T.spans.forEach((s, i) => wordIn(s, t, t0 + i * stagger, kind));
   wordsOut(T.spans, t, t1);
@@ -401,7 +404,7 @@ const titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size:
 
 // F: end card.
 const wordmark = el("div", "wordmark", sceneF, `Prompt<span style="color:var(--green)">Juice</span>`);
-const url = el("div", "url", sceneF, "promptjuice.app");
+const url = el("div", "url", sceneF, "Use it or lose it.");
 
 const mascot = createMascot(mascotLayer);
 
@@ -501,6 +504,7 @@ export function render(t) {
     // "Plenty of juice left." then the line glides over for "Resets soon."
     show(titleA.root, inA);
     if (inA) {
+      titleA.measure();
       const w4 = titleA.lefts[3] + titleA.widths[3];
       const shift = seg(t, B.resetsSoon - 0.1, B.resetsSoon + 0.6, ease.inOut3);
       const x0 = lerp(W / 2 - w4 / 2, W / 2 - titleA.width / 2, shift);
@@ -667,6 +671,7 @@ export function render(t) {
     const drains = [[B.card1 + 0.08, B.card1 + 1.0], [B.card2 + 0.08, B.card2 + 0.9], [B.card3 + 0.08, B.card3 + 0.95]];
     taskEls.forEach((tk, i) => {
       const t0 = arrivals[i];
+      fitTaskTitle(tk);
       const k = seg(t, t0, t0 + 0.6, ease.out4);
       const fl = seg(t, B.finale + i * 0.06, B.finale + 0.55 + i * 0.06, ease.inOut3);
       show(tk.el, t >= t0);
@@ -751,6 +756,15 @@ export function render(t) {
   mascot.pose(m);
 }
 
+/** Task titles stay on one line: shrink one that would overflow its card. */
+function fitTaskTitle(tk) {
+  const what = tk.el.querySelector(".what");
+  if (!what.clientWidth) return;
+  let size = 42;
+  what.style.fontSize = `${size}px`;
+  while (what.scrollWidth > what.clientWidth && size > 30) what.style.fontSize = `${--size}px`;
+}
+
 function cursorPose(on, p = [0, 0], press = 0) {
   show(cursor, on);
   if (on) cursor.style.transform = `translate(${p[0] - 6}px, ${p[1] - 4}px) scale(${1 - press * 0.16})`;
@@ -763,12 +777,7 @@ const ready = (async () => {
   await document.fonts.ready;
   await Promise.all([...document.images].map((i) => (i.complete ? null : new Promise((r) => { i.onload = i.onerror = r; }))));
   [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure());
-  // Task titles stay on one line: shrink any that would overflow the card.
-  taskEls.forEach(({ el }) => {
-    const what = el.querySelector(".what");
-    let size = 42;
-    while (what.scrollWidth > what.clientWidth && size > 30) what.style.fontSize = `${--size}px`;
-  });
+
   render(+(params.get("t") || 0));
 })();
 window.__film = { render, ready, duration: DURATION, beats: BEATS };

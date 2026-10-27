@@ -293,7 +293,7 @@
   }
   function animateTitle(T, t, { t0, t1, kind = "blur", stagger = 0.07, cx = W / 2, y = 90 }) {
     let on = t >= t0 - 0.01 && t < t1 + 0.4;
-    show(T.root, on), on && (placeTitle(T, cx, y), T.spans.forEach((s, i) => wordIn(s, t, t0 + i * stagger, kind)), wordsOut(T.spans, t, t1));
+    show(T.root, on), on && (T.measure(), placeTitle(T, cx, y), T.spans.forEach((s, i) => wordIn(s, t, t0 + i * stagger, kind)), wordsOut(T.spans, t, t1));
   }
   function rays(ctx, cx, cy, color, alpha, rot, n = 14) {
     if (alpha <= 0.01) return;
@@ -369,7 +369,7 @@
     c.style.left = `${260 + i * 480}px`, c.style.top = "680px";
     let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     return path.setAttribute("fill", "none"), path.setAttribute("stroke-linecap", "round"), streamSvg.appendChild(path), { el: c, prog: c.querySelector(".prog b"), chip: c.querySelector(".chip"), path, x: 260 + i * 480 };
-  }), titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], ["model.", "amber"]], { size: 100 }), titleE2 = createTitle(sceneE, [["Use"], ["higher", "amber"], ["effort.", "amber"]], { size: 100 }), titleE2b = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 }), titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 }), wordmark = el2("div", "wordmark", sceneF, 'Prompt<span style="color:var(--green)">Juice</span>'), url = el2("div", "url", sceneF, "promptjuice.app"), mascot = createMascot(mascotLayer), cursor = el2("div", "", world, '<svg width="46" height="68" viewBox="0 0 23 34"><path d="M1.5 1.5 L1.5 26.5 L7.6 20.8 L11.6 30.6 L15.6 29 L11.7 19.4 L20 19.4 Z" fill="#000" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>');
+  }), titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], ["model.", "amber"]], { size: 100 }), titleE2 = createTitle(sceneE, [["Use"], ["higher", "amber"], ["effort.", "amber"]], { size: 100 }), titleE2b = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 }), titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 }), wordmark = el2("div", "wordmark", sceneF, 'Prompt<span style="color:var(--green)">Juice</span>'), url = el2("div", "url", sceneF, "Use it or lose it."), mascot = createMascot(mascotLayer), cursor = el2("div", "", world, '<svg width="46" height="68" viewBox="0 0 23 34"><path d="M1.5 1.5 L1.5 26.5 L7.6 20.8 L11.6 30.6 L15.6 29 L11.7 19.4 L20 19.4 Z" fill="#000" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>');
   cursor.id = "cursor";
   var BEATS = {
     popIn: 0,
@@ -440,6 +440,7 @@
         valueAReset.style.color = `rgba(${Math.round(lerp(255, 240, amberText))},${Math.round(lerp(255, 163, amberText))},${Math.round(lerp(255, 42, amberText))},${lerp(0.55, 1, amberText)})`, valueA.style.transform = `translate(${1710 - valueA.offsetWidth}px, ${ry}px)`, valueA.style.opacity = rowIn * (1 - out), valueA.style.filter = `blur(${(1 - rowIn) * 8}px)`;
       }
       if (show(titleA.root, inA), inA) {
+        titleA.measure();
         let w4 = titleA.lefts[3] + titleA.widths[3], shift = seg(t, B.resetsSoon - 0.1, B.resetsSoon + 0.6, ease.inOut3), x0 = lerp(W / 2 - w4 / 2, W / 2 - titleA.width / 2, shift);
         titleA.root.style.transform = `translate(${x0}px, 92px)`, [0.5, 0.58, 0.66, 0.74].forEach((t0, i) => wordIn(titleA.spans[i], t, t0, "blur")), wordIn(titleA.spans[4], t, B.resetsSoon + 0.15, "blur"), wordIn(titleA.spans[5], t, B.resetsSoon + 0.25, "blur"), wordsOut(titleA.spans, t, 3.62);
       }
@@ -522,7 +523,9 @@
       labelE.style.transform = `translate(260px, ${578 + (1 - rowIn) * 14 + fall * 120}px)`, labelE.style.opacity = rowIn * (1 - fall), labelE.style.filter = `blur(${(1 - rowIn) * 8}px)`, valueE.style.transform = `translate(${1660 - valueE.offsetWidth}px, ${574 + (1 - rowIn) * 14 + fall * 120}px)`, valueE.style.opacity = rowIn * (1 - fall), valueE.style.filter = `blur(${(1 - rowIn) * 8}px)`;
       let arrivals = [B.card1, B.card2, B.card3], drains = [[B.card1 + 0.08, B.card1 + 1], [B.card2 + 0.08, B.card2 + 0.9], [B.card3 + 0.08, B.card3 + 0.95]];
       if (taskEls.forEach((tk, i) => {
-        let t0 = arrivals[i], k = seg(t, t0, t0 + 0.6, ease.out4), fl = seg(t, B.finale + i * 0.06, B.finale + 0.55 + i * 0.06, ease.inOut3);
+        let t0 = arrivals[i];
+        fitTaskTitle(tk);
+        let k = seg(t, t0, t0 + 0.6, ease.out4), fl = seg(t, B.finale + i * 0.06, B.finale + 0.55 + i * 0.06, ease.inOut3);
         show(tk.el, t >= t0), tk.el.style.opacity = k * (1 - fl), tk.el.style.transform = `translateY(${(1 - k) * 36 + fl * 90}px)`, tk.el.style.filter = k < 1 ? `blur(${(1 - k) * 10}px)` : "";
         let done = seg(t, B.reset + 0.2 + i * 0.12, B.reset + 0.7 + i * 0.12, ease.out3), work = seg(t, drains[i][0] + 0.3, drains[i][1] + 1.6, ease.inOut2);
         tk.prog.style.width = `${lerp(work * 70, 100, done)}%`, tk.prog.style.background = done > 0 ? "linear-gradient(90deg,#3fa512,#8be24e)" : "", done > 0.5 ? (tk.chip.textContent = "Done", tk.chip.style.color = "#5fd11f", tk.chip.style.background = "rgba(95,209,31,.14)", tk.chip.style.boxShadow = "inset 0 0 0 2px rgba(95,209,31,.35)") : (tk.chip.textContent = TASKS[i].chip, tk.chip.style.cssText = "");
@@ -552,16 +555,19 @@
     }
     t >= B.glyphLand && t < B.handoff && (m.visible = !1), mascot.pose(m);
   }
+  function fitTaskTitle(tk) {
+    let what = tk.el.querySelector(".what");
+    if (!what.clientWidth) return;
+    let size = 42;
+    for (what.style.fontSize = `${size}px`; what.scrollWidth > what.clientWidth && size > 30; ) what.style.fontSize = `${--size}px`;
+  }
   function cursorPose(on, p = [0, 0], press = 0) {
     show(cursor, on), on && (cursor.style.transform = `translate(${p[0] - 6}px, ${p[1] - 4}px) scale(${1 - press * 0.16})`);
   }
   var params = new URLSearchParams(location.search), capture = params.has("capture"), ready = (async () => {
     await document.fonts.ready, await Promise.all([...document.images].map((i) => i.complete ? null : new Promise((r) => {
       i.onload = i.onerror = r;
-    }))), [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure()), taskEls.forEach(({ el: el3 }) => {
-      let what = el3.querySelector(".what"), size = 42;
-      for (; what.scrollWidth > what.clientWidth && size > 30; ) what.style.fontSize = `${--size}px`;
-    }), render(+(params.get("t") || 0));
+    }))), [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure()), render(+(params.get("t") || 0));
   })();
   window.__film = { render, ready, duration: DURATION, beats: BEATS };
   if (!capture) {

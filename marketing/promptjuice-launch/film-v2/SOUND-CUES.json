@@ -14,7 +14,7 @@
    "what": "bar fills (soft air)",
    "time": 1.0,
    "file": "assets/sfx/whoosh-soft.mp3",
-   "gain": 0.28,
+   "gain": 0.16,
    "align": "peak"
   },
   {
@@ -28,7 +28,7 @@
    "what": "amber wash swells into Resets soon",
    "time": 2.97,
    "file": "assets/sfx/whoosh-swell.mp3",
-   "gain": 0.5,
+   "gain": 0.3,
    "align": "peak"
   },
   {
