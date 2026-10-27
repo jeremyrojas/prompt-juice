@@ -56,26 +56,47 @@
    "what": "panel unfolds",
    "time": 8.2,
    "file": "assets/sfx/whoosh-soft.mp3",
+   "gain": 0.14,
+   "align": "peak"
+  },
+  {
+   "what": "Claude bar zips in (Epidemic whoosh)",
+   "time": 8.37,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.3,
+   "align": "peak"
+  },
+  {
+   "what": "Codex bar zips in",
+   "time": 8.51,
+   "file": "assets/sfx/whoosh-soft.mp3",
    "gain": 0.26,
    "align": "peak"
   },
   {
    "what": "Juicebar swings into the close-up (Epidemic whoosh)",
-   "time": 9.72,
+   "time": 9.375,
    "file": "licensed/es-whoosh-short-low-dry-01.wav",
    "gain": 0.42,
    "align": "peak"
   },
   {
    "what": "click Claude chevron",
-   "time": 11.75,
+   "time": 11.4,
    "file": "assets/sfx/click-soft.mp3",
    "gain": 0.55,
    "align": "peak"
   },
   {
+   "what": "Weekly and Fable rows zip in",
+   "time": 11.87,
+   "file": "assets/sfx/whoosh-soft.mp3",
+   "gain": 0.17,
+   "align": "peak"
+  },
+  {
    "what": "Juicebar swings to the callouts (Epidemic whoosh)",
-   "time": 13.15,
+   "time": 12.6,
    "file": "licensed/es-whoosh-short-low-dry-01.wav",
    "gain": 0.4,
    "align": "peak"
@@ -175,6 +196,7 @@
     "note": "song ending under the logo"
    }
   ],
-  "drop_at": 19.7
+  "drop_at": 19.7,
+  "fade_in": 1.5
  }
 }

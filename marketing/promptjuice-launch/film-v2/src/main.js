@@ -414,8 +414,8 @@ export const BEATS = {
   popIn: 0.0, barZip: 0.45, barLand: 1.5, clockRoll: 1.85, turn: 2.4, resetsSoon: 2.72,
   youPaid: 4.05, dontWaste: 4.95,
   jumpPrep: 6.25, jump: 6.4, glyphLand: 7.05, menuCaption: 7.12, click: 7.85, panelOpen: 7.95,
-  zipClaude: 8.2, zipCodex: 8.34, swing1: 9.3, glint: 10.3, toCard: 11.0, chevronClick: 11.75, expand: 11.79,
-  swing2: 12.75, legClaude: 13.2, legCodex: 13.5, toBar: 14.4, handoff: 15.3,
+  zipClaude: 8.2, zipCodex: 8.34, swing1: 8.95, glint: 9.95, toCard: 10.65, chevronClick: 11.4, expand: 11.44,
+  swing2: 12.2, legClaude: 12.6, legCodex: 12.85, toBar: 14.4, handoff: 15.3,
   strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.5, nothingWasted: 19.8,
   finale: 21.0, mascotLand: 21.7, wordmarkIn: 22.2, endHop: 23.2,
 };

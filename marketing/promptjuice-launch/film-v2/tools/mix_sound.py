@@ -53,6 +53,9 @@ def music_bed(src, music, n):
         if i + 1 < len(segs) and xf:
             w[-2 * xf:] = np.cos(np.linspace(0, np.pi / 2, 2 * xf))
         bed[lo:hi] += chunk * w[:, None]
+    fi = int(music.get("fade_in", 0.0) * SR)
+    if fi:
+        bed[:fi] *= np.linspace(0, 1, fi)[:, None] ** 2
     fo = int(music.get("fade_out", 0.0) * SR)
     if fo:
         bed[-fo:] *= np.linspace(1, 0, fo)[:, None]
