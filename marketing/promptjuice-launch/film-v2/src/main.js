@@ -353,6 +353,7 @@ Object.assign(clock.style, { left: "718px", width: "76px" });
 // D: Juicebar.
 const panelStage = el("div", "layer", sceneD); panelStage.id = "panelStage";
 const panelCam = el("div", "", panelStage); panelCam.id = "panelCam";
+const PANEL_ZOOM = 4;
 const panel = createPanel(panelCam, {
   header: { title: "Use your Claude juice", subtitle: "5-hour · 83% left · resets in 33m", remaining: 0.83, tint: "#f0a32a" },
   cards: [
@@ -366,6 +367,7 @@ const panel = createPanel(panelCam, {
     ] },
   ],
 });
+panel.root.style.zoom = PANEL_ZOOM;
 // Callouts: one mascot per provider, in that provider's state colour.
 const legend = el("div", "layer", sceneD);
 const legClaude = el("div", "legend", legend, `<img src="assets/img/mascot-amber-happy.png"><div><span class="who"><i style="background:var(--claude)"></i>Claude</span><span style="color:var(--amber)">Resets soon.</span></div>`);
@@ -598,7 +600,9 @@ export function render(t) {
     ]);
     const [cx, cy, fx, fy, s, rx, ry] = pose;
     panelStage.style.perspectiveOrigin = `${cx}px ${cy}px`;
-    panelCam.style.transform = `translate3d(${cx}px, ${cy}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s}) translate(${-fx}px, ${-fy}px)`;
+    // The panel is laid out at PANEL_ZOOM× (CSS zoom) and scaled back down, so
+    // Chrome rasterises it sharp even while the 3D camera moves.
+    panelCam.style.transform = `translate3d(${cx}px, ${cy}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s / PANEL_ZOOM}) translate(${-fx * PANEL_ZOOM}px, ${-fy * PANEL_ZOOM}px)`;
     sceneD.style.opacity = 1 - seg(t, B.handoff - 0.1, B.handoff + 0.25, ease.inOut2);
 
     const unfold = spring(t, B.panelOpen, { zeta: 0.78, freq: 1.25 });

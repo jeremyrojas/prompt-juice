@@ -440,7 +440,7 @@
   panelStage.id = "panelStage";
   var panelCam = el2("div", "", panelStage);
   panelCam.id = "panelCam";
-  var panel = createPanel(panelCam, {
+  var PANEL_ZOOM = 4, panel = createPanel(panelCam, {
     header: { title: "Use your Claude juice", subtitle: "5-hour \xB7 83% left \xB7 resets in 33m", remaining: 0.83, tint: "#f0a32a" },
     cards: [
       { id: "claude", name: "Claude", color: "#ff9f0a", rows: [
@@ -452,7 +452,9 @@
         { label: "Weekly", pct: 88, reset: "resets in 5d", severity: "healthy" }
       ] }
     ]
-  }), legend = el2("div", "layer", sceneD), legClaude = el2("div", "legend", legend, '<img src="assets/img/mascot-amber-happy.png"><div><span class="who"><i style="background:var(--claude)"></i>Claude</span><span style="color:var(--amber)">Resets soon.</span></div>'), legCodex = el2("div", "legend", legend, '<img src="assets/img/mascot-green-happy.png"><div><span class="who"><i style="background:var(--codex)"></i>Codex</span><span style="color:var(--green)">Plenty left.</span></div>'), streamSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  });
+  panel.root.style.zoom = PANEL_ZOOM;
+  var legend = el2("div", "layer", sceneD), legClaude = el2("div", "legend", legend, '<img src="assets/img/mascot-amber-happy.png"><div><span class="who"><i style="background:var(--claude)"></i>Claude</span><span style="color:var(--amber)">Resets soon.</span></div>'), legCodex = el2("div", "legend", legend, '<img src="assets/img/mascot-green-happy.png"><div><span class="who"><i style="background:var(--codex)"></i>Codex</span><span style="color:var(--green)">Plenty left.</span></div>'), streamSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   streamSvg.id = "stream";
   streamSvg.setAttribute("width", W);
   streamSvg.setAttribute("height", H);
@@ -586,7 +588,7 @@
         [B.toBar, P_ANGLE2, ease.inOut2],
         [B.toBar + 0.8, P_BAR, ease.inOut3]
       ]), [cx, cy, fx, fy, s, rx, ry] = pose;
-      panelStage.style.perspectiveOrigin = `${cx}px ${cy}px`, panelCam.style.transform = `translate3d(${cx}px, ${cy}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s}) translate(${-fx}px, ${-fy}px)`, sceneD.style.opacity = 1 - seg(t, B.handoff - 0.1, B.handoff + 0.25, ease.inOut2);
+      panelStage.style.perspectiveOrigin = `${cx}px ${cy}px`, panelCam.style.transform = `translate3d(${cx}px, ${cy}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s / PANEL_ZOOM}) translate(${-fx * PANEL_ZOOM}px, ${-fy * PANEL_ZOOM}px)`, sceneD.style.opacity = 1 - seg(t, B.handoff - 0.1, B.handoff + 0.25, ease.inOut2);
       let unfold = spring(t, B.panelOpen, { zeta: 0.78, freq: 1.25 });
       panel.root.style.transform = `rotateX(${(1 - unfold) * -92}deg)`, panel.root.style.opacity = clamp(seg(t, B.panelOpen, B.panelOpen + 0.15) * 1.2);
       let zc = (tt) => zipZ(tt, B.zipClaude), zx = (tt) => zipZ(tt, B.zipCodex), z1 = (tt) => zipZ(tt, B.expand + 0.2), z2 = (tt) => zipZ(tt, B.expand + 0.32);
