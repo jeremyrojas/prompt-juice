@@ -60,10 +60,10 @@
    "align": "peak"
   },
   {
-   "what": "camera to punch-in",
-   "time": 9.8,
-   "file": "assets/sfx/whoosh-air.mp3",
-   "gain": 0.2,
+   "what": "Juicebar swings into the close-up (Epidemic whoosh)",
+   "time": 9.72,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.42,
    "align": "peak"
   },
   {
@@ -74,17 +74,17 @@
    "align": "peak"
   },
   {
-   "what": "camera to callouts",
-   "time": 13.2,
-   "file": "assets/sfx/whoosh-air.mp3",
-   "gain": 0.2,
+   "what": "Juicebar swings to the callouts (Epidemic whoosh)",
+   "time": 13.15,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.4,
    "align": "peak"
   },
   {
-   "what": "push through the bar",
-   "time": 15.3,
-   "file": "assets/sfx/whoosh-swell.mp3",
-   "gain": 0.5,
+   "what": "push into the bar (Epidemic whoosh)",
+   "time": 14.8,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.45,
    "align": "peak"
   },
   {
@@ -109,7 +109,7 @@
    "align": "peak"
   },
   {
-   "what": "riser peaking on the drop (reset)",
+   "what": "riser peaking on the drop (music drop at 19.7)",
    "time": 19.7,
    "file": "assets/sfx/whoosh-swell.mp3",
    "gain": 0.42,
@@ -117,7 +117,7 @@
   },
   {
    "what": "Nothing wasted (glint)",
-   "time": 20.47,
+   "time": 20.4,
    "file": "assets/sfx/sparkle.mp3",
    "gain": 0.1,
    "align": "peak"
@@ -152,12 +152,12 @@
   }
  ],
  "music": {
-  "file": "music-options/intuition-full-preview.mp3",
+  "file": "licensed/intuition-full-preview.mp3",
   "credit": "intuition (Instrumental Version) by dasloe. Epidemic Sound. Low-quality preview: swap in the high-quality full track before the final render.",
   "gain": 0.85,
   "duck_db": 3.0,
   "xfade": 0.04,
-  "fade_out": 0.5,
+  "fade_out": 1.8,
   "segments": [
    {
     "from": 0.55,

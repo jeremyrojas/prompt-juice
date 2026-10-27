@@ -404,8 +404,8 @@
     card2: 17.18,
     another: 18.3,
     card3: 18.53,
-    reset: 19.7,
-    nothingWasted: 19.87,
+    reset: 19.5,
+    nothingWasted: 19.8,
     finale: 21,
     mascotLand: 21.7,
     wordmarkIn: 22.2,
@@ -512,7 +512,7 @@
     } else inD || cursorPose(!1);
     let inE = t >= B.handoff - 0.08 && t < B.finale + 0.7;
     if (show(sceneE, inE), inE) {
-      let fall = seg(t, B.finale, B.finale + 0.6, ease.inOut3), d1 = seg(t, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2), d2 = seg(t, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2), d3 = seg(t, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), level = (tt) => 0.83 - 0.28 * seg(tt, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2) - 0.27 * seg(tt, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2) - 0.24 * seg(tt, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), refill = (tt) => tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.88, freq: 0.9 }), reset = t >= B.reset, z = reset ? Math.min(1, lerp(0.04, 1, refill(t))) : level(t), v = CALM * (reset ? speed(refill, t) / 1.1 : speed(level, t)), thick = lerp(6 * P_BAR[4] / 46, 1, seg(t, B.handoff, B.handoff + 0.5, ease.inOut3));
+      let fall = seg(t, B.finale, B.finale + 0.6, ease.inOut3), d1 = seg(t, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2), d2 = seg(t, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2), d3 = seg(t, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), level = (tt) => 0.83 - 0.28 * seg(tt, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2) - 0.27 * seg(tt, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2) - 0.24 * seg(tt, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), refill = (tt) => tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.86, freq: 1.15 }), reset = t >= B.reset, z = reset ? Math.min(1, lerp(0.04, 1, refill(t))) : level(t), v = CALM * (reset ? speed(refill, t) / 1.1 : speed(level, t)), thick = lerp(6 * P_BAR[4] / 46, 1, seg(t, B.handoff, B.handoff + 0.5, ease.inOut3));
       barE.root.style.transformOrigin = "50% 50%";
       let headX = barE.pose({ z, color: reset ? "green" : "amber", v, glint: (t - (B.reset + 0.9)) / 0.7, opacity: 1 - fall, ty: fall * 120 });
       barE.root.style.transform += ` scaleY(${thick})`, sparkle(fctx, headX - 8, 523, 40 * bump(t, B.reset + 0.8, 0.8), 0.95, t * 0.8, [210, 255, 170]), valueEPct.textContent = `${Math.round(z * 100)}% left`;

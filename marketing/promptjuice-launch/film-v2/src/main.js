@@ -416,7 +416,7 @@ export const BEATS = {
   jumpPrep: 6.25, jump: 6.4, glyphLand: 7.05, menuCaption: 7.12, click: 7.85, panelOpen: 7.95,
   zipClaude: 8.2, zipCodex: 8.34, swing1: 9.3, glint: 10.3, toCard: 11.0, chevronClick: 11.75, expand: 11.79,
   swing2: 12.75, legClaude: 13.2, legCodex: 13.5, toBar: 14.4, handoff: 15.3,
-  strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.7, nothingWasted: 19.87,
+  strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.5, nothingWasted: 19.8,
   finale: 21.0, mascotLand: 21.7, wordmarkIn: 22.2, endHop: 23.2,
 };
 const B = BEATS;
@@ -638,7 +638,8 @@ export function render(t) {
       - 0.28 * seg(tt, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2)
       - 0.27 * seg(tt, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2)
       - 0.24 * seg(tt, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2);
-    const refill = (tt) => (tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.88, freq: 0.9 }));
+    // Fast refill: the head is at full speed when the music drops (0.2 s in).
+    const refill = (tt) => (tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.86, freq: 1.15 }));
     const reset = t >= B.reset;
     const z = reset ? Math.min(1, lerp(0.04, 1, refill(t))) : level(t);
     const v = CALM * (reset ? speed(refill, t) / 1.1 : speed(level, t));
