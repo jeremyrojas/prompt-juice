@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=iife --outfile=dist/film.js --minify-syntax",
+    "build": "esbuild src/main.js --bundle --format=iife --outfile=dist/film.js --minify-syntax --loader:.svg=text",
     "mix": "python3 tools/mix_sound.py",
     "render": "node tools/render.mjs",
     "snap": "node tools/snap.mjs"

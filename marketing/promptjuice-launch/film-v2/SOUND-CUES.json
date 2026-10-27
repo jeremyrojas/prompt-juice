@@ -158,15 +158,22 @@
    "align": "peak"
   },
   {
-   "what": "logo: low thump",
-   "time": 22.55,
+   "what": "logo: low thump as the wordmark rises",
+   "time": 21.75,
    "file": "assets/sfx/impact-low.mp3",
-   "gain": 0.35,
+   "gain": 0.3,
    "align": "peak"
   },
   {
-   "what": "logo: chime",
-   "time": 22.75,
+   "what": "juice fills the letters",
+   "time": 22.42,
+   "file": "assets/sfx/whoosh-soft.mp3",
+   "gain": 0.16,
+   "align": "peak"
+  },
+  {
+   "what": "droplet lands as the i's dot (chime)",
+   "time": 22.72,
    "file": "assets/sfx/chime.mp3",
    "gain": 0.24,
    "align": "peak"

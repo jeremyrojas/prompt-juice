@@ -2,6 +2,7 @@
 // preview, scrubbing and the frame-by-frame capture all agree.
 import { clamp, lerp, ease, seg, spring, wobble, keys, rng } from "./anim.js";
 import { createPanel, gaugeSVG, poseBar } from "./panel.js";
+import logoSvg from "../logo/option-1.svg";
 
 export const DURATION = 24.9;
 const W = 1920;
@@ -402,9 +403,24 @@ const titleE2 = createTitle(sceneE, [["Use"], ["higher", "amber"], ["effort.", "
 const titleE2b = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 });
 const titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 });
 
-// F: end card.
-const wordmark = el("div", "wordmark", sceneF, `Prompt<span style="color:var(--green)">Juice</span>`);
-const url = el("div", "url", sceneF, "Use it or lose it.");
+// F: end card — logo option 1 ("Juice Level"), inlined so its parts animate.
+// Ids are prefixed so they can't collide with the film's own (e.g. #glow).
+const logoWrap = el("div", "layer logo", sceneF);
+logoWrap.innerHTML = logoSvg
+  .replace(/id="([^"]+)"/g, 'id="lg-$1"')
+  .replace(/url\(#([^)]+)\)/g, "url(#lg-$1)")
+  .replace(/href="#([^"]+)"/g, 'href="#lg-$1"')
+  .replace(/\.\.\/assets\//g, "assets/");
+const LG = (id) => logoWrap.querySelector(`#lg-${id}`);
+// The film draws its own ground, glow and mascot.
+["bg", "glow", "mascot"].forEach((id) => { const e = LG(id); if (e) e.style.display = "none"; });
+const PROMPT_LETTERS = ["l-P", "l-r", "l-o", "l-m", "l-p", "l-t"];
+// The logo's mascot slot (same PNG crop as the rig: feet at 1109/1115).
+const LOGO_MASCOT = (() => {
+  const img = LG("mascot-img");
+  const y = +img.getAttribute("y"), h = +img.getAttribute("height"), x = +img.getAttribute("x"), w = +img.getAttribute("width");
+  return { x: x + w / 2, ground: y + h * (1109 / 1115), h };
+})();
 
 const mascot = createMascot(mascotLayer);
 
@@ -420,7 +436,7 @@ export const BEATS = {
   zipClaude: 8.2, zipCodex: 8.34, swing1: 8.95, glint: 9.95, toCard: 10.65, chevronClick: 11.4, expand: 11.44,
   swing2: 12.2, legClaude: 12.6, legCodex: 12.85, toBar: 14.4, handoff: 15.3,
   strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.5, nothingWasted: 19.8,
-  finale: 21.0, mascotLand: 21.7, wordmarkIn: 22.2, endHop: 23.2,
+  finale: 21.0, mascotLand: 21.7, juiceRise: 22.2, dotLand: 22.7, tagline: 23.2, endHop: 23.95,
 };
 const B = BEATS;
 
@@ -448,7 +464,7 @@ export function render(t) {
   const amberK = seg(t, B.turn, B.turn + 0.9, ease.inOut2) * (1 - seg(t, B.reset, B.reset + 0.9, ease.inOut2));
   const glowC = mixC(GREEN, AMBER, amberK);
   const glowI = keys(t, [[0, 0.3], [1.0, 1, ease.inOut2], [B.toBar, 1], [B.handoff + 0.3, 0.8], [B.reset, 0.85], [B.reset + 0.8, 1.05], [24.4, 1]]);
-  const glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.4, [960, 300]], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [780, 560]]]);
+  const glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.4, [960, 300]], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [960, 500]]]);
   glow.style.background = `radial-gradient(closest-side, ${rgba(glowC, 0.34 * glowI)}, ${rgba(glowC, 0.1 * glowI)} 42%, ${rgba(glowC, 0)} 72%)`;
   glow.style.transform = `translate(${glowXY[0] - 960}px, ${glowXY[1] - 540}px)`;
   // A slow dolly on the opening shots.
@@ -721,35 +737,55 @@ export function render(t) {
     animateTitle(titleE3, t, { t0: B.nothingWasted, t1: B.finale - 0.15, kind: "blur", stagger: 0.1, y: 120 });
   }
 
-  // ------------------------------------------------ F: end card (20.4 – 24.4)
+  // ------------------------------------------------ F: end card (21.0 – 24.9)
   const inF = t >= B.finale;
   show(sceneF, inF);
   if (inF) {
-    const wmW = wordmark.offsetWidth, mH = 380, mW = mH * MASCOT_ASPECT, gap = 56;
-    const left = W / 2 - (mW + gap + wmW) / 2;
-    const target = [left + mW / 2, 740, mH];
+    // The film's mascot glides in and lands in the logo's mascot slot.
+    const target = [LOGO_MASCOT.x, LOGO_MASCOT.ground, LOGO_MASCOT.h];
     const start = [clamp(barE.headX(1) - 40, 380, 1600), 500, 180];
     const f = seg(t, B.finale + 0.1, B.mascotLand, ease.inOut2);
     m.from = "green"; m.to = "green"; m.k = 0;
     m.x = lerp(start[0], target[0], f);
     m.ground = lerp(start[1], target[1], f);
     m.h = lerp(start[2], target[2], ease.out2(f));
-    m.lift = 150 * Math.sin(Math.PI * f) + 40 * hop(t, B.endHop, 0.5);
+    m.lift = 150 * Math.sin(Math.PI * f) + 36 * hop(t, B.endHop, 0.5);
     m.rot = -8 * bump(t, B.finale + 0.1, B.mascotLand - B.finale - 0.1);
     const sq = wobble(t, B.mascotLand, { amp: 0.06, freq: 2.4, decay: 5 }) + wobble(t, B.endHop + 0.5, { amp: 0.04, freq: 2.6, decay: 6 });
     m.sx = 1 + sq * 0.6; m.sy = 1 - sq;
-    m.expr = t < B.mascotLand + 0.7 ? "joy" : (t > 23.9 && t < 23.98) ? "blink" : "happy";
+    m.expr = t < B.mascotLand + 0.7 ? "joy" : (t > 24.2 && t < 24.28) ? "blink" : (t > B.endHop - 0.1 && t < B.endHop + 0.7) ? "joy" : "happy";
+    m.shadowOpacity = 0.8;
 
-    const wipe = seg(t, B.wordmarkIn, B.wordmarkIn + 0.8, ease.inOut3);
-    const wmX = left + mW + gap;
-    wordmark.style.transform = `translate(${wmX - (1 - wipe) * 40}px, 440px)`;
-    wordmark.style.clipPath = `inset(-20% ${(1 - wipe) * 100}% -20% 0)`;
-    wordmark.style.opacity = wipe > 0 ? 1 : 0;
-    const u = seg(t, B.wordmarkIn + 0.45, B.wordmarkIn + 1.0, ease.out3);
-    url.style.transform = `translate(${wmX + 6}px, ${626 + (1 - u) * 12}px)`;
-    url.style.opacity = u;
-    url.style.filter = `blur(${(1 - u) * 8}px)`;
-    sparkle(fctx, wmX + wmW - 10, 452, 30 * bump(t, B.wordmarkIn + 0.7, 0.8), 0.9, t * 0.8, [210, 255, 170]);
+    // "Prompt" rises in letter by letter.
+    PROMPT_LETTERS.forEach((id, i) => {
+      const k = seg(t, B.mascotLand + 0.02 + i * 0.05, B.mascotLand + 0.5 + i * 0.05, ease.out3);
+      const e = LG(id);
+      e.style.transform = `translateY(${(1 - k) * 46}px)`;
+      e.style.opacity = k;
+      e.style.filter = k < 1 ? `blur(${(1 - k) * 10}px)` : "";
+    });
+    // The "Juice" glasses appear, then fill with a slosh.
+    const vessel = seg(t, B.mascotLand + 0.25, B.mascotLand + 0.6, ease.out3);
+    LG("word-juice").style.opacity = vessel;
+    const fill = t < B.juiceRise ? 0 : spring(t, B.juiceRise, { zeta: 0.55, freq: 1.3 });
+    LG("juice-level").style.transform = `translateY(${92 * (1 - fill)}px)`;
+    LG("juice-wave").style.transform = `translateX(${((t * 0.9) % 1) * 146}px)`;
+    LG("juice-bubbles").style.transform = `translateY(${-10 * seg(t, B.juiceRise, B.juiceRise + 2.5)}px)`;
+    LG("juice-bubbles").style.opacity = seg(t, B.juiceRise + 0.3, B.juiceRise + 0.7);
+    // The droplet falls in as the dot of the i and squashes on landing.
+    const fallK = seg(t, B.dotLand - 0.42, B.dotLand, ease.in2);
+    const squash = wobble(t, B.dotLand, { amp: 0.28, freq: 3.2, decay: 7 });
+    const dot = LG("droplet-dot");
+    dot.style.opacity = t < B.dotLand - 0.42 ? 0 : 1;
+    dot.style.transform = `translateY(${-300 * (1 - fallK)}px) scale(${1 + squash * 0.7}, ${1 - squash})`;
+    // Tagline, then the open-source pill (enlarged so it reads on a phone).
+    const tg = seg(t, B.tagline, B.tagline + 0.5, ease.out3);
+    LG("tagline").style.opacity = tg;
+    LG("tagline").style.transform = `translateY(${(1 - tg) * 16}px)`;
+    LG("tagline").style.filter = tg < 1 ? `blur(${(1 - tg) * 8}px)` : "";
+    const pill = seg(t, B.tagline + 0.35, B.tagline + 0.85, ease.out3);
+    LG("oss-pill").style.opacity = pill;
+    LG("oss-pill").style.transform = `translateY(${12 + (1 - pill) * 14}px) scale(1.5)`;
   }
 
   if (t >= B.glyphLand && t < B.handoff) m.visible = false;
