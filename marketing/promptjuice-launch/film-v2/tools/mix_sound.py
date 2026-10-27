@@ -33,6 +33,32 @@ def peak_index(x):
     return int(np.argmax(smooth))
 
 
+def music_bed(src, music, n):
+    """Lay the music track along the film. "segments" is a list of
+    {"from": source seconds, "at": film seconds}; each plays until the next
+    one starts, joined by a short equal-power crossfade (cut on bar lines)."""
+    segs = music.get("segments") or [{"from": 0.0, "at": 0.0}]
+    xf = int(music.get("xfade", 0.04) * SR)
+    bed = np.zeros((n, 2), np.float32)
+    for i, seg in enumerate(segs):
+        a = int(round(seg["at"] * SR))
+        b = int(round(segs[i + 1]["at"] * SR)) if i + 1 < len(segs) else n
+        s0 = int(round(seg["from"] * SR))
+        lo, hi = max(0, a - (xf if i else 0)), min(n, b + (xf if i + 1 < len(segs) else 0))
+        chunk = src[s0 - (a - lo): s0 - (a - lo) + (hi - lo)]
+        chunk = np.pad(chunk, ((0, (hi - lo) - len(chunk)), (0, 0)))
+        w = np.ones(hi - lo, np.float32)
+        if i and xf:
+            w[: 2 * xf] = np.sin(np.linspace(0, np.pi / 2, 2 * xf))
+        if i + 1 < len(segs) and xf:
+            w[-2 * xf:] = np.cos(np.linspace(0, np.pi / 2, 2 * xf))
+        bed[lo:hi] += chunk * w[:, None]
+    fo = int(music.get("fade_out", 0.0) * SR)
+    if fo:
+        bed[-fo:] *= np.linspace(1, 0, fo)[:, None]
+    return bed
+
+
 def repitch(x, ratio):
     if abs(ratio - 1) < 1e-4:
         return x
@@ -70,8 +96,7 @@ def main():
     if music and (ROOT / music["file"]).exists():
         # Music bed under the effects. It dips a few dB while an effect rings
         # so the hits stay clear without the bed pumping.
-        bed = decode(ROOT / music["file"])[: len(mix)] * music.get("gain", 0.8)
-        bed = np.pad(bed, ((0, len(mix) - len(bed)), (0, 0)))
+        bed = music_bed(decode(ROOT / music["file"]), music, len(mix)) * music.get("gain", 0.8)
         env = np.abs(mix).max(axis=1)
         win = int(0.12 * SR)
         env = np.convolve(env, np.ones(win) / win, mode="same")

@@ -417,7 +417,7 @@ export const BEATS = {
   zipClaude: 8.2, zipCodex: 8.34, swing1: 9.3, glint: 10.3, toCard: 11.0, chevronClick: 11.75, expand: 11.79,
   swing2: 12.75, legClaude: 13.2, legCodex: 13.5, toBar: 14.4, handoff: 15.3,
   strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.7, nothingWasted: 19.87,
-  finale: 21.1, mascotLand: 21.8, wordmarkIn: 22.0, endHop: 23.1,
+  finale: 21.0, mascotLand: 21.7, wordmarkIn: 22.2, endHop: 23.2,
 };
 const B = BEATS;
 

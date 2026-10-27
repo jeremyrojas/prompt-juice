@@ -109,10 +109,10 @@
    "align": "peak"
   },
   {
-   "what": "green refill swells",
-   "time": 20.25,
+   "what": "riser peaking on the drop (reset)",
+   "time": 19.7,
    "file": "assets/sfx/whoosh-swell.mp3",
-   "gain": 0.45,
+   "gain": 0.42,
    "align": "peak"
   },
   {
@@ -124,37 +124,57 @@
   },
   {
    "what": "mascot glides to end card",
-   "time": 21.55,
+   "time": 21.45,
    "file": "assets/sfx/whoosh-air.mp3",
    "gain": 0.26,
    "align": "peak"
   },
   {
    "what": "mascot lands (soft bloop)",
-   "time": 21.8,
+   "time": 21.7,
    "file": "assets/sfx/pop-soft.mp3",
    "gain": 0.25,
    "align": "peak"
   },
   {
    "what": "logo: low thump",
-   "time": 22.35,
+   "time": 22.55,
    "file": "assets/sfx/impact-low.mp3",
    "gain": 0.35,
    "align": "peak"
   },
   {
    "what": "logo: chime",
-   "time": 22.55,
+   "time": 22.75,
    "file": "assets/sfx/chime.mp3",
    "gain": 0.24,
    "align": "peak"
   }
  ],
  "music": {
-  "file": "music-options/intuition-24.9s.mp3",
-  "gain": 0.8,
-  "duck_db": 4.0,
-  "credit": "intuition (Instrumental Version) by dasloe, Epidemic Sound. 24.9 s edit 6e36f233."
+  "file": "music-options/intuition-full-preview.mp3",
+  "credit": "intuition (Instrumental Version) by dasloe. Epidemic Sound. Low-quality preview: swap in the high-quality full track before the final render.",
+  "gain": 0.85,
+  "duck_db": 3.0,
+  "xfade": 0.04,
+  "fade_out": 0.5,
+  "segments": [
+   {
+    "from": 0.55,
+    "at": 0.0,
+    "note": "intro; build at film 1.7, groove at 3.7"
+   },
+   {
+    "from": 44.25,
+    "at": 11.7,
+    "note": "breakdown; tension dip 15.7-19.7"
+   },
+   {
+    "from": 144.25,
+    "at": 21.7,
+    "note": "song ending under the logo"
+   }
+  ],
+  "drop_at": 19.7
  }
 }

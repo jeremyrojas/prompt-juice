@@ -406,10 +406,10 @@
     card3: 18.53,
     reset: 19.7,
     nothingWasted: 19.87,
-    finale: 21.1,
-    mascotLand: 21.8,
-    wordmarkIn: 22,
-    endHop: 23.1
+    finale: 21,
+    mascotLand: 21.7,
+    wordmarkIn: 22.2,
+    endHop: 23.2
   }, B = BEATS, P_OPEN = [960, 76, 192, 0, 2.6, 0, 0], P_PUNCH = [960, 560, 192, 104, 4.3, 6, -12], P_PUNCH2 = [960, 560, 192, 104, 4.4, 5, -8], P_CARD = [960, 150, 192, 54, 3.4, 0, 0], P_ANGLE = [640, 560, 192, 152, 2.45, 5, 20], P_ANGLE2 = [620, 560, 192, 152, 2.5, 4, 17], P_BAR = [960, 523, 192, 116, 1400 / 332, 0, 0];
   function zipZ(t, t0) {
     return spring(t, t0, { zeta: 0.82, freq: 1 });
