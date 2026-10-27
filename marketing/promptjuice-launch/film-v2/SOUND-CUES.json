@@ -1,0 +1,217 @@
+{
+ "fps": 30,
+ "duration": 22.6,
+ "note": "Times are film seconds. align=peak lands the sample's loudest point one frame after the picture; align=start starts it there. Swap 'file' for the approved palette and run tools/mix_sound.py.",
+ "cues": [
+  {
+   "what": "popIn",
+   "time": 0.02,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.55,
+   "align": "peak"
+  },
+  {
+   "what": "bar zips in",
+   "time": 0.42,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "bar lands, sparkle",
+   "time": 1.02,
+   "file": "assets/sfx/sparkle.mp3",
+   "gain": 0.22,
+   "align": "peak"
+  },
+  {
+   "what": "clock rolls to 33m",
+   "time": 2.0,
+   "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.6,
+   "align": "peak"
+  },
+  {
+   "what": "turn to amber (impact)",
+   "time": 2.05,
+   "file": "assets/sfx/whoosh.mp3",
+   "gain": 0.7,
+   "align": "peak"
+  },
+  {
+   "what": "Resets soon lands",
+   "time": 2.29,
+   "file": "assets/sfx/chime.mp3",
+   "gain": 0.32,
+   "align": "peak"
+  },
+  {
+   "what": "mascot bounce",
+   "time": 3.98,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.25,
+   "align": "peak"
+  },
+  {
+   "what": "jump to menu bar",
+   "time": 5.59,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "lands as glyph",
+   "time": 5.98,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.5,
+   "align": "peak"
+  },
+  {
+   "what": "click glyph",
+   "time": 6.74,
+   "file": "assets/sfx/click.mp3",
+   "gain": 0.55,
+   "align": "peak"
+  },
+  {
+   "what": "panel unfolds",
+   "time": 6.96,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.35,
+   "align": "peak"
+  },
+  {
+   "what": "Claude bar zips",
+   "time": 7.28,
+   "file": "assets/sfx/sparkle.mp3",
+   "gain": 0.15,
+   "align": "peak"
+  },
+  {
+   "what": "camera swing to punch-in",
+   "time": 8.66,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.3,
+   "align": "peak"
+  },
+  {
+   "what": "glint on 83% bar",
+   "time": 9.2,
+   "file": "assets/sfx/sparkle.mp3",
+   "gain": 0.25,
+   "align": "peak"
+  },
+  {
+   "what": "click Claude chevron",
+   "time": 10.34,
+   "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.7,
+   "align": "peak"
+  },
+  {
+   "what": "rows drop in",
+   "time": 10.56,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.2,
+   "align": "peak"
+  },
+  {
+   "what": "camera swing to legend",
+   "time": 11.5,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.28,
+   "align": "peak"
+  },
+  {
+   "what": "amber mascot pops",
+   "time": 11.46,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.4,
+   "align": "peak"
+  },
+  {
+   "what": "green mascot pops",
+   "time": 11.72,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.4,
+   "align": "peak"
+  },
+  {
+   "what": "whip to benefit",
+   "time": 12.74,
+   "file": "assets/sfx/whoosh.mp3",
+   "gain": 0.55,
+   "align": "peak"
+  },
+  {
+   "what": "task 1 slams",
+   "time": 13.25,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.5,
+   "align": "peak"
+  },
+  {
+   "what": "task 2 slams",
+   "time": 14.91,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "task 3 slams",
+   "time": 15.33,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "reset refills green",
+   "time": 16.51,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "Nothing wasted",
+   "time": 16.57,
+   "file": "assets/sfx/chime.mp3",
+   "gain": 0.3,
+   "align": "peak"
+  },
+  {
+   "what": "cards fall away",
+   "time": 18.16,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.35,
+   "align": "peak"
+  },
+  {
+   "what": "mascot lands center",
+   "time": 18.42,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.55,
+   "align": "peak"
+  },
+  {
+   "what": "wordmark wipes in",
+   "time": 20.32,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.3,
+   "align": "peak"
+  },
+  {
+   "what": "wordmark sparkle",
+   "time": 20.72,
+   "file": "assets/sfx/chime.mp3",
+   "gain": 0.32,
+   "align": "peak"
+  },
+  {
+   "what": "end hop",
+   "time": 21.42,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.35,
+   "align": "peak"
+  }
+ ]
+}

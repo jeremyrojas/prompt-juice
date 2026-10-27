@@ -1,0 +1,14 @@
+{
+  "name": "promptjuice-launch-film-v2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --outfile=dist/film.js --minify-syntax",
+    "mix": "python3 tools/mix_sound.py",
+    "render": "node tools/render.mjs",
+    "snap": "node tools/snap.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

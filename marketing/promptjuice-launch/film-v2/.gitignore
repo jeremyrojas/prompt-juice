@@ -1,0 +1,6 @@
+node_modules/
+scratch/
+out/frames-*/
+out/render.log
+dist/soundtrack.wav
+out/draft-*.mp4
