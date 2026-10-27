@@ -1,0 +1,102 @@
+<title>PromptJuice Music Shortlist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one column of track rows, grouped by the brief they answer. */
+  :root {
+    color-scheme: dark;
+    --bg: #0b0c10; --surface: #15171d; --line: #262a33;
+    --text: #e8eaee; --muted: #9aa0ab; --green: #5fd11f; --amber: #f0a32a; --link-ink: #08130a;
+    --display: "Inter Display", "Inter", system-ui, -apple-system, sans-serif;
+    --body: "Inter", system-ui, -apple-system, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 var(--body); margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 56px; }
+  main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  h1 { font: 700 34px/1.1 var(--display); letter-spacing: -0.03em; margin: 0; text-wrap: balance; }
+  h1 span { color: var(--green); }
+  .lede { color: var(--muted); margin: 8px 0 0; max-width: 62ch; }
+  section { display: flex; flex-direction: column; gap: 10px; }
+  h2 { font: 600 12px/1 var(--body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+  .track { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center;
+    padding: 16px 18px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+  .track > div { min-width: 0; }
+  .title { font: 650 18px/1.25 var(--display); letter-spacing: -0.015em; }
+  .meta { color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .why { grid-column: 1 / -1; color: var(--text); opacity: .82; font-size: 14px; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .links a { text-decoration: none; font: 600 13px/1 var(--body); padding: 9px 12px; border-radius: 9px; white-space: nowrap; }
+  .links a.edit { background: var(--green); color: var(--link-ink); }
+  .links a.full { color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  .links a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .pick { color: var(--amber); font-weight: 650; }
+  .note { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+  @media (max-width: 560px) { .track { grid-template-columns: 1fr; } .links { justify-content: flex-start; } }
+</style>
+<main>
+  <header>
+    <h1>Music for the <span>PromptJuice</span> launch film</h1>
+    <p class="lede">Six Epidemic Sound tracks. Each has a 24.4 s cut made by Epidemic's editor to fit the film exactly, with a real ending. Links open in a new tab.</p>
+  </header>
+
+  <section>
+    <h2>Cinematic, not corny</h2>
+    <div class="track">
+      <div><div class="title">Fate of the World</div><div class="meta">Christoffer Moe Ditlevsen · 112 bpm · epic, hopeful build</div></div>
+      <div class="links">
+        <a class="edit" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/generated/track-edits/3cd86e78-8b08-41f5-93de-a9a19451aa82/ES_Fate%20of%20the%20World%20-%20Christoffer%20Moe%20Ditlevsen%20%28Version%203cd86e78%29%20-%20fullmix_preview.mp3?exp=1793194200&key_id=K35H1EEHXR9MJU&response-content-disposition=attachment%3B%20filename%3D%22ES_Fate%2520of%2520the%2520World%2520-%2520Christoffer%2520Moe%2520Ditlevsen%2520%2528Version%25203cd86e78%2529%2520-%2520fullmix_preview.mp3%22&signature=Oam_1rxJCbtDkcWxwYQSb-aUf0UddlpnMDlAYJsKkt6oPPaz1N7Wtt9qqQ57JHDDnk4YHutBlA0NzDrhaX0St1GPoDhvHgGRN4rE_1-MUqat5X4b152DX7496CcCsSqdQd3uNZWHlriyexzSJvBawTD4Ye6Vvz7i6zk2OdE7DWDzILNxD9Qi565BvuvmrltJjBKYoy6kdb0-jg6Dmw4ychMEtUpvfxU3ug9hwj1zFusfUj2oWxTXAGD5-RALRdiYvGYwzT_G8HImPfOyEdLi597SWb9OIg8qjMwz0PpvB3fX_-Yh8oB_puvYFQQqVOzCss3PqcDTpmvuI5JiIdlBKA">24 s cut</a>
+        <a class="full" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/lqmp3/01KK383T66N3NT64N2AFDNCB76.mp3">Full track</a>
+      </div>
+      <p class="why">Orchestral swell with drums. The most "trailer" of the six, so it risks feeling big for a cute mascot.</p>
+    </div>
+    <div class="track">
+      <div><div class="title">Never Fade</div><div class="meta">Hysics · 110 bpm · euphoric electro</div></div>
+      <div class="links">
+        <a class="edit" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/generated/track-edits/092b0e05-6c28-4a4f-a0fb-44302c6f9156/ES_Never%20Fade%20-%20Hysics%20%28Version%20092b0e05%29%20-%20fullmix_preview.mp3?exp=1793194204&key_id=K35H1EEHXR9MJU&response-content-disposition=attachment%3B%20filename%3D%22ES_Never%2520Fade%2520-%2520Hysics%2520%2528Version%2520092b0e05%2529%2520-%2520fullmix_preview.mp3%22&signature=hlvSDLU77tRZaTbIJyTauq-eoYUHJGNgQAbR0h_tggKU9qAMko9XKn-BGFPZ4eDhfrS11_rZpEzLfm-C6pid8OPEmIptKlcAlVmQUUktAtFJM4035zjDobPHPdtkPPaKgMf2DKvaAxtSRmNIE_AgdZ7ho8s4TTirZR6ke4YTv569vM1XfgFLm9zJJsFEEutJMF33M-gEq8pXL5AsYTcxzkzA3jmaEB1KIi3NjB6m_IoRSslcyebVjgf0klqTUT34SIS_4_8QUOaYbBSuSHYnorPPGJd_GQ6Yb6OP2sVbyqnkAq1d_5x7Uiv_5bQCCfZMFwKiGvdmZWl0bzzOSvLMvg">24 s cut</a>
+        <a class="full" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/lqmp3/01KJQ1SDPWCRERFKEQ0SWBN3BC.mp3">Full track</a>
+      </div>
+      <p class="why"><span class="pick">My pick to try first.</span> Modern and cinematic without the orchestra, so it matches the dark, glowing look.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pop, modern, fun</h2>
+    <div class="track">
+      <div><div class="title">If I Could, I Would <span class="meta">(Instrumental)</span></div><div class="meta">Mindme · 121 bpm · happy, hopeful pop</div></div>
+      <div class="links">
+        <a class="edit" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/generated/track-edits/488102d4-def9-408a-a642-bb01b20efbaf/ES_If%20I%20Could%2C%20I%20Would%20%28Instrumental%20Version%29%20-%20Karl%20Flykt%20%28Version%20488102d4%29%20-%20fullmix_preview.mp3?exp=1793194211&key_id=K35H1EEHXR9MJU&response-content-disposition=attachment%3B%20filename%3D%22ES_If%2520I%2520Could%252C%2520I%2520Would%2520%2528Instrumental%2520Version%2529%2520-%2520Karl%2520Flykt%2520%2528Version%2520488102d4%2529%2520-%2520fullmix_preview.mp3%22&signature=TKTASRfmFzOf_HRdSv2GgGbOfm5X6DL-GXTO1Q_g6WWnPCxXEEtq6teUw2bhZdycs98c1OQzmVViGJOGz20_h79NU7zQ24T_TBuiEgmIRZaPC1JbUtkVcdSVGlNNJghOE4VFzXhtaMGYD7b7vmGbCWkofNTZWLm-yWM1kyV_Ju86w8rVDytpwubIHZ1zJjxTC4-M5ZQGzQso7ftlOu8hf5o6Wr-gRyw17i1RT8q4IAoZQE9AaiRG0hUDDX1Wpcbr9uaextk4yIj5SjPbxC24GJne77cukDGMKe8bMoniesyRjxEKvy4l_rIWQrPXCHRarANpnESKkqTHp0JonQ4Nxg">24 s cut</a>
+        <a class="full" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/lqmp3/01KTGTZ5F954BY9PNWAXNRQ7SK.mp3">Full track</a>
+      </div>
+      <p class="why">Bright and friendly; suits the mascot best.</p>
+    </div>
+    <div class="track">
+      <div><div class="title">intuition <span class="meta">(Instrumental)</span></div><div class="meta">dasloe · 120 bpm · euphoric K-pop</div></div>
+      <div class="links">
+        <a class="edit" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/generated/track-edits/9231d184-fbf8-4808-869c-dd36f0c720e9/ES_intuition%20%28Instrumental%20Version%29%20-%20Dave%20Joon%20Lee%20%28Version%209231d184%29%20-%20fullmix_preview.mp3?exp=1793194221&key_id=K35H1EEHXR9MJU&response-content-disposition=attachment%3B%20filename%3D%22ES_intuition%2520%2528Instrumental%2520Version%2529%2520-%2520Dave%2520Joon%2520Lee%2520%2528Version%25209231d184%2529%2520-%2520fullmix_preview.mp3%22&signature=POuCD2M4f9yO68VZlfc2o_l7ZvBQh1YSpxxN9STVBQgK3av6IinqtcGxkbw9-MnhsCrWu7AYYrXfx48APY1QC8Vpr5PtTzLWphGgynjX7PUOt1RIYs8G9JXlNhwWkCWFZ1hRgZxLYz0hHENIGxNTpAJLaK49N5RcLGJKc14EVrPE67NH0RgGc0YVSXD0zCVxPJ9N5oGkBBITSMpxP-uFzDewgYxR4L4w9229oeZO9A9HGgrmUX4CX2KBJ7qppN51WmcJZkJknbx2T7kzCOro4ue1iddL4leVrvh69kpQg-P72MRKeSAcPYHzcc4UrqDMhEP-Zub02O17w6AC6gbh-A">24 s cut</a>
+        <a class="full" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/lqmp3/01KTFSQWFFGAH49CXNN9DDFGP5.mp3">Full track</a>
+      </div>
+      <p class="why">Glossy and energetic. The most "launch day" of the pop picks.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Something else</h2>
+    <div class="track">
+      <div><div class="title">One More Night <span class="meta">(Instrumental)</span></div><div class="meta">Cave Cadence · 118 bpm · future bass, soft house</div></div>
+      <div class="links">
+        <a class="edit" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/generated/track-edits/79f95cb8-767a-44f1-bf81-dae1121de7a7/ES_One%20More%20Night%20%28Instrumental%20Version%29%20-%20Cave%20Cadence%20%28Version%2079f95cb8%29%20-%20fullmix_preview.mp3?exp=1793194236&key_id=K35H1EEHXR9MJU&response-content-disposition=attachment%3B%20filename%3D%22ES_One%2520More%2520Night%2520%2528Instrumental%2520Version%2529%2520-%2520Cave%2520Cadence%2520%2528Version%252079f95cb8%2529%2520-%2520fullmix_preview.mp3%22&signature=Nvdtf9KZ1ksu722ynagi1u_UOs1YrtaE4DCgtPwRszErjUwlVyhi_I6MzHOwrQU6DoSNoRlY64YeTl5SbRzAHTRAjoYERvtXGc5WNAKa6Uxb70Zs9i99v668FODw8nbcNmNT_jKmmgkc4qYAXLZPxj0T6m3eXemw3aAsJhPa_H6by6PJl7DKA2bvMUGdGV4QTLYJj2Z59uasqCL05zNZSNN_VD8Gfx3zNsTI_o6zY5vCUVacVOHxTZ_MH5ZpAoqYMko-MVK6JnYRTs-tt78KBORLWO7G8NPpS9111T6QQJ5zLTrIDVWSoRn9fJ7HNAgzpKYakKdjidXPG5RMEA1bvw">24 s cut</a>
+        <a class="full" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/lqmp3/01KTJ40XYWTYSW6SVR93AN9EMW.mp3">Full track</a>
+      </div>
+      <p class="why">Playful and bouncy with a modern sheen; sits between the two briefs.</p>
+    </div>
+    <div class="track">
+      <div><div class="title">Under Cover <span class="meta">(Instrumental)</span></div><div class="meta">Torii Wolf · 114 bpm · dreamy indie-electronic</div></div>
+      <div class="links">
+        <a class="edit" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/generated/track-edits/916652ae-9f2e-4644-a461-fca5d4cf7d08/ES_Under%20Cover%20%28Instrumental%20Version%29%20-%20Torii%20Wolf%20%28Version%20916652ae%29%20-%20fullmix_preview.mp3?exp=1793194239&key_id=K35H1EEHXR9MJU&response-content-disposition=attachment%3B%20filename%3D%22ES_Under%2520Cover%2520%2528Instrumental%2520Version%2529%2520-%2520Torii%2520Wolf%2520%2528Version%2520916652ae%2529%2520-%2520fullmix_preview.mp3%22&signature=FekvUj7__hsVP-otW9zbP0Tn-cdsQpZWl-msfZmxFk3Fa6KvqZ5r51zfxPEp4W9l_uaaoTyj0ObxlXQ2MYxStAaD81sSAIabAFpC4b8xO615zxWvXqYH9JZjDSdCjnemlV-lbGMdbY1bnsCfXA1RPUzolKzLMyUDFVaEkns27NZ2PSquT1hqR1r7eVxJltXYl0Xqa73rRox4GdTG8wtyz5eoClYF82GULHhBO45EKUCNc4ayOoTvNJ-2csapxyqYv2tbmxiE4WYyQhIqJW4QUwI4Tq96pI3LkW1BX1YmGctAfsqk4KIImRK8txNAfWCx9SjkbAVXmB590sp9Zv7gFg">24 s cut</a>
+        <a class="full" target="_blank" rel="noopener" href="https://audiocdn.epidemicsound.com/lqmp3/01KJXYEQZFA49AHNA9QHTZ204D.mp3">Full track</a>
+      </div>
+      <p class="why">Soft and polished; the calmest option, with a premium feel.</p>
+    </div>
+  </section>
+
+  <p class="note">The "24 s cut" links are Epidemic Sound previews that expire about a day after they were made; "Full track" links stay up. Licensing is through your Epidemic Sound account. Pick one or two and I'll mix them under the film with the sound effects ducked beneath.</p>
+</main>
