@@ -1,7 +1,7 @@
 node_modules/
 scratch/
 out/frames-*/
-out/render.log
+out/*.log
 dist/soundtrack.wav
 out/draft-*.mp4
 licensed/

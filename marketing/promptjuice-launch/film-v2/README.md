@@ -18,7 +18,7 @@ seeks it frame by frame and ffmpeg encodes the frames.
 | `SOUND-CUES.json` | Every sound effect: time, file, gain, alignment |
 | `SHOTS.md` | Shot list |
 | `REVIEW.md` | Review notes: what was checked, what is still weak |
-| `out/promptjuice-launch-1080p.mp4` | The delivery render |
+| `out/promptjuice-launch-1080p.mp4` | The delivery render (added once the final cut is approved) |
 
 ## Run it
 
