@@ -331,7 +331,6 @@ const valueAClk = valueA.querySelector(".clk");
 const titleA = createTitle(sceneA, [["Plenty"], ["of"], ["juice"], ["left."], ["Resets", "amber"], ["soon.", "amber"]], { size: 96 });
 const titleB1 = createTitle(sceneA, [["You"], ["paid"], ["for"], ["the"], ["juice.", "amber"]], { size: 104 });
 const titleB2 = createTitle(sceneA, [["Don’t"], ["waste"], ["it."]], { size: 76 });
-const titleC = createTitle(sceneA, [["In"], ["your"], ["menu"], ["bar."]], { size: 84 });
 
 // Menu bar (pt units, scaled 2.4x).
 const MB_S = 2.4;
@@ -441,7 +440,7 @@ cursor.id = "cursor";
 export const BEATS = {
   popIn: 0.0, barZip: 0.45, barLand: 1.5, clockRoll: 1.85, turn: 2.4, resetsSoon: 2.72,
   youPaid: 4.05, dontWaste: 4.95,
-  jumpPrep: 6.25, jump: 6.4, glyphLand: 7.05, menuCaption: 7.12, click: 7.85, panelOpen: 7.95,
+  jumpPrep: 6.25, jump: 6.4, glyphLand: 7.05, click: 7.85, panelOpen: 7.95,
   zipClaude: 8.2, zipCodex: 8.34, swing1: 8.95, glint: 9.95, toCard: 10.65, chevronClick: 11.4, expand: 11.44,
   swing2: 12.2, legClaude: 12.6, legCodex: 12.85, toBar: 14.4, handoff: 15.3,
   strongest: 15.55, card1: 15.85, effort: 16.95, card2: 17.18, another: 18.3, card3: 18.53, reset: 19.5, nothingWasted: 19.8,
@@ -473,7 +472,7 @@ export function render(t) {
   const amberK = seg(t, B.turn, B.turn + 0.9, ease.inOut2) * (1 - seg(t, B.reset, B.reset + 0.9, ease.inOut2));
   const glowC = mixC(GREEN, AMBER, amberK);
   const glowI = keys(t, [[0, 0.3], [1.0, 1, ease.inOut2], [B.toBar, 1], [B.handoff + 0.3, 0.8], [B.reset, 0.85], [B.reset + 0.8, 1.05], [24.4, 1]]);
-  const glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.4, [960, 300]], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [960, 500]]]);
+  const glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.35, [1340, 200], ease.inOut2], [B.click, [1340, 200]], [B.swing1 + 0.6, [960, 300], ease.inOut2], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [960, 500]]]);
   glow.style.background = `radial-gradient(closest-side, ${rgba(glowC, 0.34 * glowI)}, ${rgba(glowC, 0.1 * glowI)} 42%, ${rgba(glowC, 0)} 72%)`;
   glow.style.transform = `translate(${glowXY[0] - 960}px, ${glowXY[1] - 540}px)`;
   // A slow dolly on the opening shots.
@@ -570,7 +569,6 @@ export function render(t) {
       m.shadowOpacity = 1 - f;
       m.visible = t < B.glyphLand;
     }
-    animateTitle(titleC, t, { t0: B.menuCaption, t1: 7.72, kind: "blur", stagger: 0.06, y: 330 });
   } else {
     show(titleA.root, false);
   }
@@ -844,7 +842,7 @@ const capture = params.has("capture");
 const ready = (async () => {
   await document.fonts.ready;
   await Promise.all([...document.images].map((i) => (i.complete ? null : new Promise((r) => { i.onload = i.onerror = r; }))));
-  [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure());
+  [titleA, titleB1, titleB2, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure());
 
   render(+(params.get("t") || 0));
 })();

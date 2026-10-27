@@ -419,7 +419,7 @@
   }
   var sceneA = el2("div", "layer", world), sceneD = el2("div", "layer", world), sceneE = el2("div", "layer", world), sceneF = el2("div", "layer", world), mascotLayer = el2("div", "layer", world), rowA = el2("div", "layer", sceneA), barA = createBigBar(rowA, { x: 210, y: 822, w: 1500, h: 44 }), labelA = el2("div", "caption", rowA, "5-hour limit");
   labelA.style.cssText += "color: rgba(255,255,255,.55); font-weight: 500;";
-  var valueA = el2("div", "caption", rowA, '<span class="pct">83% left</span><span style="color:rgba(255,255,255,.3)"> \xB7 </span><span class="reset">resets in <span class="clk">2h 56m</span></span>'), valueAReset = valueA.querySelector(".reset"), valueAClk = valueA.querySelector(".clk"), titleA = createTitle(sceneA, [["Plenty"], ["of"], ["juice"], ["left."], ["Resets", "amber"], ["soon.", "amber"]], { size: 96 }), titleB1 = createTitle(sceneA, [["You"], ["paid"], ["for"], ["the"], ["juice.", "amber"]], { size: 104 }), titleB2 = createTitle(sceneA, [["Don\u2019t"], ["waste"], ["it."]], { size: 76 }), titleC = createTitle(sceneA, [["In"], ["your"], ["menu"], ["bar."]], { size: 84 }), MB_S = 2.4, menubar = el2("div", "", world);
+  var valueA = el2("div", "caption", rowA, '<span class="pct">83% left</span><span style="color:rgba(255,255,255,.3)"> \xB7 </span><span class="reset">resets in <span class="clk">2h 56m</span></span>'), valueAReset = valueA.querySelector(".reset"), valueAClk = valueA.querySelector(".clk"), titleA = createTitle(sceneA, [["Plenty"], ["of"], ["juice"], ["left."], ["Resets", "amber"], ["soon.", "amber"]], { size: 96 }), titleB1 = createTitle(sceneA, [["You"], ["paid"], ["for"], ["the"], ["juice.", "amber"]], { size: 104 }), titleB2 = createTitle(sceneA, [["Don\u2019t"], ["waste"], ["it."]], { size: 76 }), MB_S = 2.4, menubar = el2("div", "", world);
   menubar.id = "menubar";
   menubar.style.width = `${W / MB_S}px`;
   var mbHL = el2("div", "hl", menubar), GLYPH_PT = 590, mbGlyph = el2("div", "item", menubar);
@@ -497,7 +497,6 @@
     jumpPrep: 6.25,
     jump: 6.4,
     glyphLand: 7.05,
-    menuCaption: 7.12,
     click: 7.85,
     panelOpen: 7.95,
     zipClaude: 8.2,
@@ -536,7 +535,7 @@
   var CALM = 0.5;
   function render(t) {
     bctx.clearRect(0, 0, W, H), fctx.clearRect(0, 0, W, H);
-    let amberK = seg(t, B.turn, B.turn + 0.9, ease.inOut2) * (1 - seg(t, B.reset, B.reset + 0.9, ease.inOut2)), glowC = mixC(GREEN, AMBER, amberK), glowI = keys(t, [[0, 0.3], [1, 1, ease.inOut2], [B.toBar, 1], [B.handoff + 0.3, 0.8], [B.reset, 0.85], [B.reset + 0.8, 1.05], [24.4, 1]]), glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.4, [960, 300]], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [960, 500]]]);
+    let amberK = seg(t, B.turn, B.turn + 0.9, ease.inOut2) * (1 - seg(t, B.reset, B.reset + 0.9, ease.inOut2)), glowC = mixC(GREEN, AMBER, amberK), glowI = keys(t, [[0, 0.3], [1, 1, ease.inOut2], [B.toBar, 1], [B.handoff + 0.3, 0.8], [B.reset, 0.85], [B.reset + 0.8, 1.05], [24.4, 1]]), glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.35, [1340, 200], ease.inOut2], [B.click, [1340, 200]], [B.swing1 + 0.6, [960, 300], ease.inOut2], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [960, 500]]]);
     glow.style.background = `radial-gradient(closest-side, ${rgba(glowC, 0.34 * glowI)}, ${rgba(glowC, 0.1 * glowI)} 42%, ${rgba(glowC, 0)} 72%)`, glow.style.transform = `translate(${glowXY[0] - 960}px, ${glowXY[1] - 540}px)`;
     let dolly = 1 + 0.035 * seg(t, 0, 6.2, ease.inOut2);
     world.style.transform = t < 6.3 ? `scale(${dolly})` : "", world.style.transformOrigin = "960px 560px";
@@ -570,7 +569,6 @@
         let prep = bump(t, B.jumpPrep, 0.22), f = seg(t, B.jump, B.glyphLand, ease.inOut3), p0 = [960, 830], p1 = [1380, 420], p2 = [GLYPH_PT * MB_S, 52];
         m.x = (1 - f) ** 2 * p0[0] + 2 * (1 - f) * f * p1[0] + f * f * p2[0], m.ground = (1 - f) ** 2 * p0[1] + 2 * (1 - f) * f * p1[1] + f * f * p2[1], m.lift = 0, m.h = lerp(450, 40, ease.inOut2(f)), m.sx = 1 + prep * 0.08 - bump(t, B.jump, 0.6) * 0.06, m.sy = 1 - prep * 0.1 + bump(t, B.jump, 0.6) * 0.1, m.rot = 10 * bump(t, B.jump, 0.65), m.expr = "joy", m.shadowOpacity = 1 - f, m.visible = t < B.glyphLand;
       }
-      animateTitle(titleC, t, { t0: B.menuCaption, t1: 7.72, kind: "blur", stagger: 0.06, y: 330 });
     } else
       show(titleA.root, !1);
     let mbIn = seg(t, 6.45, 6.9, ease.out3) * (1 - seg(t, B.swing1, B.swing1 + 0.4, ease.in2));
@@ -706,7 +704,7 @@
   var params = new URLSearchParams(location.search), capture = params.has("capture"), ready = (async () => {
     await document.fonts.ready, await Promise.all([...document.images].map((i) => i.complete ? null : new Promise((r) => {
       i.onload = i.onerror = r;
-    }))), [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure()), render(+(params.get("t") || 0));
+    }))), [titleA, titleB1, titleB2, titleE1, titleE2, titleE2b, titleE3].forEach((T) => T.measure()), render(+(params.get("t") || 0));
   })();
   window.__film = { render, ready, duration: DURATION, beats: BEATS };
   if (!capture) {

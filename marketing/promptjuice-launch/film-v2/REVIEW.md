@@ -17,7 +17,7 @@
 - **The benefit is a mechanism.** Tasks visibly drink from the 5-hour bar, the clock runs
   out, it refills green: "Nothing wasted." That shows why amber matters without a claim
   about anyone else's product.
-- Copy: Plenty left. / Resets soon. / You paid for the juice. / In your menu bar. /
+- Copy: Plenty left. / Resets soon. / You paid for the juice. /
   Use your strongest model. / Start another task. / Nothing wasted. / Don't waste the juice. /
   PromptJuice · promptjuice.app.
 
@@ -44,8 +44,7 @@
   works muted, and the SFX carry it with sound on.
 - **Mascot expressions** are painted strokes over the 3D-rendered character. They read well
   at film size but are flatter than the original eyes up close (the alert face most of all).
-- **"In your menu bar."** is the quietest shot (a thin bar at the top of a dark frame,
-  about 0.7 s). A tighter 3–4× crop on the bar would sell the glyph more.
+- **The menu-bar beat** has no caption (it competed with the click); the glow drifting up to the glyph carries the eye instead.
 - **The benefit task cards** are illustrations. Their labels are small on a phone; the title
   above them carries the meaning.
 - **Fonts** are Inter / Inter Display rather than SF Pro; panel text sits a hair wider
