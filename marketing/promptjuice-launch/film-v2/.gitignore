@@ -5,3 +5,5 @@ out/*.log
 dist/soundtrack.wav
 out/draft-*.mp4
 licensed/
+dist/soundtrack.mp3
+out/promptjuice-launch-1080p.mp4

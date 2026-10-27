@@ -244,9 +244,9 @@
   }
  ],
  "music": {
-  "file": "licensed/intuition-full-preview.mp3",
+  "file": "licensed/intuition-full.mp3",
   "credit": "intuition (Instrumental Version) by dasloe. Epidemic Sound. Low-quality preview: swap in the high-quality full track before the final render.",
-  "gain": 0.85,
+  "gain": 0.81,
   "duck_db": 3.0,
   "xfade": 0.04,
   "fade_out": 2.4,

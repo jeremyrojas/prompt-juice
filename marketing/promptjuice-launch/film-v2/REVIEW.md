@@ -17,9 +17,9 @@
 - **The benefit is a mechanism.** Tasks visibly drink from the 5-hour bar, the clock runs
   out, it refills green: "Nothing wasted." That shows why amber matters without a claim
   about anyone else's product.
-- Copy: Plenty left. / Resets soon. / You paid for the juice. /
-  Use your strongest model. / Start another task. / Nothing wasted. / Don't waste the juice. /
-  PromptJuice · promptjuice.app.
+- Copy: Plenty of juice left. / Resets soon. / You paid for the juice. / Don't waste it. /
+  Use your strongest model. / Use higher effort. / Start another task. / Nothing wasted. /
+  PromptJuice · Use it or lose it. · Free & open source · MIT.
 
 ## What was checked
 
@@ -38,16 +38,15 @@
 
 ## Still weak / not done
 
-- **Stand-in sounds.** The approved palette is on the Mac and wasn't reachable. These are
-  Pixabay stand-ins in the same roles; swap them via `SOUND-CUES.json` (see README).
-- **No music bed.** It was not requested and there was no licensed source here. The film
-  works muted, and the SFX carry it with sound on.
+- **Sound.** Music is Epidemic Sound's *intuition (Instrumental)* by dasloe, spliced on bar lines so
+  the drop lands on the reset; the Juicebar whooshes and the droplet drip are Epidemic effects. The
+  rest are Pixabay effects (`assets/sfx/CREDITS.md`). Licensed files live in `licensed/` (not in git).
 - **Mascot expressions** are painted strokes over the 3D-rendered character. They read well
   at film size but are flatter than the original eyes up close (the alert face most of all).
 - **The menu-bar beat** has no caption (it competed with the click); the glow drifting up to the glyph carries the eye instead.
 - **The benefit task cards** are illustrations. Their labels are small on a phone; the title
   above them carries the meaning.
-- **Fonts** are Inter / Inter Display rather than SF Pro; panel text sits a hair wider
-  than the real app.
+- **Fonts:** titles, captions and the logo are Instrument Sans; the Juicebar is Inter / Inter Display
+  rather than SF Pro, so panel text sits a hair wider than the real app.
 - The original film's BRIEF/SPEC/STORYBOARD/REVIEW and the landing page weren't reachable
   from this session, so copy came from the brief in the request and the repo README.

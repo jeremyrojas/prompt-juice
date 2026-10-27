@@ -1,6 +1,6 @@
 # PromptJuice launch film, v2
 
-A 22.6 s, 1920×1080, 30 fps launch film for X, built around the mascot. It is a
+A 25.9 s, 1920×1080, 30 fps launch film for X, built around the mascot. It is a
 second creative pass, made to sit next to the original HyperFrames film
 (`promptjuice-launch/film`) for comparison. It uses no HyperFrames: one HTML
 page draws every frame as a pure function of time (`render(t)`). Playwright
@@ -18,7 +18,7 @@ seeks it frame by frame and ffmpeg encodes the frames.
 | `SOUND-CUES.json` | Every sound effect: time, file, gain, alignment |
 | `SHOTS.md` | Shot list |
 | `REVIEW.md` | Review notes: what was checked, what is still weak |
-| `out/promptjuice-launch-1080p.mp4` | The delivery render (added once the final cut is approved) |
+| `out/promptjuice-launch-1080p.mp4` | The delivery render (not in git: it carries licensed music) |
 
 ## Run it
 
@@ -43,17 +43,13 @@ Rendering needs Node 22, Playwright's Chromium and ffmpeg.
 - **blink**, **joy** (^ ^) and **alert** (wide eyes) paint over only the eyes and mouth.
   The body under them is inpainted from its own surrounding pixels.
 
-## Swapping in the approved sound palette
+## Sound
 
-The approved sounds live on the Mac in `film/` and weren't reachable from this
-session. These are stand-ins from HyperFrames' bundled Pixabay library (free for
-commercial use, see `assets/sfx/CREDITS.md`), in the same roles: soft clicks,
-whooshes, a chime and pops. To use the approved files:
-
-1. Copy them into `assets/sfx/`.
-2. Point each cue's `file` in `SOUND-CUES.json` at the matching approved file.
-3. Run `python3 tools/mix_sound.py`, then re-render (or just remux:
-   `ffmpeg -i out/promptjuice-launch-1080p.mp4 -i dist/soundtrack.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k out/remux.mp4`).
+`SOUND-CUES.json` lists every effect (time, file, gain, alignment) and the music bed.
+The music (Epidemic Sound, *intuition (Instrumental)* by dasloe) and the Epidemic effects
+are licensed and live in `licensed/`, which is not in git: put the files there to rebuild
+the soundtrack. The music is laid from three bar-aligned sections of the track
+(`segments`), with dips, a fade-in, and a stop at a natural gap (`end_at`).
 
 `align: "peak"` places each file's loudest moment one frame after the picture.
 The mix is loudness-normalised to about −15 LUFS with a −1.5 dBTP ceiling.
@@ -70,6 +66,6 @@ The mix is loudness-normalised to about −15 LUFS with a −1.5 dBTP ceiling.
   as in the app.
 - The menu-bar glyph uses `DropletGeometry` and `PromptJuiceIcon`'s layout,
   quantised to 80% and tinted amber.
-- The fonts are Inter and Inter Display (SF Pro can't ship here). The menu bar
+- The Juicebar uses Inter and Inter Display (SF Pro can't ship here); film titles and the logo use Instrument Sans. The menu bar
   icons and clock are generic stand-ins.
 - The task cards in the benefit scene are illustrations, not PromptJuice UI.
