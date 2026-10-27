@@ -2,7 +2,7 @@
 
     python3 logo/src/build.py
 
-All lettering is Bricolage Grotesque (SIL OFL 1.1) converted to paths.
+All lettering is Fraunces (SIL OFL 1.1; set PJ_FONT_FAMILY to change) converted to paths.
 """
 import os
 import sys
@@ -45,8 +45,10 @@ def word_width(size):
 def split_i(letter):
     """Remove the tittle from the i: returns (stem path, dot bounds in units)."""
     parts = pj.split_contours(letter["path"])
-    stem = [p for p, b in parts if b[3] <= 560]
-    dot = [b for p, b in parts if b[1] > 560][0]
+    # Split at just above the x-height, so it works for any font's metrics.
+    cut = F800.xh * 1.08
+    stem = [p for p, b in parts if b[3] <= cut]
+    dot = [b for p, b in parts if b[1] > cut][0]
     return pj.merge(stem), dot
 
 

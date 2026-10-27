@@ -1,6 +1,6 @@
 """Shared helpers for the PromptJuice logo builds.
 
-Glyph outlines come from Bricolage Grotesque (SIL OFL 1.1), read from the
+Glyph outlines come from the FAMILY font (Fraunces, SIL OFL 1.1), read from the
 film's own woff2 files, shaped with HarfBuzz (kerning on), cleaned with
 skia-pathops (overlaps removed) and written out as plain SVG paths, so the
 SVGs have no font dependency.
@@ -47,10 +47,15 @@ def fmt(v):
     return "0" if s == "-0" else s
 
 
+# Font family used for all lettering (file prefix in assets/fonts). The film
+# switched from Bricolage Grotesque to Fraunces; both are SIL OFL 1.1.
+FAMILY = os.environ.get("PJ_FONT_FAMILY", "Fraunces")
+
+
 class Font:
     def __init__(self, weight):
         self.weight = weight
-        self.tt = TTFont(os.path.join(FONT_DIR, f"BricolageGrotesque-{weight}.woff2"))
+        self.tt = TTFont(os.path.join(FONT_DIR, f"{FAMILY}-{weight}.woff2"))
         self.tt.flavor = None
         buf = io.BytesIO()
         self.tt.save(buf)
