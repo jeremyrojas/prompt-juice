@@ -197,6 +197,14 @@
    }
   ],
   "drop_at": 19.7,
-  "fade_in": 1.5
+  "fade_in": 1.5,
+  "dips": [
+   {
+    "from": 18.9,
+    "to": 19.22,
+    "db": -14,
+    "note": "song's bright stab before the drop"
+   }
+  ]
  }
 }

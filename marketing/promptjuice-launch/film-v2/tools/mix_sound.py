@@ -53,6 +53,15 @@ def music_bed(src, music, n):
         if i + 1 < len(segs) and xf:
             w[-2 * xf:] = np.cos(np.linspace(0, np.pi / 2, 2 * xf))
         bed[lo:hi] += chunk * w[:, None]
+    # Dips: pull a moment of the track down (e.g. a stab the picture doesn't
+    # want), with 40 ms ramps so the edit can't click.
+    for dip in music.get("dips", []):
+        a0, a1 = int(dip["from"] * SR), int(dip["to"] * SR)
+        g = np.ones(n, np.float32)
+        g[a0:a1] = 10 ** (dip.get("db", -12) / 20)
+        ramp = int(0.04 * SR)
+        g = np.convolve(g, np.ones(ramp) / ramp, mode="same").astype(np.float32)
+        bed *= g[:, None]
     fi = int(music.get("fade_in", 0.0) * SR)
     if fi:
         bed[:fi] *= np.linspace(0, 1, fi)[:, None] ** 2
