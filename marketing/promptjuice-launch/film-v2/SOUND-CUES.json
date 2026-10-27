@@ -1,216 +1,188 @@
 {
  "fps": 30,
- "duration": 22.6,
- "note": "Times are film seconds. align=peak lands the sample's loudest point one frame after the picture; align=start starts it there. Swap 'file' for the approved palette and run tools/mix_sound.py.",
+ "duration": 24.4,
+ "note": "Times are film seconds. align=peak (default) lands each sample's loudest point one frame after the picture. Swap 'file' for the approved palette and run tools/mix_sound.py.",
  "cues": [
   {
-   "what": "popIn",
-   "time": 0.02,
+   "what": "mascot settles in",
+   "time": 0.35,
    "file": "assets/sfx/pop.mp3",
-   "gain": 0.55,
+   "gain": 0.3,
    "align": "peak"
   },
   {
-   "what": "bar zips in",
-   "time": 0.42,
+   "what": "bar fills",
+   "time": 0.9,
    "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.45,
+   "gain": 0.3,
    "align": "peak"
   },
   {
-   "what": "bar lands, sparkle",
-   "time": 1.02,
+   "what": "bar lands, glint",
+   "time": 1.65,
    "file": "assets/sfx/sparkle.mp3",
-   "gain": 0.22,
+   "gain": 0.14,
    "align": "peak"
   },
   {
-   "what": "clock rolls to 33m",
-   "time": 2.0,
+   "what": "clock lands on 33m",
+   "time": 2.35,
+   "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.5,
+   "align": "peak"
+  },
+  {
+   "what": "amber wash",
+   "time": 2.75,
+   "file": "assets/sfx/whoosh.mp3",
+   "gain": 0.38,
+   "align": "peak"
+  },
+  {
+   "what": "Resets soon",
+   "time": 3.07,
+   "file": "assets/sfx/chime.mp3",
+   "gain": 0.28,
+   "align": "peak"
+  },
+  {
+   "what": "jump to menu bar",
+   "time": 6.7,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.3,
+   "align": "peak"
+  },
+  {
+   "what": "lands as glyph",
+   "time": 7.05,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.38,
+   "align": "peak"
+  },
+  {
+   "what": "click glyph",
+   "time": 7.85,
+   "file": "assets/sfx/click.mp3",
+   "gain": 0.5,
+   "align": "peak"
+  },
+  {
+   "what": "panel unfolds",
+   "time": 8.15,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.26,
+   "align": "peak"
+  },
+  {
+   "what": "camera to punch-in",
+   "time": 9.75,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.18,
+   "align": "peak"
+  },
+  {
+   "what": "glint on 83% bar",
+   "time": 10.75,
+   "file": "assets/sfx/sparkle.mp3",
+   "gain": 0.14,
+   "align": "peak"
+  },
+  {
+   "what": "click Claude chevron",
+   "time": 11.75,
    "file": "assets/sfx/click-soft.mp3",
    "gain": 0.6,
    "align": "peak"
   },
   {
-   "what": "turn to amber (impact)",
-   "time": 2.05,
+   "what": "camera to callouts",
+   "time": 13.15,
+   "file": "assets/sfx/whoosh-short.mp3",
+   "gain": 0.18,
+   "align": "peak"
+  },
+  {
+   "what": "Claude callout",
+   "time": 13.4,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.22,
+   "align": "peak"
+  },
+  {
+   "what": "Codex callout",
+   "time": 13.7,
+   "file": "assets/sfx/pop.mp3",
+   "gain": 0.22,
+   "align": "peak"
+  },
+  {
+   "what": "push into the bar",
+   "time": 15.0,
    "file": "assets/sfx/whoosh.mp3",
-   "gain": 0.7,
+   "gain": 0.36,
    "align": "peak"
   },
   {
-   "what": "Resets soon lands",
-   "time": 2.29,
-   "file": "assets/sfx/chime.mp3",
-   "gain": 0.32,
-   "align": "peak"
-  },
-  {
-   "what": "mascot bounce",
-   "time": 3.98,
+   "what": "task 1",
+   "time": 16.1,
    "file": "assets/sfx/pop.mp3",
-   "gain": 0.25,
+   "gain": 0.26,
    "align": "peak"
   },
   {
-   "what": "jump to menu bar",
-   "time": 5.59,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.45,
-   "align": "peak"
-  },
-  {
-   "what": "lands as glyph",
-   "time": 5.98,
+   "what": "task 2",
+   "time": 17.58,
    "file": "assets/sfx/pop.mp3",
-   "gain": 0.5,
+   "gain": 0.24,
    "align": "peak"
   },
   {
-   "what": "click glyph",
-   "time": 6.74,
-   "file": "assets/sfx/click.mp3",
-   "gain": 0.55,
-   "align": "peak"
-  },
-  {
-   "what": "panel unfolds",
-   "time": 6.96,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.35,
-   "align": "peak"
-  },
-  {
-   "what": "Claude bar zips",
-   "time": 7.28,
-   "file": "assets/sfx/sparkle.mp3",
-   "gain": 0.15,
-   "align": "peak"
-  },
-  {
-   "what": "camera swing to punch-in",
-   "time": 8.66,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.3,
-   "align": "peak"
-  },
-  {
-   "what": "glint on 83% bar",
-   "time": 9.2,
-   "file": "assets/sfx/sparkle.mp3",
-   "gain": 0.25,
-   "align": "peak"
-  },
-  {
-   "what": "click Claude chevron",
-   "time": 10.34,
-   "file": "assets/sfx/click-soft.mp3",
-   "gain": 0.7,
-   "align": "peak"
-  },
-  {
-   "what": "rows drop in",
-   "time": 10.56,
+   "what": "task 3",
+   "time": 17.98,
    "file": "assets/sfx/pop.mp3",
-   "gain": 0.2,
-   "align": "peak"
-  },
-  {
-   "what": "camera swing to legend",
-   "time": 11.5,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.28,
-   "align": "peak"
-  },
-  {
-   "what": "amber mascot pops",
-   "time": 11.46,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.4,
-   "align": "peak"
-  },
-  {
-   "what": "green mascot pops",
-   "time": 11.72,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.4,
-   "align": "peak"
-  },
-  {
-   "what": "whip to benefit",
-   "time": 12.74,
-   "file": "assets/sfx/whoosh.mp3",
-   "gain": 0.55,
-   "align": "peak"
-  },
-  {
-   "what": "task 1 slams",
-   "time": 13.25,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.5,
-   "align": "peak"
-  },
-  {
-   "what": "task 2 slams",
-   "time": 14.91,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.45,
-   "align": "peak"
-  },
-  {
-   "what": "task 3 slams",
-   "time": 15.33,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.45,
+   "gain": 0.24,
    "align": "peak"
   },
   {
    "what": "reset refills green",
-   "time": 16.51,
+   "time": 19.25,
    "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.45,
+   "gain": 0.3,
    "align": "peak"
   },
   {
    "what": "Nothing wasted",
-   "time": 16.57,
+   "time": 19.22,
    "file": "assets/sfx/chime.mp3",
-   "gain": 0.3,
+   "gain": 0.26,
    "align": "peak"
   },
   {
-   "what": "cards fall away",
-   "time": 18.16,
+   "what": "mascot glides to end card",
+   "time": 20.8,
    "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.35,
+   "gain": 0.26,
    "align": "peak"
   },
   {
-   "what": "mascot lands center",
-   "time": 18.42,
+   "what": "mascot lands",
+   "time": 21.1,
    "file": "assets/sfx/pop.mp3",
-   "gain": 0.55,
-   "align": "peak"
-  },
-  {
-   "what": "wordmark wipes in",
-   "time": 20.32,
-   "file": "assets/sfx/whoosh-short.mp3",
    "gain": 0.3,
    "align": "peak"
   },
   {
-   "what": "wordmark sparkle",
-   "time": 20.72,
+   "what": "wordmark",
+   "time": 21.8,
    "file": "assets/sfx/chime.mp3",
-   "gain": 0.32,
+   "gain": 0.28,
    "align": "peak"
   },
   {
    "what": "end hop",
-   "time": 21.42,
+   "time": 22.9,
    "file": "assets/sfx/pop.mp3",
-   "gain": 0.35,
+   "gain": 0.2,
    "align": "peak"
   }
  ]

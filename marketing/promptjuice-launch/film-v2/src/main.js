@@ -3,7 +3,7 @@
 import { clamp, lerp, ease, seg, spring, wobble, keys, rng } from "./anim.js";
 import { createPanel, gaugeSVG, poseBar } from "./panel.js";
 
-export const DURATION = 22.6;
+export const DURATION = 24.4;
 const W = 1920;
 const H = 1080;
 const GREEN = [95, 209, 31];
@@ -141,7 +141,7 @@ function createBigBar(parent, { x, y, w, h }) {
       head.style.transform = `translateX(${hx - 60}px) scaleX(${1 + vv * 1.6})`;
       const c = (sweepK > 0 && sweepK < 1 ? sweepColor : color) === "green" ? GREEN : AMBER;
       streaks.forEach((s) => {
-        const len = s.len * vv;
+        const len = s.len * vv * 0.75;
         s.el.style.opacity = vv * s.a;
         s.el.style.width = `${len}px`;
         s.el.style.height = `${s.th}px`;
@@ -323,8 +323,9 @@ labelA.style.cssText += "color: rgba(255,255,255,.55); font-weight: 500;";
 const valueA = el("div", "caption", rowA, `<span class="pct">83% left</span><span style="color:rgba(255,255,255,.3)"> · </span><span class="reset">resets in <span class="clk">2h 56m</span></span>`);
 const valueAReset = valueA.querySelector(".reset");
 const valueAClk = valueA.querySelector(".clk");
-const titleA = createTitle(sceneA, [["Plenty"], ["left."], ["Resets", "amber"], ["soon.", "amber"]]);
-const titleB = createTitle(sceneA, [["You"], ["paid"], ["for"], ["the"], ["juice.", "amber"]]);
+const titleA = createTitle(sceneA, [["Plenty"], ["of"], ["juice"], ["left."], ["Resets", "amber"], ["soon.", "amber"]], { size: 96 });
+const titleB1 = createTitle(sceneA, [["You"], ["paid"], ["for"], ["the"], ["juice.", "amber"]], { size: 104 });
+const titleB2 = createTitle(sceneA, [["Don’t"], ["waste"], ["it."]], { size: 104 });
 const titleC = createTitle(sceneA, [["In"], ["your"], ["menu"], ["bar."]], { size: 84 });
 
 // Menu bar (pt units, scaled 2.4x).
@@ -361,11 +362,15 @@ const panel = createPanel(panelCam, {
     ] },
   ],
 });
+// Callouts: one mascot per provider, in that provider's state colour.
 const legend = el("div", "layer", sceneD);
-const legAmber = el("div", "legend", legend, `<img src="assets/img/mascot-amber-happy.png"><div><span style="color:var(--amber)">Resets soon.</span><small>Use your juice.</small></div>`);
-const legGreen = el("div", "legend", legend, `<img src="assets/img/mascot-green-happy.png"><div><span style="color:var(--green)">Plenty left.</span><small>No rush.</small></div>`);
+const legClaude = el("div", "legend", legend, `<img src="assets/img/mascot-amber-happy.png"><div><span class="who"><i style="background:var(--claude)"></i>Claude</span><span style="color:var(--amber)">Resets soon.</span></div>`);
+const legCodex = el("div", "legend", legend, `<img src="assets/img/mascot-green-happy.png"><div><span class="who"><i style="background:var(--codex)"></i>Codex</span><span style="color:var(--green)">Plenty left.</span></div>`);
 
 // E: benefit.
+const streamSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+streamSvg.id = "stream"; streamSvg.setAttribute("width", W); streamSvg.setAttribute("height", H);
+sceneE.appendChild(streamSvg);
 const rowE = el("div", "layer", sceneE);
 const barE = createBigBar(rowE, { x: 260, y: 500, w: 1400, h: 46 });
 const labelE = el("div", "caption", rowE, `Claude <span style="color:rgba(255,255,255,.3)">·</span> 5-hour limit`);
@@ -374,9 +379,6 @@ const valueE = el("div", "caption", rowE, `<span class="pct">83% left</span><spa
 valueE.style.textShadow = "0 0 14px #07080b, 0 0 6px #07080b";
 const valueEPct = valueE.querySelector(".pct");
 const valueEReset = valueE.querySelector(".reset");
-const streamSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-streamSvg.id = "stream"; streamSvg.setAttribute("width", W); streamSvg.setAttribute("height", H);
-sceneE.insertBefore(streamSvg, rowE);
 const TASKS = [
   { what: "Plan the big refactor", chip: "Strongest model" },
   { what: "Write the test suite", chip: "New task" },
@@ -396,8 +398,7 @@ const titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], 
 const titleE2 = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 });
 const titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 });
 
-// F: finale.
-const titleF = createTitle(sceneF, [["Don’t"], ["waste"], ["the"], ["juice.", "green"]]);
+// F: end card.
 const wordmark = el("div", "wordmark", sceneF, `Prompt<span style="color:var(--green)">Juice</span>`);
 const url = el("div", "url", sceneF, "promptjuice.app");
 
@@ -407,392 +408,343 @@ const cursor = el("div", "", world, `<svg width="46" height="68" viewBox="0 0 23
 cursor.id = "cursor";
 
 // ---------------------------------------------------------------- timing
-// Every beat in one place; sound cues are generated from these same numbers.
+// Every beat in one place; SOUND-CUES.json is generated from these numbers.
 export const BEATS = {
-  popIn: 0.0, barZip: 0.3, barLand: 1.0, clockRoll: 1.72, turn: 2.05, resetsSoon: 2.24,
-  youPaid: 3.42, jumpPrep: 5.32, jump: 5.47, glyphLand: 5.98, click: 6.74, panelOpen: 6.84,
-  zipClaude: 7.1, zipCodex: 7.22, swing1: 8.36, glint: 9.0, chevronClick: 10.34, expand: 10.38,
-  swing2: 11.2, legAmber: 11.46, legGreen: 11.72, whip: 12.62, strongest: 12.98, card1: 13.22,
-  another: 14.66, card2: 14.88, card3: 15.3, reset: 16.36, nothingWasted: 16.52,
-  finale: 17.96, mascotLand: 18.42, dontWaste: 18.5, lockup: 19.82, wordmarkIn: 20.22, endHop: 21.0,
+  popIn: 0.0, barZip: 0.45, barLand: 1.5, clockRoll: 1.85, turn: 2.4, resetsSoon: 2.72,
+  youPaid: 4.05, dontWaste: 4.95,
+  jumpPrep: 6.25, jump: 6.4, glyphLand: 7.05, menuCaption: 7.12, click: 7.85, panelOpen: 7.95,
+  zipClaude: 8.2, zipCodex: 8.34, swing1: 9.3, glint: 10.3, toCard: 11.0, chevronClick: 11.75, expand: 11.79,
+  swing2: 12.75, legClaude: 13.2, legCodex: 13.5, toBar: 14.4, handoff: 15.3,
+  strongest: 15.55, card1: 15.9, another: 17.15, card2: 17.38, card3: 17.78, reset: 18.85, nothingWasted: 19.02,
+  finale: 20.4, mascotLand: 21.1, wordmarkIn: 21.3, endHop: 22.4,
 };
 const B = BEATS;
 
 // Panel camera poses: focus point (fx, fy in panel pt) lands on screen (cx, cy).
+// [cx, cy, fx, fy, scale, rotateX, rotateY]
 const P_OPEN = [960, 76, 192, 0, 2.6, 0, 0];
-const P_PUNCH = [960, 560, 192, 104, 4.3, 7, -13];
-const P_PUNCH2 = [960, 560, 192, 104, 4.4, 6, -9];
+const P_PUNCH = [960, 560, 192, 104, 4.3, 6, -12];
+const P_PUNCH2 = [960, 560, 192, 104, 4.4, 5, -8];
 const P_CARD = [960, 150, 192, 54, 3.4, 0, 0];
-const P_ANGLE = [640, 560, 192, 152, 2.45, 5, 22];
+const P_ANGLE = [640, 560, 192, 152, 2.45, 5, 20];
+const P_ANGLE2 = [620, 560, 192, 152, 2.5, 4, 17];
+// The Claude 5-hour bar lands exactly on the benefit scene's big bar.
+const P_BAR = [960, 523, 192, 116, 1400 / 332, 0, 0];
 
-function zipZ(t, t0, opts = { zeta: 0.66, freq: 1.35 }) { return spring(t, t0, opts); }
+function zipZ(t, t0) { return spring(t, t0, { zeta: 0.82, freq: 1.0 }); }
 function speed(fn, t) { return Math.abs(fn(t) - fn(t - 1 / 60)) * 60; }
+const CALM = 0.5; // how much of the speed-streak effect to keep
 
 // ---------------------------------------------------------------- render
 export function render(t) {
   bctx.clearRect(0, 0, W, H);
   fctx.clearRect(0, 0, W, H);
 
-  // Colour state of the film: green → amber at the turn → green at the reset.
-  const amberK = t < B.turn ? 0 : t < B.reset ? 1 : 0;
-  const glowC = amberK ? AMBER : GREEN;
-  const glowI = keys(t, [[0, 0.35], [0.6, 1, ease.out3], [12.6, 1], [12.75, 0.5], [13.0, 0.85], [17.9, 0.85], [18.4, 1.15], [22.6, 1]]);
-  const glowXY = t < 6.7 ? [960, 470] : t < 12.7 ? [960, 300] : t < 18 ? [960, 520] : t < B.lockup ? [960, 560] : [lerp(960, 760, seg(t, B.lockup, B.lockup + 0.5, ease.inOut3)), 540];
+  // Colour state: green → amber at the turn → green at the reset, as slow washes.
+  const amberK = seg(t, B.turn, B.turn + 0.9, ease.inOut2) * (1 - seg(t, B.reset, B.reset + 0.9, ease.inOut2));
+  const glowC = mixC(GREEN, AMBER, amberK);
+  const glowI = keys(t, [[0, 0.3], [1.0, 1, ease.inOut2], [B.toBar, 1], [B.handoff + 0.3, 0.8], [B.reset, 0.85], [B.reset + 0.8, 1.05], [24.4, 1]]);
+  const glowXY = keys(t, [[0, [960, 470]], [6.3, [960, 470]], [7.4, [960, 300]], [B.toBar, [960, 300]], [B.handoff + 0.4, [960, 520]], [B.finale, [960, 520]], [B.mascotLand, [780, 560]]]);
   glow.style.background = `radial-gradient(closest-side, ${rgba(glowC, 0.34 * glowI)}, ${rgba(glowC, 0.1 * glowI)} 42%, ${rgba(glowC, 0)} 72%)`;
   glow.style.transform = `translate(${glowXY[0] - 960}px, ${glowXY[1] - 540}px)`;
-
-  // Impact frame at the turn: flat amber ground, everything in silhouette.
-  const impact = t >= B.turn && t < B.turn + 0.07;
-  bgFlash.style.background = impact ? "#f0a32a" : "";
-  world.style.filter = impact ? "brightness(0)" : "";
-  flash.style.background = "#fff";
-  flash.style.opacity = t >= B.turn + 0.07 ? 0.5 * (1 - seg(t, B.turn + 0.07, B.turn + 0.3, ease.out2)) * (t < B.turn + 0.3 ? 1 : 0) : 0;
-
-  const [sx, sy] = shake(t, [[B.turn, 16], [B.glyphLand, 5], [B.card1 + 0.04, 7], [B.card2 + 0.04, 6], [B.card3 + 0.04, 6], [B.mascotLand, 10]]);
-  world.style.transform = `translate(${sx}px, ${sy}px)`;
-  fxFront.style.transform = world.style.transform;
+  // A slow dolly on the opening shots.
+  const dolly = 1 + 0.035 * seg(t, 0, 6.2, ease.inOut2);
+  world.style.transform = t < 6.3 ? `scale(${dolly})` : "";
+  world.style.transformOrigin = "960px 560px";
 
   const m = { visible: true, x: 960, ground: 672, h: 390, from: "green", to: "amber", k: 0, expr: "happy", t };
 
-  // ------------------------------------------------ A: green → amber (0 – 3.4)
-  const inA = t < 3.5;
-  show(sceneA, t < 6.9);
+  // ------------------------------------------------ A: green → amber (0 – 3.9)
+  const inA = t < 3.95;
+  show(sceneA, t < 7.9);
   show(rowA, inA);
-  if (t < 6.9) {
-    // Mascot pops in and rides out the bar's arrival.
-    const pop = 0.7 + 0.3 * spring(t, B.popIn, { zeta: 0.42, freq: 2.3 });
-    const land = wobble(t, B.barLand + 0.02, { amp: 0.08, freq: 3.2, decay: 6 });
-    m.sx = pop * (1 + land * 0.6); m.sy = pop * (1 - land);
-    m.lift = 46 * hop(t, B.barLand - 0.06, 0.34);
-    m.expr = (t > 0.62 && t < 0.71) || (t > 1.48 && t < 1.56) ? "blink" : "happy";
-    // The turn: alert, a startled leap, amber rising through the body.
+  if (t < 7.9) {
+    const intro = seg(t, 0, 0.9, ease.out3);
+    m.opacity = 0.35 + 0.65 * seg(t, 0, 0.5);
+    m.lift = 26 * (1 - intro);
+    const settle = wobble(t, 0.62, { amp: 0.035, freq: 2.2, decay: 4 });
+    m.sx = 1 + settle * 0.6; m.sy = 1 - settle;
+    m.expr = (t > 0.95 && t < 1.04) || (t > 1.62 && t < 1.7) ? "blink" : "happy";
+    // The turn: eyes widen, a small lift, amber rises through the body.
     if (t >= B.turn) {
-      m.expr = t < B.turn + 0.95 ? "alert" : (t > 3.12 && t < 3.2) ? "blink" : "happy";
-      const jump = hop(t, B.turn + 0.05, 0.5);
-      m.lift = 70 * jump;
-      const stretch = t < B.turn + 0.3 ? bump(t, B.turn + 0.02, 0.36) : 0;
-      const squash = wobble(t, B.turn + 0.55, { amp: 0.14, freq: 3, decay: 6 });
-      m.sx = 1 - stretch * 0.12 + squash * 0.7; m.sy = 1 + stretch * 0.18 - squash;
-      m.rot = wobble(t, B.turn + 0.05, { amp: -6, freq: 2.2, decay: 4 });
-      m.k = seg(t, B.turn + 0.06, B.turn + 0.52, ease.inOut2);
-      m.bang = t < B.turn + 1.1 ? spring(t, B.turn + 0.1, { zeta: 0.4, freq: 3 }) * (1 - seg(t, B.turn + 0.95, B.turn + 1.1)) : 0;
-      m.silhouette = impact;
+      m.expr = t < B.turn + 1.0 ? "alert" : (t > 3.45 && t < 3.53) ? "blink" : "happy";
+      m.lift = 18 * bump(t, B.turn + 0.05, 0.7);
+      m.rot = wobble(t, B.turn + 0.1, { amp: -3, freq: 1.4, decay: 3 });
+      m.k = seg(t, B.turn + 0.05, B.turn + 0.95, ease.inOut3);
     }
-    // Focus lines burst out of the turn.
-    const fl = t >= B.turn ? (1 - seg(t, B.turn + 0.1, B.turn + 0.65, ease.in2)) : 0;
-    focusLines(bctx, 960, 470, 300, AMBER, 0.5 * fl, 100 + Math.floor(t * 12));
-    sparks(fctx, 960, 470, t, B.turn + 0.07, [255, 205, 120], { n: 26, speed: 900, seed: 5 });
 
     if (inA) {
-      // The bar zips left → right, then amber sweeps over the green.
       const z = (tt) => 0.83 * zipZ(tt, B.barZip);
-      const sweepF = (tt) => seg(tt, B.turn + 0.08, B.turn + 0.42, ease.outExpo);
+      const sweepF = (tt) => seg(tt, B.turn + 0.1, B.turn + 0.95, ease.inOut3);
       const sw = sweepF(t);
-      const v = t < B.turn ? speed(z, t) / 1.6 : speed(sweepF, t) / 4;
-      const out = seg(t, 3.22, 3.46, ease.in3);
-      const headX = barA.pose({ z: z(t), color: "green", v, glint: (t - 1.02) / 0.42, sweepK: sw, sweepColor: "amber", opacity: 1 - out, ty: out * 60 });
-      sparkle(fctx, headX, 844, 46 * bump(t, 0.98, 0.5), 1, t * 2);
-      sparks(fctx, headX, 844, t, 0.4, [190, 255, 140], { n: 10, speed: 380, seed: 9, dir: Math.PI, spread: 1.2, dur: 0.6 });
-      // Row text, with the reset clock rolling 2h 56m → 33m.
-      const rowIn = seg(t, 0.8, 1.15, ease.out3);
-      labelA.style.transform = `translate(210px, ${750 + (1 - rowIn) * 20 + out * 60}px)`;
+      const v = CALM * (t < B.turn ? speed(z, t) / 1.2 : speed(sweepF, t) / 2.2);
+      const out = seg(t, 3.7, 4.0, ease.in2);
+      const headX = barA.pose({ z: z(t), color: "green", v, glint: (t - (B.barLand - 0.1)) / 0.7, sweepK: sw, sweepColor: "amber", opacity: 1 - out, ty: out * 30 });
+      sparkle(fctx, headX, 844, 34 * bump(t, B.barLand - 0.05, 0.8), 0.9, t * 0.8);
+      const rowIn = seg(t, 1.0, 1.5, ease.out3);
+      const ry = 750 + (1 - rowIn) * 16 + out * 30;
+      labelA.style.transform = `translate(210px, ${ry}px)`;
       labelA.style.opacity = rowIn * (1 - out);
       labelA.style.filter = `blur(${(1 - rowIn) * 8}px)`;
-      const roll = seg(t, B.clockRoll, B.clockRoll + 0.3, ease.inOut2);
+      // The reset clock rolls 2h 56m → 33m: the cause of the turn.
+      const roll = seg(t, B.clockRoll, B.clockRoll + 0.55, ease.inOut3);
       const mins = Math.round(lerp(176, 33, roll));
       valueAClk.textContent = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
-      valueAReset.style.color = t >= B.clockRoll + 0.3 ? "#f0a32a" : "rgba(255,255,255,.55)";
-      valueA.style.transform = `translate(${1710 - valueA.offsetWidth}px, ${750 + (1 - rowIn) * 20 + out * 60}px) scale(${1 + 0.06 * bump(t, B.clockRoll + 0.25, 0.25)})`;
-      valueA.style.transformOrigin = "100% 50%";
+      const amberText = seg(t, B.clockRoll + 0.4, B.clockRoll + 0.75);
+      valueAReset.style.color = `rgba(${Math.round(lerp(255, 240, amberText))},${Math.round(lerp(255, 163, amberText))},${Math.round(lerp(255, 42, amberText))},${lerp(0.55, 1, amberText)})`;
+      valueA.style.transform = `translate(${1710 - valueA.offsetWidth}px, ${ry}px)`;
       valueA.style.opacity = rowIn * (1 - out);
       valueA.style.filter = `blur(${(1 - rowIn) * 8}px)`;
     }
 
-    // Title: "Plenty left." then the line slides over for "Resets soon."
+    // "Plenty of juice left." then the line glides over for "Resets soon."
     show(titleA.root, inA);
     if (inA) {
-      const w12 = titleA.lefts[1] + titleA.widths[1];
-      const shift = seg(t, B.resetsSoon - 0.06, B.resetsSoon + 0.3, ease.outExpo);
-      const x0 = lerp(W / 2 - w12 / 2, W / 2 - titleA.width / 2, shift);
-      titleA.root.style.transform = `translate(${x0}px, 86px)`;
-      wordIn(titleA.spans[0], t, 0.42, "blur");
-      wordIn(titleA.spans[1], t, 0.5, "blur");
-      wordIn(titleA.spans[2], t, B.resetsSoon, "slam");
-      wordIn(titleA.spans[3], t, B.resetsSoon + 0.08, "slam");
-      wordsOut(titleA.spans, t, 3.2);
+      const w4 = titleA.lefts[3] + titleA.widths[3];
+      const shift = seg(t, B.resetsSoon - 0.1, B.resetsSoon + 0.6, ease.inOut3);
+      const x0 = lerp(W / 2 - w4 / 2, W / 2 - titleA.width / 2, shift);
+      titleA.root.style.transform = `translate(${x0}px, 92px)`;
+      [0.5, 0.58, 0.66, 0.74].forEach((t0, i) => wordIn(titleA.spans[i], t, t0, "blur"));
+      wordIn(titleA.spans[4], t, B.resetsSoon + 0.15, "blur");
+      wordIn(titleA.spans[5], t, B.resetsSoon + 0.25, "blur");
+      wordsOut(titleA.spans, t, 3.62);
     }
 
-    // B: "You paid for the juice." — a proud little bounce under sun rays.
-    if (t >= 3.3) {
-      const mv = seg(t, 3.3, 3.85, ease.inOut3);
-      m.x = 960; m.ground = lerp(672, 790, mv); m.h = lerp(390, 480, mv);
-      m.k = 1; m.from = "amber"; m.to = "amber";
-      const b1 = hop(t, 3.95, 0.3), b2 = hop(t, 4.3, 0.3);
-      m.lift = 34 * (b1 + b2);
-      const sq = wobble(t, 4.25, { amp: 0.06, freq: 3.5, decay: 7 }) + wobble(t, 4.6, { amp: 0.06, freq: 3.5, decay: 7 });
-      m.sx = 1 + sq * 0.7; m.sy = 1 - sq;
-      m.rot = 0;
-      m.expr = (t > 4.78 && t < 4.86) ? "blink" : (t > 3.9 && t < 4.7) ? "joy" : "happy";
-      m.bang = 0;
+    // B: "You paid for the juice. Don't waste it."
+    if (t >= 3.85) {
+      const mv = seg(t, 3.85, 4.6, ease.inOut3);
+      m.x = 960; m.ground = lerp(672, 830, mv); m.h = lerp(390, 450, mv);
+      m.k = 1; m.from = "amber"; m.to = "amber"; m.rot = 0;
+      m.lift = 14 * bump(t, 4.5, 0.55);
+      const sq = wobble(t, 4.95, { amp: 0.03, freq: 2.4, decay: 5 });
+      m.sx = 1 + sq * 0.6; m.sy = 1 - sq;
+      m.expr = (t > 5.7 && t < 5.78) ? "blink" : (t > 4.4 && t < 5.4) ? "joy" : "happy";
     }
-    rays(bctx, 960, 560, AMBER, 0.07 * seg(t, 3.35, 3.9) * (1 - seg(t, 5.3, 5.6)), t * 0.12);
-    animateTitle(titleB, t, { t0: B.youPaid, t1: 5.18, kind: "blur", y: 96 });
+    rays(bctx, 960, 620, AMBER, 0.05 * seg(t, 3.9, 4.8) * (1 - seg(t, 6.0, 6.5)), t * 0.06);
+    animateTitle(titleB1, t, { t0: B.youPaid, t1: 6.0, kind: "blur", y: 96 });
+    animateTitle(titleB2, t, { t0: B.dontWaste, t1: 6.08, kind: "blur", y: 222 });
 
     // C: a hop up into the menu bar, where the mascot becomes the glyph.
     if (t >= B.jumpPrep) {
-      const prep = bump(t, B.jumpPrep, 0.2);
-      const f = seg(t, B.jump, B.glyphLand, ease.inOut2);
-      const p0 = [960, 790], p1 = [1380, 420], p2 = [GLYPH_PT * MB_S, 52];
-      const bx = (1 - f) ** 2 * p0[0] + 2 * (1 - f) * f * p1[0] + f * f * p2[0];
-      const by = (1 - f) ** 2 * p0[1] + 2 * (1 - f) * f * p1[1] + f * f * p2[1];
-      m.x = bx; m.ground = by; m.lift = 0;
-      m.h = lerp(480, 40, ease.inOut2(f));
-      m.sx = 1 + prep * 0.14 - bump(t, B.jump, 0.5) * 0.12;
-      m.sy = 1 - prep * 0.2 + bump(t, B.jump, 0.5) * 0.22;
-      m.rot = 18 * bump(t, B.jump, 0.5);
-      m.expr = t < B.jump + 0.3 ? "joy" : "happy";
+      const prep = bump(t, B.jumpPrep, 0.22);
+      const f = seg(t, B.jump, B.glyphLand, ease.inOut3);
+      const p0 = [960, 830], p1 = [1380, 420], p2 = [GLYPH_PT * MB_S, 52];
+      m.x = (1 - f) ** 2 * p0[0] + 2 * (1 - f) * f * p1[0] + f * f * p2[0];
+      m.ground = (1 - f) ** 2 * p0[1] + 2 * (1 - f) * f * p1[1] + f * f * p2[1];
+      m.lift = 0;
+      m.h = lerp(450, 40, ease.inOut2(f));
+      m.sx = 1 + prep * 0.08 - bump(t, B.jump, 0.6) * 0.06;
+      m.sy = 1 - prep * 0.1 + bump(t, B.jump, 0.6) * 0.1;
+      m.rot = 10 * bump(t, B.jump, 0.65);
+      m.expr = "joy";
       m.shadowOpacity = 1 - f;
       m.visible = t < B.glyphLand;
     }
-    animateTitle(titleC, t, { t0: 6.06, t1: 6.6, kind: "blur", stagger: 0.05, y: 330 });
+    animateTitle(titleC, t, { t0: B.menuCaption, t1: 7.72, kind: "blur", stagger: 0.06, y: 330 });
   } else {
     show(titleA.root, false);
   }
 
   // Menu bar slides in for the hand-off and leaves when the camera swings.
-  const mbIn = seg(t, 5.55, 5.9, ease.outExpo) * (1 - seg(t, 8.36, 8.66, ease.in3));
-  show(menubar, mbIn > 0.001 && t < 9);
+  const mbIn = seg(t, 6.45, 6.9, ease.out3) * (1 - seg(t, B.swing1, B.swing1 + 0.4, ease.in2));
+  show(menubar, mbIn > 0.001 && t < B.swing1 + 0.5);
   menubar.style.transform = `translate(0px, ${(1 - mbIn) * -70}px) scale(${MB_S})`;
-  const glyphPop = t < B.glyphLand ? 0 : spring(t, B.glyphLand, { zeta: 0.38, freq: 2.6 });
-  mbGlyph.style.transform = `scale(${glyphPop * (1 - 0.15 * bump(t, B.click, 0.12))})`;
-  mbHL.style.cssText = `left:${GLYPH_PT - 15}px;width:30px;opacity:${t > B.click ? 1 : 0}`;
-  burst(fctx, GLYPH_PT * MB_S, 29, t, B.glyphLand, AMBER, { n: 9, r0: 34, r1: 110, width: 5 });
+  const glyphPop = t < B.glyphLand ? 0 : spring(t, B.glyphLand, { zeta: 0.62, freq: 2.0 });
+  mbGlyph.style.transform = `scale(${glyphPop * (1 - 0.12 * bump(t, B.click, 0.14))})`;
+  mbHL.style.cssText = `left:${GLYPH_PT - 15}px;width:30px;opacity:${seg(t, B.click, B.click + 0.08)}`;
+  sparkle(fctx, GLYPH_PT * MB_S + 18, 22, 22 * bump(t, B.glyphLand + 0.05, 0.5), 0.9, t);
 
-  // ------------------------------------------------ D: the Juicebar (6.8 – 12.7)
-  const inD = t >= B.panelOpen - 0.02 && t < 13.0;
+  // ------------------------------------------------ D: the Juicebar (7.9 – 15.4)
+  const inD = t >= B.panelOpen - 0.02 && t < B.handoff + 0.35;
   show(sceneD, inD);
   if (inD) {
     const pose = keys(t, [
       [B.panelOpen, P_OPEN], [B.swing1, P_OPEN],
-      [B.swing1 + 0.6, P_PUNCH, ease.inOut4], [9.86, P_PUNCH2, ease.inOut2],
-      [10.26, P_CARD, ease.inOut4], [B.swing2, P_CARD],
-      [B.swing2 + 0.62, P_ANGLE, ease.inOut4], [12.62, [P_ANGLE[0] - 30, ...P_ANGLE.slice(1, 6), P_ANGLE[6] + 3], ease.inOut2],
+      [B.swing1 + 0.85, P_PUNCH, ease.inOut3], [B.toCard, P_PUNCH2, ease.inOut2],
+      [B.toCard + 0.65, P_CARD, ease.inOut3], [B.swing2, P_CARD],
+      [B.swing2 + 0.8, P_ANGLE, ease.inOut3], [B.toBar, P_ANGLE2, ease.inOut2],
+      [B.toBar + 0.8, P_BAR, ease.inOut3],
     ]);
     const [cx, cy, fx, fy, s, rx, ry] = pose;
-    // Whip out to the next world.
-    const whip = seg(t, B.whip, B.whip + 0.2, ease.inExpo);
     panelStage.style.perspectiveOrigin = `${cx}px ${cy}px`;
-    panelCam.style.transform = `translate3d(${cx - whip * 2300}px, ${cy}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s}) translate(${-fx}px, ${-fy}px)`;
-    sceneD.style.filter = whip > 0 ? `blur(${whip * 16}px)` : "";
+    panelCam.style.transform = `translate3d(${cx}px, ${cy}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s}) translate(${-fx}px, ${-fy}px)`;
+    sceneD.style.opacity = 1 - seg(t, B.handoff - 0.1, B.handoff + 0.25, ease.inOut2);
 
-    const unfold = spring(t, B.panelOpen, { zeta: 0.62, freq: 1.45 });
+    const unfold = spring(t, B.panelOpen, { zeta: 0.78, freq: 1.25 });
     panel.root.style.transform = `rotateX(${(1 - unfold) * -92}deg)`;
-    panel.root.style.opacity = clamp(seg(t, B.panelOpen, B.panelOpen + 0.12) * 1.2);
+    panel.root.style.opacity = clamp(seg(t, B.panelOpen, B.panelOpen + 0.15) * 1.2);
     const zc = (tt) => zipZ(tt, B.zipClaude);
     const zx = (tt) => zipZ(tt, B.zipCodex);
-    const z1 = (tt) => zipZ(tt, B.expand + 0.16);
-    const z2 = (tt) => zipZ(tt, B.expand + 0.27);
-    const geo = panel.layout({
-      expand: { claude: spring(t, B.expand, { zeta: 0.74, freq: 1.7 }) },
+    const z1 = (tt) => zipZ(tt, B.expand + 0.2);
+    const z2 = (tt) => zipZ(tt, B.expand + 0.32);
+    panel.layout({
+      expand: { claude: spring(t, B.expand, { zeta: 0.86, freq: 1.4 }) },
       appear: {
-        header: seg(t, B.panelOpen + 0.02, B.panelOpen + 0.3, ease.out3),
-        card0: seg(t, B.panelOpen + 0.06, B.panelOpen + 0.36, ease.out3),
-        card1: seg(t, B.panelOpen + 0.11, B.panelOpen + 0.42, ease.out3),
+        header: seg(t, B.panelOpen + 0.03, B.panelOpen + 0.4, ease.out3),
+        card0: seg(t, B.panelOpen + 0.08, B.panelOpen + 0.46, ease.out3),
+        card1: seg(t, B.panelOpen + 0.14, B.panelOpen + 0.52, ease.out3),
       },
-      chevronPress: { claude: bump(t, B.chevronClick - 0.03, 0.14) },
+      chevronPress: { claude: bump(t, B.chevronClick - 0.03, 0.16) },
       zip: {
-        "claude-0": [zc(t), speed(zc, t) / 2.4, (t - B.glint) / 0.4],
-        "claude-1": [z1(t), speed(z1, t) / 2.4, -1],
-        "claude-2": [z2(t), speed(z2, t) / 2.4, -1],
-        "codex-0": [zx(t), speed(zx, t) / 2.4, -1],
+        "claude-0": [zc(t), CALM * speed(zc, t) / 2, (t - B.glint) / 0.7],
+        "claude-1": [z1(t), CALM * speed(z1, t) / 2, -1],
+        "claude-2": [z2(t), CALM * speed(z2, t) / 2, -1],
+        "codex-0": [zx(t), CALM * speed(zx, t) / 2, -1],
       },
     });
-    // Screen positions for FX and the cursor.
-    const headRect = panel.cards[0].rows[0].bar.fill.getBoundingClientRect();
     const vp = document.getElementById("viewport").getBoundingClientRect();
     const sc = vp.width / W;
+    const headRect = panel.cards[0].rows[0].bar.fill.getBoundingClientRect();
     const hx = (headRect.right - vp.left) / sc, hy = (headRect.top + headRect.height / 2 - vp.top) / sc;
-    sparkle(fctx, hx - 6, hy, 64 * bump(t, B.glint + 0.3, 0.45), 1, t * 2, [255, 236, 190]);
-    sparkle(fctx, hx - 6, hy, 30 * bump(t, B.zipClaude + 0.45, 0.4), 1, t * 2, [255, 236, 190]);
+    sparkle(fctx, hx - 6, hy, 46 * bump(t, B.glint + 0.45, 0.7), 0.95, t * 0.8, [255, 236, 190]);
 
-    // Cursor: click the glyph, leave, return for the Claude chevron.
+    // Cursor: leaves after the glyph click, returns for the Claude chevron.
     const chevEl = panel.cards[0].chevron.getBoundingClientRect();
     const chev = [(chevEl.left + chevEl.width / 2 - vp.left) / sc, (chevEl.top + chevEl.height / 2 - vp.top) / sc];
-    const cIn = seg(t, 9.92, 10.3, ease.outExpo);
-    const cOut = seg(t, 10.62, 10.95, ease.in3);
-    const cpos = [lerp(lerp(1500, chev[0], cIn), 1700, cOut), lerp(lerp(1100, chev[1], cIn), 1150, cOut)];
-    cursorPose(t > 9.9 && t < 10.95, cpos, bump(t, B.chevronClick - 0.04, 0.14));
-    if (t >= 6.9 && t < 9.9) {
-      const away = seg(t, 6.92, 7.3, ease.in2);
-      cursorPose(away < 1, [lerp(GLYPH_PT * MB_S + 6, 1760, away), lerp(34, 420, away)], 0);
-    }
+    const cIn = seg(t, B.chevronClick - 0.5, B.chevronClick - 0.06, ease.out3);
+    const cOut = seg(t, B.chevronClick + 0.3, B.chevronClick + 0.7, ease.in2);
+    const onChev = t > B.chevronClick - 0.5 && t < B.chevronClick + 0.7;
+    if (onChev) cursorPose(true, [lerp(lerp(1500, chev[0], cIn), 1720, cOut), lerp(lerp(1100, chev[1], cIn), 1160, cOut)], bump(t, B.chevronClick - 0.04, 0.16));
+    else if (t >= B.click + 0.05 && t < B.click + 0.6) {
+      const away = seg(t, B.click + 0.12, B.click + 0.55, ease.in2);
+      cursorPose(true, [lerp(GLYPH_PT * MB_S + 6, 1780, away), lerp(34, 460, away)], 0);
+    } else cursorPose(false);
 
-    // Legend: one mascot per colour, popping in beside the tilted panel.
-    const la = t < B.legAmber ? 0 : spring(t, B.legAmber, { zeta: 0.5, freq: 2.2 });
-    const lg = t < B.legGreen ? 0 : spring(t, B.legGreen, { zeta: 0.5, freq: 2.2 });
-    const lOut = whip;
-    show(legend, t > B.legAmber);
-    legAmber.style.transform = `translate(${1180 - lOut * 2300}px, 330px) scale(${la})`;
-    legAmber.style.opacity = clamp(la * 2);
-    legGreen.style.transform = `translate(${1180 - lOut * 2300}px, 560px) scale(${lg})`;
-    legGreen.style.opacity = clamp(lg * 2);
-    legAmber.style.transformOrigin = legGreen.style.transformOrigin = "60px 66px";
+    // Callouts beside each card: Claude amber, Codex green.
+    const lOut = seg(t, B.toBar - 0.1, B.toBar + 0.25, ease.in2);
+    [[legClaude, B.legClaude, 430], [legCodex, B.legCodex, 724]].forEach(([e, t0, y]) => {
+      const k = seg(t, t0, t0 + 0.55, ease.out3);
+      show(e, k > 0);
+      e.style.transform = `translate(1180px, ${y + (1 - k) * 22}px)`;
+      e.style.opacity = k * (1 - lOut);
+      e.style.filter = `blur(${(1 - k) * 8 + lOut * 8}px)`;
+    });
   }
-  if (t >= B.click - 0.6 && t < 6.9) {
-    const cin = seg(t, 6.18, 6.66, ease.outExpo);
-    cursorPose(true, [lerp(1720, GLYPH_PT * MB_S + 6, cin), lerp(1150, 34, cin)], bump(t, B.click - 0.04, 0.14));
-  } else if (!(t >= 6.9 && t < 10.95)) cursorPose(false);
+  if (t >= B.click - 0.65 && t < B.click + 0.05) {
+    const cin = seg(t, B.click - 0.62, B.click - 0.08, ease.out3);
+    cursorPose(true, [lerp(1720, GLYPH_PT * MB_S + 6, cin), lerp(1150, 34, cin)], bump(t, B.click - 0.04, 0.16));
+  } else if (!inD) cursorPose(false);
 
-  // Horizontal speed lines across the whip.
-  if (t > B.whip && t < B.whip + 0.42) {
-    const k = bump(t, B.whip, 0.42);
-    const R = rng(77 + Math.floor(t * 30));
-    for (let i = 0; i < 26; i++) {
-      fctx.fillStyle = `rgba(255,255,255,${(0.15 + R() * 0.4) * k})`;
-      const y = R() * H, len = 300 + R() * 900;
-      fctx.fillRect(R() * W - len / 2, y, len, 1 + R() * 3);
-    }
-  }
-
-  // ------------------------------------------------ E: benefit (12.7 – 18.0)
-  const inE = t >= B.whip + 0.08 && t < 18.6;
+  // ------------------------------------------------ E: benefit (15.1 – 20.6)
+  const inE = t >= B.handoff - 0.08 && t < B.finale + 0.7;
   show(sceneE, inE);
   if (inE) {
-    const enter = seg(t, B.whip + 0.12, B.whip + 0.34, ease.outExpo);
-    sceneE.style.transform = `translateX(${(1 - enter) * 1800}px)`;
-    sceneE.style.filter = enter < 1 ? `blur(${(1 - enter) * 14}px)` : "";
-    const fall = seg(t, B.finale, B.finale + 0.4, ease.in3);
-
-    // Juice level: each task drinks a slice; then the reset refills it green.
-    const d1 = seg(t, B.card1 + 0.12, B.card1 + 0.8, ease.inOut2);
-    const d2 = seg(t, B.card2 + 0.12, B.card2 + 0.7, ease.inOut2);
-    const d3 = seg(t, B.card3 + 0.12, B.card3 + 0.72, ease.inOut2);
-    const level = (tt) => {
-      const a = seg(tt, B.card1 + 0.12, B.card1 + 0.8, ease.inOut2), b2 = seg(tt, B.card2 + 0.12, B.card2 + 0.7, ease.inOut2), c = seg(tt, B.card3 + 0.12, B.card3 + 0.72, ease.inOut2);
-      return 0.83 - 0.28 * a - 0.27 * b2 - 0.24 * c;
-    };
-    const refill = (tt) => tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.85, freq: 1.1 });
+    const fall = seg(t, B.finale, B.finale + 0.6, ease.inOut3);
+    const d1 = seg(t, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2);
+    const d2 = seg(t, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2);
+    const d3 = seg(t, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2);
+    const level = (tt) => 0.83
+      - 0.28 * seg(tt, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2)
+      - 0.27 * seg(tt, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2)
+      - 0.24 * seg(tt, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2);
+    const refill = (tt) => (tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.88, freq: 0.9 }));
     const reset = t >= B.reset;
     const z = reset ? Math.min(1, lerp(0.04, 1, refill(t))) : level(t);
-    const v = reset ? speed(refill, t) / 1.4 : speed(level, t) / 1.2;
-    const headX = barE.pose({ z, color: reset ? "green" : "amber", v, glint: (t - (B.reset + 0.75)) / 0.45, opacity: 1 - fall, ty: fall * 500 });
-    sparkle(fctx, headX - 8, 523, 52 * bump(t, B.reset + 0.6, 0.5), 1, t * 2, [210, 255, 170]);
+    const v = CALM * (reset ? speed(refill, t) / 1.1 : speed(level, t));
+    // The panel's bar becomes this bar: it arrives at the panel bar's thickness.
+    const thick = lerp(6 * P_BAR[4] / 46, 1, seg(t, B.handoff, B.handoff + 0.5, ease.inOut3));
+    barE.root.style.transformOrigin = "50% 50%";
+    const headX = barE.pose({ z, color: reset ? "green" : "amber", v, glint: (t - (B.reset + 0.9)) / 0.7, opacity: 1 - fall, ty: fall * 120 });
+    barE.root.style.transform += ` scaleY(${thick})`;
+    sparkle(fctx, headX - 8, 523, 40 * bump(t, B.reset + 0.8, 0.8), 0.95, t * 0.8, [210, 255, 170]);
 
-    const pct = Math.round(z * 100);
-    valueEPct.textContent = `${pct}% left`;
-    const mins = reset ? null : Math.max(1, Math.round(33 - 10 * d1 - 11 * d2 - 11 * d3));
+    valueEPct.textContent = `${Math.round(z * 100)}% left`;
+    const mins = Math.max(1, Math.round(33 - 10 * d1 - 11 * d2 - 11 * d3));
     valueEReset.textContent = reset ? "resets in 4h" : `resets in ${mins}m`;
     valueEReset.style.color = reset ? "rgba(255,255,255,.55)" : "#f0a32a";
-    const rowIn = seg(t, B.whip + 0.2, B.whip + 0.5, ease.out3);
-    labelE.style.transform = `translate(260px, ${578 + fall * 500}px)`;
+    const rowIn = seg(t, B.handoff + 0.2, B.handoff + 0.65, ease.out3);
+    labelE.style.transform = `translate(260px, ${578 + (1 - rowIn) * 14 + fall * 120}px)`;
     labelE.style.opacity = rowIn * (1 - fall);
-    valueE.style.transform = `translate(${1660 - valueE.offsetWidth}px, ${574 + fall * 500}px)`;
+    labelE.style.filter = `blur(${(1 - rowIn) * 8}px)`;
+    valueE.style.transform = `translate(${1660 - valueE.offsetWidth}px, ${574 + (1 - rowIn) * 14 + fall * 120}px)`;
     valueE.style.opacity = rowIn * (1 - fall);
+    valueE.style.filter = `blur(${(1 - rowIn) * 8}px)`;
 
-    // Task cards slam in; a stream of juice runs from the bar into each.
-    const slams = [B.card1, B.card2, B.card3];
-    const drains = [[B.card1 + 0.05, B.card1 + 0.85], [B.card2 + 0.05, B.card2 + 0.75], [B.card3 + 0.05, B.card3 + 0.78]];
+    // Task cards rise in; a stream of juice runs from the bar into each.
+    const arrivals = [B.card1, B.card2, B.card3];
+    const drains = [[B.card1 + 0.08, B.card1 + 1.0], [B.card2 + 0.08, B.card2 + 0.9], [B.card3 + 0.08, B.card3 + 0.95]];
     taskEls.forEach((tk, i) => {
-      const t0 = slams[i];
-      const k = t < t0 ? 0 : spring(t, t0, { zeta: 0.55, freq: 2.1 });
-      const a = seg(t, t0, t0 + 0.1);
-      const fl = seg(t, B.finale + i * 0.05, B.finale + 0.4 + i * 0.05, ease.in3);
+      const t0 = arrivals[i];
+      const k = seg(t, t0, t0 + 0.6, ease.out4);
+      const fl = seg(t, B.finale + i * 0.06, B.finale + 0.55 + i * 0.06, ease.inOut3);
       show(tk.el, t >= t0);
-      tk.el.style.opacity = a;
-      tk.el.style.transform = `translateY(${fl * 520}px) scale(${lerp(1.5, 1, k)}) rotate(${lerp(i % 2 ? 7 : -7, 0, k) + fl * (i - 1) * 8}deg)`;
-      tk.el.style.filter = k < 0.6 ? `blur(${(1 - k / 0.6) * 10}px)` : "";
-      const done = seg(t, B.reset + 0.1 + i * 0.08, B.reset + 0.5 + i * 0.08, ease.out3);
+      tk.el.style.opacity = k * (1 - fl);
+      tk.el.style.transform = `translateY(${(1 - k) * 36 + fl * 90}px)`;
+      tk.el.style.filter = k < 1 ? `blur(${(1 - k) * 10}px)` : "";
+      const done = seg(t, B.reset + 0.2 + i * 0.12, B.reset + 0.7 + i * 0.12, ease.out3);
       const work = seg(t, drains[i][0] + 0.3, drains[i][1] + 1.6, ease.inOut2);
       tk.prog.style.width = `${lerp(work * 70, 100, done)}%`;
       tk.prog.style.background = done > 0 ? "linear-gradient(90deg,#3fa512,#8be24e)" : "";
       if (done > 0.5) { tk.chip.textContent = "Done"; tk.chip.style.color = "#5fd11f"; tk.chip.style.background = "rgba(95,209,31,.14)"; tk.chip.style.boxShadow = "inset 0 0 0 2px rgba(95,209,31,.35)"; }
       else { tk.chip.textContent = TASKS[i].chip; tk.chip.style.cssText = ""; }
-      burst(fctx, tk.x + 220, 768, t, t0 + 0.04, [255, 255, 255], { n: 12, r0: 230, r1: 330, width: 6, seed: 20 + i });
-      // Stream.
       const [s0, s1] = drains[i];
       const sk = (t - s0) / (s1 - s0);
       if (sk > 0 && sk < 1.25) {
         const hxNow = barE.headX(level(t));
-        const p = `M ${hxNow - 10} 546 C ${hxNow - 10} 640, ${tk.x + 220} 600, ${tk.x + 220} 682`;
-        tk.path.setAttribute("d", p);
+        tk.path.setAttribute("d", `M ${hxNow - 10} 546 C ${hxNow - 10} 640, ${tk.x + 220} 600, ${tk.x + 220} 682`);
         tk.path.setAttribute("stroke", "#f0a32a");
-        tk.path.setAttribute("stroke-width", `${10 * (1 - clamp((sk - 1) * 4))}`);
-        tk.path.setAttribute("stroke-dasharray", "26 18");
-        tk.path.setAttribute("stroke-dashoffset", `${-t * 240}`);
-        tk.path.setAttribute("opacity", `${clamp(sk * 6) * (1 - clamp((sk - 1) * 4))}`);
-        tk.path.style.filter = "drop-shadow(0 0 10px rgba(240,163,42,.8))";
+        tk.path.setAttribute("stroke-width", `${8 * (1 - clamp((sk - 1) * 4))}`);
+        tk.path.setAttribute("stroke-dasharray", "22 16");
+        tk.path.setAttribute("stroke-dashoffset", `${-t * 160}`);
+        tk.path.setAttribute("opacity", `${0.85 * clamp(sk * 5) * (1 - clamp((sk - 1) * 4))}`);
+        tk.path.style.filter = "drop-shadow(0 0 8px rgba(240,163,42,.7))";
       } else tk.path.setAttribute("opacity", "0");
     });
 
     // The mascot rides the juice level.
     if (t < B.finale) {
       const hx = barE.headX(z);
-      m.x = clamp(hx - 40, 380, 1600); m.ground = 500; m.h = 180; m.k = 1; m.lift = 0;
-      m.from = "amber"; m.to = "amber";
-      // Little hops while the level falls; a big happy one on the refill.
-      const moving = clamp(v * 1.4);
-      m.lift = 26 * Math.abs(Math.sin(t * 15)) * moving;
-      m.expr = (t > 13.9 && t < 13.98) || (t > 15.95 && t < 16.03) ? "blink" : "happy";
+      const appear = seg(t, B.handoff + 0.25, B.handoff + 0.8, ease.out3);
+      m.x = clamp(hx - 40, 380, 1600); m.ground = 500; m.h = 180;
+      m.from = "amber"; m.to = "amber"; m.k = 1; m.rot = 0;
+      m.opacity = appear;
+      const moving = clamp(v * 2);
+      m.lift = 26 * (1 - appear) + 7 * Math.abs(Math.sin(t * 9)) * moving;
+      m.expr = (t > 16.6 && t < 16.68) || (t > 18.3 && t < 18.38) ? "blink" : "happy";
       if (reset) {
-        m.from = "amber"; m.to = "green";
-        m.k = seg(t, B.reset + 0.05, B.reset + 0.45, ease.inOut2);
+        m.to = "green";
+        m.k = seg(t, B.reset + 0.1, B.reset + 0.9, ease.inOut3);
         m.expr = "joy";
-        m.lift = 90 * hop(t, B.reset + 0.05, 0.6) + 20 * moving;
+        m.lift = 40 * bump(t, B.reset + 0.1, 0.7) + 6 * moving;
       }
-      const ent = seg(t, B.whip + 0.3, B.whip + 0.6, ease.outBack);
-      m.sx = m.sy = ent;
     }
-    animateTitle(titleE1, t, { t0: B.strongest, t1: 14.48, kind: "blur", y: 120 });
-    animateTitle(titleE2, t, { t0: B.another, t1: 16.22, kind: "slam", stagger: 0.09, y: 120 });
-    animateTitle(titleE3, t, { t0: B.nothingWasted, t1: 17.85, kind: "slam", stagger: 0.1, y: 120 });
+    animateTitle(titleE1, t, { t0: B.strongest, t1: 16.95, kind: "blur", y: 120 });
+    animateTitle(titleE2, t, { t0: B.another, t1: 18.75, kind: "blur", stagger: 0.09, y: 120 });
+    animateTitle(titleE3, t, { t0: B.nothingWasted, t1: 20.25, kind: "blur", stagger: 0.1, y: 120 });
   }
 
-  // ------------------------------------------------ F: finale (18.0 – 22.6)
+  // ------------------------------------------------ F: end card (20.4 – 24.4)
   const inF = t >= B.finale;
   show(sceneF, inF);
   if (inF) {
-    m.from = "green"; m.to = "green"; m.k = 0;
-    const f = seg(t, B.finale + 0.05, B.mascotLand, ease.linear);
-    const start = [clamp(barE.headX(1) - 40, 380, 1600), 500, 180];
-    m.x = lerp(start[0], 960, ease.inOut2(f));
-    m.ground = lerp(start[1], 800, ease.in2(f));
-    m.h = lerp(start[2], 430, ease.out2(f));
-    m.lift = 260 * Math.sin(Math.PI * f) * (1 - f * 0.4);
-    m.rot = -14 * bump(t, B.finale + 0.05, B.mascotLand - B.finale);
-    const sq = wobble(t, B.mascotLand, { amp: 0.16, freq: 3, decay: 6 });
-    m.sx = 1 + sq * 0.7; m.sy = 1 - sq;
-    m.expr = t < 19.3 ? "joy" : (t > 19.55 && t < 19.63) || (t > 21.7 && t < 21.78) ? "blink" : "happy";
-    focusLines(bctx, 960, 560, 320, GREEN, 0.4 * (1 - seg(t, B.mascotLand + 0.05, B.mascotLand + 0.6, ease.in2)) * (t > B.mascotLand ? 1 : 0), 300 + Math.floor(t * 12));
-    rays(bctx, 960, 600, GREEN, 0.075 * seg(t, B.mascotLand, B.mascotLand + 0.5) * (1 - seg(t, B.lockup, B.lockup + 0.4)), t * 0.12);
-    animateTitle(titleF, t, { t0: B.dontWaste, t1: 19.62, kind: "blur", y: 110 });
-
-    // Lockup: mascot steps left, the wordmark wipes out from behind it.
-    const lk = seg(t, B.lockup, B.lockup + 0.5, ease.inOut3);
     const wmW = wordmark.offsetWidth, mH = 380, mW = mH * MASCOT_ASPECT, gap = 56;
-    const total = mW + gap + wmW;
-    const left = W / 2 - total / 2;
-    if (t >= B.lockup) {
-      m.x = lerp(960, left + mW / 2, lk);
-      m.ground = lerp(800, 740, lk);
-      m.h = lerp(430, mH, lk);
-      m.lift = 70 * hop(t, B.endHop, 0.42);
-      const sq2 = wobble(t, B.endHop + 0.42, { amp: 0.1, freq: 3.2, decay: 7 }) - 0.1 * bump(t, B.endHop - 0.12, 0.14);
-      m.sx = 1 + sq2 * 0.7; m.sy = 1 - sq2;
-      m.rot = 0;
-    }
-    const wipe = seg(t, B.wordmarkIn, B.wordmarkIn + 0.55, ease.outExpo);
+    const left = W / 2 - (mW + gap + wmW) / 2;
+    const target = [left + mW / 2, 740, mH];
+    const start = [clamp(barE.headX(1) - 40, 380, 1600), 500, 180];
+    const f = seg(t, B.finale + 0.1, B.mascotLand, ease.inOut2);
+    m.from = "green"; m.to = "green"; m.k = 0;
+    m.x = lerp(start[0], target[0], f);
+    m.ground = lerp(start[1], target[1], f);
+    m.h = lerp(start[2], target[2], ease.out2(f));
+    m.lift = 150 * Math.sin(Math.PI * f) + 40 * hop(t, B.endHop, 0.5);
+    m.rot = -8 * bump(t, B.finale + 0.1, B.mascotLand - B.finale - 0.1);
+    const sq = wobble(t, B.mascotLand, { amp: 0.06, freq: 2.4, decay: 5 }) + wobble(t, B.endHop + 0.5, { amp: 0.04, freq: 2.6, decay: 6 });
+    m.sx = 1 + sq * 0.6; m.sy = 1 - sq;
+    m.expr = t < 21.8 ? "joy" : (t > 23.3 && t < 23.38) ? "blink" : "happy";
+
+    const wipe = seg(t, B.wordmarkIn, B.wordmarkIn + 0.8, ease.inOut3);
     const wmX = left + mW + gap;
-    wordmark.style.transform = `translate(${wmX - (1 - wipe) * 60}px, ${740 - 300}px)`;
+    wordmark.style.transform = `translate(${wmX - (1 - wipe) * 40}px, 440px)`;
     wordmark.style.clipPath = `inset(-20% ${(1 - wipe) * 100}% -20% 0)`;
     wordmark.style.opacity = wipe > 0 ? 1 : 0;
-    const u = seg(t, B.wordmarkIn + 0.32, B.wordmarkIn + 0.7, ease.out3);
-    url.style.transform = `translate(${wmX + 6}px, ${740 - 300 + 186 + (1 - u) * 14}px)`;
+    const u = seg(t, B.wordmarkIn + 0.45, B.wordmarkIn + 1.0, ease.out3);
+    url.style.transform = `translate(${wmX + 6}px, ${626 + (1 - u) * 12}px)`;
     url.style.opacity = u;
     url.style.filter = `blur(${(1 - u) * 8}px)`;
-    sparkle(fctx, wmX + wmW - 10, 452, 40 * bump(t, B.wordmarkIn + 0.45, 0.55), 1, t * 2, [210, 255, 170]);
+    sparkle(fctx, wmX + wmW - 10, 452, 30 * bump(t, B.wordmarkIn + 0.7, 0.8), 0.9, t * 0.8, [210, 255, 170]);
   }
 
-  if (t >= B.glyphLand && t < B.whip + 0.08) m.visible = false;
+  if (t >= B.glyphLand && t < B.handoff) m.visible = false;
   mascot.pose(m);
 }
 
@@ -807,7 +759,7 @@ const capture = params.has("capture");
 const ready = (async () => {
   await document.fonts.ready;
   await Promise.all([...document.images].map((i) => (i.complete ? null : new Promise((r) => { i.onload = i.onerror = r; }))));
-  [titleA, titleB, titleC, titleE1, titleE2, titleE3, titleF].forEach((T) => T.measure());
+  [titleA, titleB1, titleB2, titleC, titleE1, titleE2, titleE3].forEach((T) => T.measure());
   render(+(params.get("t") || 0));
 })();
 window.__film = { render, ready, duration: DURATION, beats: BEATS };
