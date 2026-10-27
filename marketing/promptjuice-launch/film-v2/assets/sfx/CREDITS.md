@@ -43,3 +43,4 @@ Made with ffmpeg from the Pixabay files above (filtering, slowing, reverb, trimm
 - `whoosh-swell.mp3`: the 3.2 s peak region of `whoosh-cinematic.mp3`, faded in and out
 - `pop-soft.mp3`: `pop.mp3`, slowed 20%, low-passed, light echo
 - `impact-low.mp3`: `impact-bass-2.mp3`, low-passed and shortened
+- `pour.mp3`: a slowed, low-passed slice of `whoosh-swell.mp3` with a short reverb, used as the juice-pouring sweep

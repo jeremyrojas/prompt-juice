@@ -613,7 +613,7 @@
         cursorPose(!0, [lerp(GLYPH_PT * MB_S + 6, 1780, away), lerp(34, 460, away)], 0);
       } else cursorPose(!1);
       let lOut = seg(t, B.toBar - 0.1, B.toBar + 0.25, ease.in2);
-      [[legClaude, B.legClaude, 430], [legCodex, B.legCodex, 724]].forEach(([e, t0, y]) => {
+      [[legClaude, B.legClaude, 393], [legCodex, B.legCodex, 565]].forEach(([e, t0, y]) => {
         let k = seg(t, t0, t0 + 0.55, ease.out3);
         show(e, k > 0), e.style.transform = `translate(1180px, ${y + (1 - k) * 22}px)`, e.style.opacity = k * (1 - lOut), e.style.filter = `blur(${(1 - k) * 8 + lOut * 8}px)`;
       });

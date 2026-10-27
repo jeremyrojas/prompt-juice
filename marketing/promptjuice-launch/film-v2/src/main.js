@@ -633,7 +633,7 @@ export function render(t) {
 
     // Callouts beside each card: Claude amber, Codex green.
     const lOut = seg(t, B.toBar - 0.1, B.toBar + 0.25, ease.in2);
-    [[legClaude, B.legClaude, 430], [legCodex, B.legCodex, 724]].forEach(([e, t0, y]) => {
+    [[legClaude, B.legClaude, 393], [legCodex, B.legCodex, 565]].forEach(([e, t0, y]) => {
       const k = seg(t, t0, t0 + 0.55, ease.out3);
       show(e, k > 0);
       e.style.transform = `translate(1180px, ${y + (1 - k) * 22}px)`;

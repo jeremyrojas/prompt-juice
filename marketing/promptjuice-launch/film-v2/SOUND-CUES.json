@@ -109,24 +109,87 @@
    "align": "peak"
   },
   {
+   "what": "benefit title 1 arrives",
+   "time": 15.67,
+   "file": "assets/sfx/whoosh-air.mp3",
+   "gain": 0.18,
+   "align": "peak"
+  },
+  {
+   "what": "task 1 lands (Epidemic whoosh)",
+   "time": 16.03,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.24,
+   "align": "peak"
+  },
+  {
+   "what": "juice pours into task 1",
+   "time": 16.4,
+   "file": "assets/sfx/pour.mp3",
+   "gain": 0.2,
+   "align": "peak"
+  },
+  {
+   "what": "benefit title 2 arrives",
+   "time": 17.07,
+   "file": "assets/sfx/whoosh-air.mp3",
+   "gain": 0.18,
+   "align": "peak"
+  },
+  {
+   "what": "task 2 lands (Epidemic whoosh)",
+   "time": 17.36,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.24,
+   "align": "peak"
+  },
+  {
+   "what": "juice pours into task 2",
+   "time": 17.68,
+   "file": "assets/sfx/pour.mp3",
+   "gain": 0.2,
+   "align": "peak"
+  },
+  {
+   "what": "benefit title 3 arrives",
+   "time": 18.42,
+   "file": "assets/sfx/whoosh-air.mp3",
+   "gain": 0.18,
+   "align": "peak"
+  },
+  {
+   "what": "task 3 lands (Epidemic whoosh)",
+   "time": 18.71,
+   "file": "licensed/es-whoosh-short-low-dry-01.wav",
+   "gain": 0.24,
+   "align": "peak"
+  },
+  {
+   "what": "juice pours into task 3",
+   "time": 19.05,
+   "file": "assets/sfx/pour.mp3",
+   "gain": 0.2,
+   "align": "peak"
+  },
+  {
    "what": "task 1",
    "time": 16.05,
    "file": "assets/sfx/click-soft.mp3",
-   "gain": 0.3,
+   "gain": 0.24,
    "align": "peak"
   },
   {
    "what": "task 2",
    "time": 17.38,
    "file": "assets/sfx/click-soft.mp3",
-   "gain": 0.28,
+   "gain": 0.24,
    "align": "peak"
   },
   {
    "what": "task 3",
    "time": 18.73,
    "file": "assets/sfx/click-soft.mp3",
-   "gain": 0.28,
+   "gain": 0.24,
    "align": "peak"
   },
   {
@@ -206,6 +269,12 @@
   "drop_at": 19.7,
   "fade_in": 1.5,
   "dips": [
+   {
+    "from": 15.4,
+    "to": 18.85,
+    "db": 3,
+    "note": "lift the breakdown under the benefit scene"
+   },
    {
     "from": 18.9,
     "to": 19.22,
