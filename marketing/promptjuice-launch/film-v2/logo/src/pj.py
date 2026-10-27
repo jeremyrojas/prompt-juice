@@ -1,6 +1,6 @@
 """Shared helpers for the PromptJuice logo builds.
 
-Glyph outlines come from the FAMILY font (Fraunces, SIL OFL 1.1), read from the
+Glyph outlines come from the FAMILY font (Instrument Sans, SIL OFL 1.1), read from the
 film's own woff2 files, shaped with HarfBuzz (kerning on), cleaned with
 skia-pathops (overlaps removed) and written out as plain SVG paths, so the
 SVGs have no font dependency.
@@ -48,14 +48,23 @@ def fmt(v):
 
 
 # Font family used for all lettering (file prefix in assets/fonts). The film
-# switched from Bricolage Grotesque to Fraunces; both are SIL OFL 1.1.
-FAMILY = os.environ.get("PJ_FONT_FAMILY", "Fraunces")
+# went Bricolage Grotesque → Fraunces → Instrument Sans; all SIL OFL 1.1.
+FAMILY = os.environ.get("PJ_FONT_FAMILY", "InstrumentSans")
+
+
+def font_file(weight):
+    """The family's file for `weight`, or its heaviest weight below that
+    (Instrument Sans stops at 700)."""
+    have = sorted(int(f[len(FAMILY) + 1:-6]) for f in os.listdir(FONT_DIR)
+                  if f.startswith(FAMILY + "-") and f.endswith(".woff2") and f[len(FAMILY) + 1:-6].isdigit())
+    w = max([h for h in have if h <= weight] or have[:1])
+    return os.path.join(FONT_DIR, f"{FAMILY}-{w}.woff2")
 
 
 class Font:
     def __init__(self, weight):
         self.weight = weight
-        self.tt = TTFont(os.path.join(FONT_DIR, f"{FAMILY}-{weight}.woff2"))
+        self.tt = TTFont(font_file(weight))
         self.tt.flavor = None
         buf = io.BytesIO()
         self.tt.save(buf)

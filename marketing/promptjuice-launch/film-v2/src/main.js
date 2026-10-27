@@ -330,7 +330,7 @@ const valueAReset = valueA.querySelector(".reset");
 const valueAClk = valueA.querySelector(".clk");
 const titleA = createTitle(sceneA, [["Plenty"], ["of"], ["juice"], ["left."], ["Resets", "amber"], ["soon.", "amber"]], { size: 96 });
 const titleB1 = createTitle(sceneA, [["You"], ["paid"], ["for"], ["the"], ["juice.", "amber"]], { size: 104 });
-const titleB2 = createTitle(sceneA, [["Don’t"], ["waste"], ["it."]], { size: 104 });
+const titleB2 = createTitle(sceneA, [["Don’t"], ["waste"], ["it."]], { size: 76 });
 const titleC = createTitle(sceneA, [["In"], ["your"], ["menu"], ["bar."]], { size: 84 });
 
 // Menu bar (pt units, scaled 2.4x).
@@ -552,7 +552,7 @@ export function render(t) {
     }
     rays(bctx, 960, 620, AMBER, 0.05 * seg(t, 3.9, 4.8) * (1 - seg(t, 6.0, 6.5)), t * 0.06);
     animateTitle(titleB1, t, { t0: B.youPaid, t1: 6.0, kind: "blur", y: 96 });
-    animateTitle(titleB2, t, { t0: B.dontWaste, t1: 6.08, kind: "blur", y: 222 });
+    animateTitle(titleB2, t, { t0: B.dontWaste, t1: 6.08, kind: "blur", y: 218 });
 
     // C: a hop up into the menu bar, where the mascot becomes the glyph.
     if (t >= B.jumpPrep) {
@@ -853,17 +853,22 @@ window.__film = { render, ready, duration: DURATION, beats: BEATS };
 if (!capture) {
   document.body.classList.add("preview");
   const vpEl = document.getElementById("viewport");
+  // Place the scaled stage explicitly (not via layout): a viewer frame that
+  // loads hidden or resizes later would otherwise leave it off-centre.
   const fit = () => {
-    const s = Math.min((window.innerWidth - 32) / W, (window.innerHeight - 96) / H);
-    vpEl.style.transform = `scale(${s})`;
-    vpEl.style.width = `${W}px`;
-    vpEl.parentElement.style.width = `${W * s}px`;
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const vh = document.documentElement.clientHeight || window.innerHeight;
+    const s = Math.max(0.05, Math.min((vw - 32) / W, (vh - 100) / H));
+    Object.assign(vpEl.style, {
+      position: "absolute", margin: "0", transformOrigin: "0 0", transform: `scale(${s})`,
+      left: `${Math.round((vw - W * s) / 2)}px`, top: `${Math.round(Math.max(16, (vh - 84 - H * s) / 2))}px`,
+    });
     document.body.style.setProperty("--s", s);
-    vpEl.style.marginBottom = `${H * s - H}px`;
-    vpEl.style.marginRight = `${W * s - W}px`;
   };
   fit();
   window.addEventListener("resize", fit);
+  new ResizeObserver(fit).observe(document.documentElement);
+  document.addEventListener("visibilitychange", fit);
   const audio = document.getElementById("soundtrack");
   const scrub = document.getElementById("scrub");
   const time = document.getElementById("time");
