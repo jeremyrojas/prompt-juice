@@ -4,186 +4,157 @@
  "note": "Times are film seconds. align=peak (default) lands each sample's loudest point one frame after the picture. Swap 'file' for the approved palette and run tools/mix_sound.py.",
  "cues": [
   {
-   "what": "mascot settles in",
-   "time": 0.35,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.3,
+   "what": "mascot settles in (soft bloop)",
+   "time": 0.4,
+   "file": "assets/sfx/pop-soft.mp3",
+   "gain": 0.22,
    "align": "peak"
   },
   {
-   "what": "bar fills",
-   "time": 0.9,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.3,
-   "align": "peak"
-  },
-  {
-   "what": "bar lands, glint",
-   "time": 1.65,
-   "file": "assets/sfx/sparkle.mp3",
-   "gain": 0.14,
+   "what": "bar fills (soft air)",
+   "time": 1.0,
+   "file": "assets/sfx/whoosh-soft.mp3",
+   "gain": 0.28,
    "align": "peak"
   },
   {
    "what": "clock lands on 33m",
    "time": 2.35,
    "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "amber wash swells into Resets soon",
+   "time": 2.97,
+   "file": "assets/sfx/whoosh-swell.mp3",
    "gain": 0.5,
    "align": "peak"
   },
   {
-   "what": "amber wash",
-   "time": 2.75,
-   "file": "assets/sfx/whoosh.mp3",
-   "gain": 0.38,
-   "align": "peak"
-  },
-  {
-   "what": "Resets soon",
-   "time": 3.07,
-   "file": "assets/sfx/chime.mp3",
-   "gain": 0.28,
-   "align": "peak"
-  },
-  {
    "what": "jump to menu bar",
-   "time": 6.7,
-   "file": "assets/sfx/whoosh-short.mp3",
+   "time": 6.75,
+   "file": "assets/sfx/whoosh-air.mp3",
    "gain": 0.3,
    "align": "peak"
   },
   {
    "what": "lands as glyph",
    "time": 7.05,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.38,
+   "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.35,
    "align": "peak"
   },
   {
    "what": "click glyph",
    "time": 7.85,
    "file": "assets/sfx/click.mp3",
-   "gain": 0.5,
+   "gain": 0.45,
    "align": "peak"
   },
   {
    "what": "panel unfolds",
-   "time": 8.15,
-   "file": "assets/sfx/whoosh-short.mp3",
+   "time": 8.2,
+   "file": "assets/sfx/whoosh-soft.mp3",
    "gain": 0.26,
    "align": "peak"
   },
   {
    "what": "camera to punch-in",
-   "time": 9.75,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.18,
-   "align": "peak"
-  },
-  {
-   "what": "glint on 83% bar",
-   "time": 10.75,
-   "file": "assets/sfx/sparkle.mp3",
-   "gain": 0.14,
+   "time": 9.8,
+   "file": "assets/sfx/whoosh-air.mp3",
+   "gain": 0.2,
    "align": "peak"
   },
   {
    "what": "click Claude chevron",
    "time": 11.75,
    "file": "assets/sfx/click-soft.mp3",
-   "gain": 0.6,
+   "gain": 0.55,
    "align": "peak"
   },
   {
    "what": "camera to callouts",
-   "time": 13.15,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.18,
+   "time": 13.2,
+   "file": "assets/sfx/whoosh-air.mp3",
+   "gain": 0.2,
    "align": "peak"
   },
   {
-   "what": "Claude callout",
-   "time": 13.4,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.22,
-   "align": "peak"
-  },
-  {
-   "what": "Codex callout",
-   "time": 13.7,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.22,
-   "align": "peak"
-  },
-  {
-   "what": "push into the bar",
-   "time": 15.0,
-   "file": "assets/sfx/whoosh.mp3",
-   "gain": 0.36,
+   "what": "push through the bar",
+   "time": 15.3,
+   "file": "assets/sfx/whoosh-swell.mp3",
+   "gain": 0.5,
    "align": "peak"
   },
   {
    "what": "task 1",
    "time": 16.05,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.26,
+   "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.3,
    "align": "peak"
   },
   {
    "what": "task 2",
    "time": 17.38,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.24,
+   "file": "assets/sfx/click-soft.mp3",
+   "gain": 0.28,
    "align": "peak"
   },
   {
    "what": "task 3",
    "time": 18.73,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.24,
-   "align": "peak"
-  },
-  {
-   "what": "reset refills green",
-   "time": 20.1,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.3,
-   "align": "peak"
-  },
-  {
-   "what": "Nothing wasted",
-   "time": 20.07,
-   "file": "assets/sfx/chime.mp3",
-   "gain": 0.26,
-   "align": "peak"
-  },
-  {
-   "what": "mascot glides to end card",
-   "time": 21.5,
-   "file": "assets/sfx/whoosh-short.mp3",
-   "gain": 0.26,
-   "align": "peak"
-  },
-  {
-   "what": "mascot lands",
-   "time": 21.8,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.3,
-   "align": "peak"
-  },
-  {
-   "what": "wordmark",
-   "time": 22.5,
-   "file": "assets/sfx/chime.mp3",
+   "file": "assets/sfx/click-soft.mp3",
    "gain": 0.28,
    "align": "peak"
   },
   {
-   "what": "end hop",
-   "time": 23.6,
-   "file": "assets/sfx/pop.mp3",
-   "gain": 0.2,
+   "what": "green refill swells",
+   "time": 20.25,
+   "file": "assets/sfx/whoosh-swell.mp3",
+   "gain": 0.45,
+   "align": "peak"
+  },
+  {
+   "what": "Nothing wasted (glint)",
+   "time": 20.47,
+   "file": "assets/sfx/sparkle.mp3",
+   "gain": 0.1,
+   "align": "peak"
+  },
+  {
+   "what": "mascot glides to end card",
+   "time": 21.55,
+   "file": "assets/sfx/whoosh-air.mp3",
+   "gain": 0.26,
+   "align": "peak"
+  },
+  {
+   "what": "mascot lands (soft bloop)",
+   "time": 21.8,
+   "file": "assets/sfx/pop-soft.mp3",
+   "gain": 0.25,
+   "align": "peak"
+  },
+  {
+   "what": "logo: low thump",
+   "time": 22.35,
+   "file": "assets/sfx/impact-low.mp3",
+   "gain": 0.35,
+   "align": "peak"
+  },
+  {
+   "what": "logo: chime",
+   "time": 22.55,
+   "file": "assets/sfx/chime.mp3",
+   "gain": 0.24,
    "align": "peak"
   }
- ]
+ ],
+ "music": {
+  "file": "music-options/intuition-24.9s.mp3",
+  "gain": 0.8,
+  "duck_db": 4.0,
+  "credit": "intuition (Instrumental Version) by dasloe, Epidemic Sound. 24.9 s edit 6e36f233."
+ }
 }

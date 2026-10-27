@@ -1,4 +1,5 @@
-"""Mix SOUND-CUES.json into dist/soundtrack.wav (+ .mp3 for the preview).
+"""Mix SOUND-CUES.json (effects, plus an optional music bed) into
+dist/soundtrack.wav (+ .mp3 for the preview).
 
     python3 tools/mix_sound.py [--cues SOUND-CUES.json]
 
@@ -65,6 +66,18 @@ def main():
         i1 = min(len(mix), i0 + len(x))
         mix[i0:i1] += x[: i1 - i0]
     mix = mix[: int(dur * SR)]
+    music = spec.get("music")
+    if music and (ROOT / music["file"]).exists():
+        # Music bed under the effects. It dips a few dB while an effect rings
+        # so the hits stay clear without the bed pumping.
+        bed = decode(ROOT / music["file"])[: len(mix)] * music.get("gain", 0.8)
+        bed = np.pad(bed, ((0, len(mix) - len(bed)), (0, 0)))
+        env = np.abs(mix).max(axis=1)
+        win = int(0.12 * SR)
+        env = np.convolve(env, np.ones(win) / win, mode="same")
+        duck_db = music.get("duck_db", 4.0)
+        gain = 10 ** (-duck_db * np.clip(env / (env.max() + 1e-9) * 3, 0, 1) / 20)
+        mix = mix + bed * gain[:, None].astype(np.float32)
     # Gentle bus: soft-clip and normalise the peak to -1 dBFS.
     mix = np.tanh(mix * 1.2) / np.tanh(1.2)
     peak = np.abs(mix).max()

@@ -33,3 +33,13 @@ All files are distributed under the [Pixabay Content License](https://pixabay.co
 - Redistribution as part of derivative works (such as videos rendered with HyperFrames)
 
 without any attribution requirement.
+
+## Derived files in this project
+
+Made with ffmpeg from the Pixabay files above (filtering, slowing, reverb, trimming):
+
+- `whoosh-soft.mp3`: `whoosh-short.mp3`, low-passed with a short reverb tail
+- `whoosh-air.mp3`: `whoosh.mp3`, slowed 15%, band-limited, reverb
+- `whoosh-swell.mp3`: the 3.2 s peak region of `whoosh-cinematic.mp3`, faded in and out
+- `pop-soft.mp3`: `pop.mp3`, slowed 20%, low-passed, light echo
+- `impact-low.mp3`: `impact-bass-2.mp3`, low-passed and shortened
