@@ -1,6 +1,6 @@
 {
  "fps": 30,
- "duration": 24.9,
+ "duration": 25.9,
  "note": "Times are film seconds. align=peak (default) lands each sample's loudest point one frame after the picture. Swap 'file' for the approved palette and run tools/mix_sound.py.",
  "cues": [
   {
@@ -248,7 +248,7 @@
   "gain": 0.85,
   "duck_db": 3.0,
   "xfade": 0.04,
-  "fade_out": 1.8,
+  "fade_out": 2.4,
   "segments": [
    {
     "from": 0.55,

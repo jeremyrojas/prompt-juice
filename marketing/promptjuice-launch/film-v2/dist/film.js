@@ -265,7 +265,7 @@
 `;
 
   // src/main.js
-  var DURATION = 24.9, W = 1920, H = 1080, GREEN = [95, 209, 31], AMBER = [240, 163, 42], MASCOT_ASPECT = 776 / 1115, film = document.getElementById("film");
+  var DURATION = 25.9, W = 1920, H = 1080, GREEN = [95, 209, 31], AMBER = [240, 163, 42], MASCOT_ASPECT = 776 / 1115, film = document.getElementById("film");
   function el2(tag, cls, parent, html) {
     let e = document.createElement(tag);
     return cls && (e.className = cls), html != null && (e.innerHTML = html), (parent || film).appendChild(e), e;
@@ -290,6 +290,8 @@
   vignette.id = "vignette";
   var flash = el2("div", "");
   flash.id = "flash";
+  var fadeOut = el2("div", "layer");
+  fadeOut.style.background = "#000";
   var bctx = fxBack.getContext("2d"), fctx = fxFront.getContext("2d"), EXPRS = ["happy", "blink", "joy", "alert"];
   function createMascot(parent) {
     let shadow = el2("div", "shadow", parent), root = el2("div", "mascot", parent), imgs = { base: {}, top: {} }, add = (layer, holder) => {
@@ -455,7 +457,7 @@
   streamSvg.setAttribute("width", W);
   streamSvg.setAttribute("height", H);
   sceneE.appendChild(streamSvg);
-  var rowE = el2("div", "layer", sceneE), barE = createBigBar(rowE, { x: 260, y: 500, w: 1400, h: 46 }), labelE = el2("div", "caption", rowE, 'Claude <span style="color:rgba(255,255,255,.3)">\xB7</span> 5-hour limit');
+  var rowE = el2("div", "layer", sceneE), barE = createBigBar(rowE, { x: 260, y: 540, w: 1400, h: 46 }), labelE = el2("div", "caption", rowE, 'Claude <span style="color:rgba(255,255,255,.3)">\xB7</span> 5-hour limit');
   labelE.style.cssText += "color: rgba(255,255,255,.62); font-weight: 500; font-size: 46px; text-shadow: 0 0 14px #07080b, 0 0 6px #07080b;";
   var valueE = el2("div", "caption", rowE, '<span class="pct">83% left</span><span style="color:rgba(255,255,255,.3)"> \xB7 </span><span class="reset" style="color:var(--amber)">resets in 33m</span>');
   valueE.style.textShadow = "0 0 14px #07080b, 0 0 6px #07080b";
@@ -465,9 +467,12 @@
     { what: "Write the test suite", chip: "New task" }
   ], taskEls = TASKS.map((tk, i) => {
     let c = el2("div", "task", sceneE, `<div class="who"><i></i>Claude</div><div class="what">${tk.what}</div><div class="chip">${tk.chip}</div><div class="prog"><b></b></div>`);
-    c.style.left = `${260 + i * 480}px`, c.style.top = "680px";
+    c.style.left = `${260 + i * 480}px`, c.style.top = "720px";
     let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    return path.setAttribute("fill", "none"), path.setAttribute("stroke-linecap", "round"), streamSvg.appendChild(path), { el: c, prog: c.querySelector(".prog b"), chip: c.querySelector(".chip"), path, x: 260 + i * 480 };
+    return path.setAttribute("fill", "none"), path.setAttribute("stroke-linecap", "round"), streamSvg.appendChild(path), { drops: Array.from({ length: 4 }, () => {
+      let d = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      return d.setAttribute("r", "7"), d.setAttribute("fill", "#ffd27a"), d.style.filter = "drop-shadow(0 0 6px rgba(255,190,90,.9))", streamSvg.appendChild(d), d;
+    }), el: c, prog: c.querySelector(".prog b"), chip: c.querySelector(".chip"), path, x: 260 + i * 480 };
   }), titleE1 = createTitle(sceneE, [["Use"], ["your"], ["strongest", "amber"], ["model.", "amber"]], { size: 100 }), titleE2 = createTitle(sceneE, [["Use"], ["higher", "amber"], ["effort.", "amber"]], { size: 100 }), titleE2b = createTitle(sceneE, [["Start"], ["another"], ["task.", "amber"]], { size: 100 }), titleE3 = createTitle(sceneE, [["Nothing", "green"], ["wasted."]], { size: 100 }), logoWrap = el2("div", "layer logo", sceneF);
   logoWrap.innerHTML = option_1_default.replace(/id="([^"]+)"/g, 'id="lg-$1"').replace(/url\(#([^)]+)\)/g, "url(#lg-$1)").replace(/href="#([^"]+)"/g, 'href="#lg-$1"').replace(/\.\.\/assets\//g, "assets/");
   var LG = (id) => logoWrap.querySelector(`#lg-${id}`);
@@ -521,7 +526,7 @@
     dotLand: 22.7,
     tagline: 23.2,
     endHop: 23.95
-  }, B = BEATS, P_OPEN = [960, 76, 192, 0, 2.6, 0, 0], P_PUNCH = [960, 560, 192, 104, 4.3, 6, -12], P_PUNCH2 = [960, 560, 192, 104, 4.4, 5, -8], P_CARD = [960, 150, 192, 54, 3.4, 0, 0], P_ANGLE = [640, 560, 192, 152, 2.45, 5, 20], P_ANGLE2 = [620, 560, 192, 152, 2.5, 4, 17], P_BAR = [960, 523, 192, 116, 1400 / 332, 0, 0];
+  }, B = BEATS, P_OPEN = [960, 76, 192, 0, 2.6, 0, 0], P_PUNCH = [960, 560, 192, 104, 4.3, 6, -12], P_PUNCH2 = [960, 560, 192, 104, 4.4, 5, -8], P_CARD = [960, 150, 192, 54, 3.4, 0, 0], P_ANGLE = [640, 560, 192, 152, 2.45, 5, 20], P_ANGLE2 = [620, 560, 192, 152, 2.5, 4, 17], P_BAR = [960, 563, 192, 116, 1400 / 332, 0, 0];
   function zipZ(t, t0) {
     return spring(t, t0, { zeta: 0.82, freq: 1 });
   }
@@ -623,15 +628,19 @@
       cursorPose(!0, [lerp(1720, GLYPH_PT * MB_S + 6, cin), lerp(1150, 34, cin)], bump(t, B.click - 0.04, 0.16));
     } else inD || cursorPose(!1);
     let inE = t >= B.handoff - 0.08 && t < B.finale + 0.7;
-    if (show(sceneE, inE), inE) {
-      let fall = seg(t, B.finale, B.finale + 0.6, ease.inOut3), d1 = seg(t, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2), d2 = seg(t, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2), d3 = seg(t, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), level = (tt) => 0.83 - 0.28 * seg(tt, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2) - 0.27 * seg(tt, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2) - 0.24 * seg(tt, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), refill = (tt) => tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.86, freq: 1.15 }), reset = t >= B.reset, z = reset ? Math.min(1, lerp(0.04, 1, refill(t))) : level(t), v = CALM * (reset ? speed(refill, t) / 1.1 : speed(level, t)), thick = lerp(6 * P_BAR[4] / 46, 1, seg(t, B.handoff, B.handoff + 0.5, ease.inOut3));
+    if (show(sceneE, inE), !inE) for (let layer of [mascotLayer, fxFront]) layer.style.transform = "";
+    if (inE) {
+      let fall = seg(t, B.finale, B.finale + 0.6, ease.inOut3), push = keys(t, [[B.handoff + 0.3, 1], [B.reset, 1.07, ease.inOut2], [B.reset + 1, 1, ease.out3]]);
+      for (let layer of [sceneE, mascotLayer, fxFront])
+        layer.style.transformOrigin = "960px 600px", layer.style.transform = `scale(${push})`;
+      let d1 = seg(t, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2), d2 = seg(t, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2), d3 = seg(t, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), level = (tt) => 0.83 - 0.28 * seg(tt, B.card1 + 0.15, B.card1 + 0.95, ease.inOut2) - 0.27 * seg(tt, B.card2 + 0.15, B.card2 + 0.85, ease.inOut2) - 0.24 * seg(tt, B.card3 + 0.15, B.card3 + 0.9, ease.inOut2), refill = (tt) => tt < B.reset ? 0 : spring(tt, B.reset, { zeta: 0.86, freq: 1.15 }), reset = t >= B.reset, z = reset ? Math.min(1, lerp(0.04, 1, refill(t))) : level(t), v = CALM * (reset ? speed(refill, t) / 1.1 : speed(level, t)), thick = lerp(6 * P_BAR[4] / 46, 1, seg(t, B.handoff, B.handoff + 0.5, ease.inOut3));
       barE.root.style.transformOrigin = "50% 50%";
       let headX = barE.pose({ z, color: reset ? "green" : "amber", v, glint: (t - (B.reset + 0.9)) / 0.7, opacity: 1 - fall, ty: fall * 120 });
-      barE.root.style.transform += ` scaleY(${thick})`, sparkle(fctx, headX - 8, 523, 40 * bump(t, B.reset + 0.8, 0.8), 0.95, t * 0.8, [210, 255, 170]), valueEPct.textContent = `${Math.round(z * 100)}% left`;
+      barE.root.style.transform += ` scaleY(${thick})`, sparkle(fctx, headX - 8, 563, 40 * bump(t, B.reset + 0.8, 0.8), 0.95, t * 0.8, [210, 255, 170]), valueEPct.textContent = `${Math.round(z * 100)}% left`;
       let mins = Math.max(1, Math.round(33 - 10 * d1 - 11 * d2 - 11 * d3));
       valueEReset.textContent = reset ? "resets in 4h" : `resets in ${mins}m`, valueEReset.style.color = reset ? "rgba(255,255,255,.55)" : "#f0a32a";
       let rowIn = seg(t, B.handoff + 0.2, B.handoff + 0.65, ease.out3);
-      labelE.style.transform = `translate(260px, ${578 + (1 - rowIn) * 14 + fall * 120}px)`, labelE.style.opacity = rowIn * (1 - fall), labelE.style.filter = `blur(${(1 - rowIn) * 8}px)`, valueE.style.transform = `translate(${1660 - valueE.offsetWidth}px, ${574 + (1 - rowIn) * 14 + fall * 120}px)`, valueE.style.opacity = rowIn * (1 - fall), valueE.style.filter = `blur(${(1 - rowIn) * 8}px)`;
+      labelE.style.transform = `translate(260px, ${618 + (1 - rowIn) * 14 + fall * 120}px)`, labelE.style.opacity = rowIn * (1 - fall), labelE.style.filter = `blur(${(1 - rowIn) * 8}px)`, valueE.style.transform = `translate(${1660 - valueE.offsetWidth}px, ${614 + (1 - rowIn) * 14 + fall * 120}px)`, valueE.style.opacity = rowIn * (1 - fall), valueE.style.filter = `blur(${(1 - rowIn) * 8}px)`;
       let arrivals = [B.card1, B.card2, B.card3], drains = [[B.card1 + 0.08, B.card1 + 1], [B.card2 + 0.08, B.card2 + 0.9], [B.card3 + 0.08, B.card3 + 0.95]];
       if (taskEls.forEach((tk, i) => {
         let t0 = arrivals[i];
@@ -639,15 +648,25 @@
         let k = seg(t, t0, t0 + 0.6, ease.out4), fl = seg(t, B.finale + i * 0.06, B.finale + 0.55 + i * 0.06, ease.inOut3);
         show(tk.el, t >= t0), tk.el.style.opacity = k * (1 - fl), tk.el.style.transform = `translateY(${(1 - k) * 36 + fl * 90}px)`, tk.el.style.filter = k < 1 ? `blur(${(1 - k) * 10}px)` : "";
         let done = seg(t, B.reset + 0.2 + i * 0.12, B.reset + 0.7 + i * 0.12, ease.out3), work = seg(t, drains[i][0] + 0.3, drains[i][1] + 1.6, ease.inOut2);
-        tk.prog.style.width = `${lerp(work * 70, 100, done)}%`, tk.prog.style.background = done > 0 ? "linear-gradient(90deg,#3fa512,#8be24e)" : "", done > 0.5 ? (tk.chip.textContent = "Done", tk.chip.style.color = "#5fd11f", tk.chip.style.background = "rgba(95,209,31,.14)", tk.chip.style.boxShadow = "inset 0 0 0 2px rgba(95,209,31,.35)") : (tk.chip.textContent = TASKS[i].chip, tk.chip.style.cssText = "");
+        tk.prog.style.width = `${lerp(work * 70, 100, done)}%`;
+        let p = (t * 0.9 + i * 0.3) % 1 * 140 - 20;
+        tk.prog.style.background = done > 0 ? "linear-gradient(90deg,#3fa512,#8be24e)" : work > 0 && work < 1 ? `linear-gradient(90deg, #d9880f 0%, #f0a32a ${p - 18}%, #fff1cf ${p}%, #f0a32a ${p + 18}%, #ffc15e 100%)` : "", done > 0.5 ? (tk.chip.textContent = "Done", tk.chip.style.color = "#5fd11f", tk.chip.style.background = "rgba(95,209,31,.14)", tk.chip.style.boxShadow = "inset 0 0 0 2px rgba(95,209,31,.35)") : (tk.chip.textContent = TASKS[i].chip, tk.chip.style.cssText = "");
         let [s0, s1] = drains[i], sk = (t - s0) / (s1 - s0);
         if (sk > 0 && sk < 1.25) {
           let hxNow = barE.headX(level(t));
-          tk.path.setAttribute("d", `M ${hxNow - 10} 546 C ${hxNow - 10} 640, ${tk.x + 220} 600, ${tk.x + 220} 682`), tk.path.setAttribute("stroke", "#f0a32a"), tk.path.setAttribute("stroke-width", `${8 * (1 - clamp((sk - 1) * 4))}`), tk.path.setAttribute("stroke-dasharray", "22 16"), tk.path.setAttribute("stroke-dashoffset", `${-t * 160}`), tk.path.setAttribute("opacity", `${0.85 * clamp(sk * 5) * (1 - clamp((sk - 1) * 4))}`), tk.path.style.filter = "drop-shadow(0 0 8px rgba(240,163,42,.7))";
-        } else tk.path.setAttribute("opacity", "0");
+          tk.path.setAttribute("d", `M ${hxNow - 10} 586 C ${hxNow - 10} 680, ${tk.x + 220} 640, ${tk.x + 220} 722`), tk.path.setAttribute("stroke", "#f0a32a"), tk.path.setAttribute("stroke-width", `${9 * (1 - clamp((sk - 1) * 4))}`), tk.path.setAttribute("stroke-dasharray", "22 16"), tk.path.setAttribute("stroke-dashoffset", `${-t * 160}`);
+          let sv = clamp(sk * 5) * (1 - clamp((sk - 1) * 4));
+          tk.path.setAttribute("opacity", `${sv}`), tk.path.style.filter = "drop-shadow(0 0 10px rgba(240,163,42,.85))";
+          let len = tk.path.getTotalLength();
+          tk.drops.forEach((d, j) => {
+            let u = ((t - s0) * 1.4 + j / 4) % 1, pt = tk.path.getPointAtLength(len * u);
+            d.setAttribute("cx", pt.x), d.setAttribute("cy", pt.y), d.setAttribute("opacity", `${sv * Math.sin(Math.PI * u) * (sk < 1 ? 1 : 0)}`);
+          });
+        } else
+          tk.path.setAttribute("opacity", "0"), tk.drops.forEach((d) => d.setAttribute("opacity", "0"));
       }), t < B.finale) {
         let hx = barE.headX(z), appear = seg(t, B.handoff + 0.25, B.handoff + 0.8, ease.out3);
-        m.x = clamp(hx - 40, 380, 1600), m.ground = 500, m.h = 180, m.from = "amber", m.to = "amber", m.k = 1, m.rot = 0, m.opacity = appear;
+        m.x = clamp(hx - 40, 380, 1600), m.ground = 540, m.h = 180, m.from = "amber", m.to = "amber", m.k = 1, m.rot = 0, m.opacity = appear;
         let moving = clamp(v * 2);
         m.lift = 26 * (1 - appear) + 7 * Math.abs(Math.sin(t * 9)) * moving, m.expr = t > 16.6 && t < 16.68 || t > 18.9 && t < 18.98 ? "blink" : "happy", reset && (m.to = "green", m.k = seg(t, B.reset + 0.1, B.reset + 0.9, ease.inOut3), m.expr = "joy", m.lift = 40 * bump(t, B.reset + 0.1, 0.7) + 6 * moving);
       }
@@ -655,10 +674,10 @@
     }
     let inF = t >= B.finale;
     if (show(sceneF, inF), inF) {
-      let target = [LOGO_MASCOT.x, LOGO_MASCOT.ground, LOGO_MASCOT.h], start = [clamp(barE.headX(1) - 40, 380, 1600), 500, 180], f = seg(t, B.finale + 0.1, B.mascotLand, ease.inOut2);
+      let target = [LOGO_MASCOT.x, LOGO_MASCOT.ground, LOGO_MASCOT.h], start = [clamp(barE.headX(1) - 40, 380, 1600), 540, 180], f = seg(t, B.finale + 0.1, B.mascotLand, ease.inOut2);
       m.from = "green", m.to = "green", m.k = 0, m.x = lerp(start[0], target[0], f), m.ground = lerp(start[1], target[1], f), m.h = lerp(start[2], target[2], ease.out2(f)), m.lift = 150 * Math.sin(Math.PI * f) + 36 * hop(t, B.endHop, 0.5), m.rot = -8 * bump(t, B.finale + 0.1, B.mascotLand - B.finale - 0.1);
       let sq = wobble(t, B.mascotLand, { amp: 0.06, freq: 2.4, decay: 5 }) + wobble(t, B.endHop + 0.5, { amp: 0.04, freq: 2.6, decay: 6 });
-      m.sx = 1 + sq * 0.6, m.sy = 1 - sq, m.expr = t < B.mascotLand + 0.7 ? "joy" : t > 24.2 && t < 24.28 ? "blink" : t > B.endHop - 0.1 && t < B.endHop + 0.7 ? "joy" : "happy", m.shadowOpacity = 0.8, PROMPT_LETTERS.forEach((id, i) => {
+      m.sx = 1 + sq * 0.6, m.sy = 1 - sq, m.expr = t < B.mascotLand + 0.7 ? "joy" : t > 24.2 && t < 24.28 || t > 25.15 && t < 25.23 ? "blink" : t > B.endHop - 0.1 && t < B.endHop + 0.7 ? "joy" : "happy", m.shadowOpacity = 0.8, PROMPT_LETTERS.forEach((id, i) => {
         let k = seg(t, B.mascotLand + 0.02 + i * 0.05, B.mascotLand + 0.5 + i * 0.05, ease.out3), e = LG(id);
         e.style.transform = `translateY(${(1 - k) * 46}px)`, e.style.opacity = k, e.style.filter = k < 1 ? `blur(${(1 - k) * 10}px)` : "";
       });
@@ -673,7 +692,7 @@
       let pill = seg(t, B.tagline + 0.35, B.tagline + 0.85, ease.out3);
       LG("oss-pill").style.opacity = pill, LG("oss-pill").style.transform = `translateY(${12 + (1 - pill) * 14}px) scale(1.5)`;
     }
-    t >= B.glyphLand && t < B.handoff && (m.visible = !1), mascot.pose(m);
+    t >= B.glyphLand && t < B.handoff && (m.visible = !1), fadeOut.style.opacity = seg(t, DURATION - 0.55, DURATION - 0.02, ease.inOut2), mascot.pose(m);
   }
   function fitTaskTitle(tk) {
     let what = tk.el.querySelector(".what");
